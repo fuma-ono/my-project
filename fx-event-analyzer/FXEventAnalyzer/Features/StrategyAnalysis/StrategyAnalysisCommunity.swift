@@ -93,12 +93,22 @@ struct CommunityMarketPollCard: View {
         // 文字を2pt大きくして」。
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
-                // ユーザー指摘(2026-11-19、9回目)「市場予測アンケートのアイコンがただの
-                // 円になっている。参考画像のようにしてほしい」: 前回`circle.fill`に
-                // 差し替えたが単純な丸すぎたため、参考画像どおりの円グラフアイコンに戻す。
-                // 小さいサイズで円が割れて見えた(7回目の指摘)原因はサイズが小さすぎた
-                // ことのため、サイズを大きくして対応する。
-                Image(systemName: "chart.pie.fill").font(.system(size: 13)).foregroundStyle(V5P.blue)
+                // ユーザー指摘(2026-11-19、10回目)「市場予想アンケートの見出しアイコンの
+                // 円グラフのデザインを変えてください。添付画像のようにしてください」:
+                // 添付画像(暗い角丸タイルの中に青〜紫のグラデーションの円グラフ)に
+                // 合わせる。
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5).fill(Color(red: 0.06, green: 0.09, blue: 0.18))
+                    Image(systemName: "chart.pie.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [V5P.blue, Color(red: 0.62, green: 0.42, blue: 0.95)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .frame(width: 18, height: 18)
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
                 HStack(spacing: 1) {
@@ -325,12 +335,17 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
+                    // ユーザー指摘(2026-11-19、10回目)「アイコンの下にしてと言いました。
+                    // もう少し右に詰めてください」: 位置(アイコンの下の列)はそのまま、
+                    // 通貨ペア行よりわずかに右へ寄せる。
                     NotoText.text(post.title, size: 7.3)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 4)
                     (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                         + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                         .lineLimit(2)
+                        .padding(.leading, 4)
                 }
 
                 Spacer(minLength: 4)

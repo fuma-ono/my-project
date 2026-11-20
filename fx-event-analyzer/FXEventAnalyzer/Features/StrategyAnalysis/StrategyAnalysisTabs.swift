@@ -77,9 +77,18 @@ struct StrategyAnalysisTabBar: View {
                     }
                 }
             }
-            // ユーザー指摘(2026-11-19)「タブの下に1本の線を引いてほしい」: タブ行の
-            // 下端にも上端と同じ横線を1本引く。
-            Rectangle().fill(Self.dividerColor).frame(height: 0.6)
+            // ユーザー指摘(2026-11-19、10回目)「タブの下線と選択した際の下線を重ねて
+            // ください」: 各タブ内の選択下線と、タブ行下端の横線が別々の2本になって
+            // いたのをやめ、下端の横線を列ごとの1本(選択中だけ青・太め)にまとめる。
+            HStack(spacing: 0) {
+                ForEach(StrategyAnalysisTab.allCases) { tab in
+                    let isSelected = tab == selection
+                    Rectangle()
+                        .fill(isSelected ? Self.selectedColor : Self.dividerColor)
+                        .frame(height: isSelected ? 1.6 : 0.6)
+                        .frame(maxWidth: .infinity)
+                }
+            }
         }
         .frame(width: 214)
     }
@@ -93,10 +102,6 @@ struct StrategyAnalysisTabBar: View {
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            RoundedRectangle(cornerRadius: 1)
-                .fill(isSelected ? Self.selectedColor : .clear)
-                .frame(height: 1.6)
-                .padding(.horizontal, 3)
         }
         .padding(.top, 6)
         .padding(.bottom, 5)
