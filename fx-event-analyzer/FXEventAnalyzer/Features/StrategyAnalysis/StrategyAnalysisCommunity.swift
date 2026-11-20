@@ -292,12 +292,11 @@ private struct CommunityPostCard: View {
     // (2行目)の2行をまとめる。
     // ユーザー指摘(2026-11-19、7回目)「投稿カードのアイコンの大きさを少し大きくして」:
     // アバターを20→24に。
-    // ユーザー指摘(2026-11-19、9回目)「米CPIの結果が下すぎる。アイコンの下に来るように
-    // して。そして、インフレの文章も同じように。ただし横の四角の大きさや位置は戻すに」:
-    // タイトル・本文を、チャート枠(56x56)の高さに引っ張られて下がっていた全幅の別行
-    // から、アバター横の列(通貨ペア行の下)に戻す。列の内容がチャート枠より低くても、
-    // 次の行がチャート枠の高さ分だけ空かないようにする。チャート枠自体のサイズ・位置は
-    // 変更しない。
+    // ユーザー指摘(2026-11-19、13回目)「タイトル・本文が通貨ペア行ではなくアイコンと
+    // 同じ左端にして/投稿カード内の四角をもう少し下に下げて」: チャート枠をHStackの
+    // 子ではなくカード全体へのoverlayにして、枠の高さが他の行の位置に影響しないように
+    // する。これによりタイトル・本文はアバター(アイコン)と同じ左端の、カード全体に
+    // またがる別行として配置できる(通貨ペア行の下に間延びしない)。
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
@@ -331,21 +330,15 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
-                    // ユーザー指摘(2026-11-19、12回目)「タイトル・本文は左寄せだった」:
-                    // 11回目の指摘で追加した右インデントを取り消し、通貨ペア行と同じ
-                    // 左端にそろえる。
-                    NotoText.text(post.title, size: 7.3)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                    (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
-                        + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
-                        .lineLimit(2)
                 }
-
-                Spacer(minLength: 4)
-                CommunityChartPlaceholder()
-                    .frame(width: 56, height: 56)
             }
+
+            NotoText.text(post.title, size: 7.3)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
+                + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
+                .lineLimit(2)
 
             HStack(spacing: 10) {
                 footerItem(icon: "heart.fill", value: "\(post.likeCount)", color: Color(red: 0.95, green: 0.32, blue: 0.52))
@@ -362,6 +355,13 @@ private struct CommunityPostCard: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 7)
         .frame(width: 214, alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            // ユーザー指摘(2026-11-19、13回目)「投稿カード内の四角をもう少し下に下げて」。
+            CommunityChartPlaceholder()
+                .frame(width: 56, height: 56)
+                .padding(.top, 17)
+                .padding(.trailing, 7)
+        }
         .accessibilityIdentifier("communityPostCard_\(post.id)")
     }
 
