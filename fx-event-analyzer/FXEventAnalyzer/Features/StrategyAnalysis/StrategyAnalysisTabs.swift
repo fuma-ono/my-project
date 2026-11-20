@@ -51,12 +51,11 @@ enum StrategyAnalysisTab: Int, CaseIterable, Identifiable {
 }
 
 /// 4タブの切り替え(ユーザー提示の参考画像どおり: アイコン+ラベルの等幅4列、列の間に
-/// 縦の区切り線、タブ行全体の上下に1本ずつの横線。アイコン・ラベルは常に白、選択中の
-/// 列だけ背景をグラデーションで塗りつぶす(ユーザー指摘2026-11-19「タブの下に1本の
-/// 線を引いてほしい/タブを選択すると四角で囲うようにしてほしい」、2回目「四角で囲む
-/// のは中を塗りつぶして、文字とアイコンではない」、5回目「丸数字はいらない/タブの
-/// デザインが変だよ、元に戻して/四角で囲むのをグラデーションにすればいい」: カード型の
-/// 配置・丸数字・アイコン変更は取り消し、単色の塗りつぶしをグラデーションに変更)。
+/// 縦の区切り線、タブ行全体の上下に1本ずつの横線。
+/// ユーザー指摘(2026-11-19、9回目)「４つのタブは四角で囲むのではなく、アイコンと
+/// みんなの分析と下線で選択するようにして」: 背景の塗りつぶし(枠)による選択表示を
+/// やめ、最初の設計に近い「選択中はアイコン・ラベルが青、下に青い下線」に戻す。
+/// 未選択はグレー(ユーザー指摘2026-11-19、7回目「白ではなくグレーに」を踏襲)。
 /// 既存の214pt列の中に収める(V5BottomBarの全幅チャンネルとは異なり、このタブバーは
 /// 他のカードと同じScrollView内で一緒にスクロールする構成を維持する — ScrollViewの
 /// 外に出す構成は過去のCIで高さの伝播不良によるタップ不能を起こしたため)。
@@ -64,18 +63,8 @@ struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
-    /// ユーザー指摘(2026-11-19、8回目)「タブは単色ではなくグラデーションにして」:
-    /// 単色に戻した直後だが、改めてグラデーションに戻す。
-    private static let selectedGradient = LinearGradient(
-        gradient: Gradient(stops: [
-            .init(color: Color(red: 0.55, green: 0.80, blue: 1.0), location: 0.0),
-            .init(color: Color(red: 0.0, green: 0.12, blue: 0.42), location: 1.0),
-        ]),
-        startPoint: .top, endPoint: .bottom
-    )
-    /// ユーザー指摘(2026-11-19、7回目)「４つのタブのアイコンと文字の色を白ではなく
-    /// グレーにして」。
-    private static let labelColor = Color(white: 0.72)
+    private static let selectedColor = V5P.blue
+    private static let unselectedColor = Color(white: 0.72)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -97,26 +86,21 @@ struct StrategyAnalysisTabBar: View {
 
     private func tabCell(_ tab: StrategyAnalysisTab) -> some View {
         let isSelected = tab == selection
+        let color = isSelected ? Self.selectedColor : Self.unselectedColor
         return VStack(spacing: 3) {
-            Image(systemName: tab.icon).font(.system(size: 13, weight: .semibold))
+            Image(systemName: tab.icon).font(.system(size: 13, weight: .semibold)).foregroundStyle(color)
             NotoText.text(tab.title, size: 6.3)
+                .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+            RoundedRectangle(cornerRadius: 1)
+                .fill(isSelected ? Self.selectedColor : .clear)
+                .frame(height: 1.6)
+                .padding(.horizontal, 3)
         }
-        // ユーザー指摘(2026-11-19、2回目)「タブの四角で囲むのは中を塗りつぶして、文字と
-        // アイコンではない」: 選択状態を示すのは枠線でも文字・アイコンの色でもなく、
-        // セルの背景の塗りつぶしのみ。アイコン・ラベルは選択有無に関わらず同じ色
-        // (ユーザー指摘2026-11-19、7回目によりグレーに変更)。
-        .foregroundStyle(Self.labelColor)
-        .padding(.vertical, 5)
-        .padding(.horizontal, 4)
+        .padding(.top, 6)
+        .padding(.bottom, 5)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 2)
-        .padding(.horizontal, 2)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isSelected ? AnyShapeStyle(Self.selectedGradient) : AnyShapeStyle(Color.clear))
-        )
         .contentShape(Rectangle())
         // V5BottomBarと同じ理由(`Button`+`.buttonStyle(.plain)`でも実機でシステム既定の
         // ハイライトカプセルが写り込んだ)で`onTapGesture`を使う。

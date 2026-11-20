@@ -93,10 +93,12 @@ struct CommunityMarketPollCard: View {
         // 文字を2pt大きくして」。
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
-                // ユーザー指摘(2026-11-19、7回目)「市場予測アンケートのアイコンの円が
-                // 2つに分裂してるから一つにして」: 小さいサイズで円が割れて見える
-                // `chart.pie.fill`をやめ、単一の円アイコンにする。
-                Image(systemName: "circle.fill").font(.system(size: 9)).foregroundStyle(V5P.blue)
+                // ユーザー指摘(2026-11-19、9回目)「市場予測アンケートのアイコンがただの
+                // 円になっている。参考画像のようにしてほしい」: 前回`circle.fill`に
+                // 差し替えたが単純な丸すぎたため、参考画像どおりの円グラフアイコンに戻す。
+                // 小さいサイズで円が割れて見えた(7回目の指摘)原因はサイズが小さすぎた
+                // ことのため、サイズを大きくして対応する。
+                Image(systemName: "chart.pie.fill").font(.system(size: 13)).foregroundStyle(V5P.blue)
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
                 HStack(spacing: 1) {
@@ -284,10 +286,12 @@ private struct CommunityPostCard: View {
     // (2行目)の2行をまとめる。
     // ユーザー指摘(2026-11-19、7回目)「投稿カードのアイコンの大きさを少し大きくして」:
     // アバターを20→24に。
-    // ユーザー指摘(2026-11-19、8回目)「米CPIの結果を受けては、アイコンの下に位置して/
-    // 投稿カードの右端の四角はもう少し大きくして/ハート、342、48保存の文字をもう少し
-    // 大きく」: タイトルは通貨ペア行の下ではなく、アバター(アイコン)と同じ左端に
-    // そろえた別行に戻し、チャート枠を拡大、footerの文字も拡大。
+    // ユーザー指摘(2026-11-19、9回目)「米CPIの結果が下すぎる。アイコンの下に来るように
+    // して。そして、インフレの文章も同じように。ただし横の四角の大きさや位置は戻すに」:
+    // タイトル・本文を、チャート枠(56x56)の高さに引っ張られて下がっていた全幅の別行
+    // から、アバター横の列(通貨ペア行の下)に戻す。列の内容がチャート枠より低くても、
+    // 次の行がチャート枠の高さ分だけ空かないようにする。チャート枠自体のサイズ・位置は
+    // 変更しない。
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
@@ -321,20 +325,18 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
+                    NotoText.text(post.title, size: 7.3)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
+                        + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
+                        .lineLimit(2)
                 }
 
                 Spacer(minLength: 4)
                 CommunityChartPlaceholder()
                     .frame(width: 56, height: 56)
             }
-
-            NotoText.text(post.title, size: 7.3)
-                .foregroundStyle(.white)
-                .fixedSize(horizontal: false, vertical: true)
-
-            (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
-                + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
-                .lineLimit(2)
 
             HStack(spacing: 10) {
                 footerItem(icon: "heart.fill", value: "\(post.likeCount)", color: Color(red: 0.95, green: 0.32, blue: 0.52))
