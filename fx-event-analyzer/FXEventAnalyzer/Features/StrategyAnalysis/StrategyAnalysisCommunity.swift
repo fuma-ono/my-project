@@ -286,6 +286,10 @@ struct CommunityPostListCard: View {
 
 private struct CommunityPostCard: View {
     let post: CommunityPost
+    // ユーザー指摘「ハートや保存などは押したら塗りつぶしになるようにして」:
+    // タップでアウトライン⇄塗りつぶしを切り替えるダミーの状態(Backendには送らない)。
+    @State private var isLiked = false
+    @State private var isSaved = false
 
     // ユーザー指摘(2026-11-19、3回目)「USD/JPY上昇予想はFXトレーダーの下にして、
     // アイコンに対して2行で」: その右にユーザー名+時刻(1行目)・通貨ペア+予想方向
@@ -346,9 +350,17 @@ private struct CommunityPostCard: View {
                 .padding(.trailing, 46)
 
             HStack(spacing: 10) {
-                footerItem(icon: "heart.fill", value: "\(post.likeCount)", color: Color(red: 0.95, green: 0.32, blue: 0.52))
+                footerItem(
+                    icon: isLiked ? "heart.fill" : "heart",
+                    value: "\(post.likeCount + (isLiked ? 1 : 0))",
+                    color: isLiked ? Color(red: 0.95, green: 0.32, blue: 0.52) : SettingsCardStyle.subtitleColor
+                ) { isLiked.toggle() }
                 footerItem(icon: "bubble.left", value: "\(post.commentCount)", color: SettingsCardStyle.subtitleColor)
-                footerItem(icon: "bookmark", value: "保存", color: SettingsCardStyle.subtitleColor)
+                footerItem(
+                    icon: isSaved ? "bookmark.fill" : "bookmark",
+                    value: "保存",
+                    color: isSaved ? V5P.blue : SettingsCardStyle.subtitleColor
+                ) { isSaved.toggle() }
                 Spacer(minLength: 0)
                 NotoText.text(post.isFollowing ? "フォロー中" : "フォローする", size: 6)
                     .foregroundStyle(V5P.blue)
@@ -373,11 +385,13 @@ private struct CommunityPostCard: View {
     }
 
     // ユーザー指摘(2026-11-19、8回目)「ハート、342、48保存の文字をもう少し大きく」。
-    private func footerItem(icon: String, value: String, color: Color) -> some View {
+    private func footerItem(icon: String, value: String, color: Color, onTap: (() -> Void)? = nil) -> some View {
         HStack(spacing: 2) {
             Image(systemName: icon).font(.system(size: 7.5)).foregroundStyle(color)
             NotoText.text(value, size: 7).foregroundStyle(color)
         }
+        .contentShape(Rectangle())
+        .onTapGesture { onTap?() }
     }
 }
 
