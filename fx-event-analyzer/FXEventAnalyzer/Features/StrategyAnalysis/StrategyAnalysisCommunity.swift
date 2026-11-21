@@ -267,6 +267,8 @@ struct CommunityPostListCard: View {
     // 区切り線だけで並べる。
     // ユーザー指摘(2026-11-19、5回目)「FXトレーダーKとアイコンをもう少し投稿カードの
     // 上枠に近づけて」: 枠の上の余白だけ詰める(下・左右の余白は変えない)。
+    // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」:
+    // さらに詰める(0にする)。
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(communityDummyPosts.enumerated()), id: \.element.id) { index, post in
@@ -277,7 +279,7 @@ struct CommunityPostListCard: View {
                 }
             }
         }
-        .padding(.top, 3)
+        .padding(.top, 0)
         .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
@@ -339,15 +341,16 @@ private struct CommunityPostCard: View {
 
             // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
             // 折り返して」: チャート枠の幅の分だけ右の余白を確保し、枠と重ならない幅で
-            // 折り返させる(枠を42ptに縮小したのに合わせて余白も46ptに調整)。
+            // 折り返させる(枠のサイズに合わせて調整。2026-11-21: 枠を50ptに拡大したのに
+            // 合わせて余白も54ptに拡大)。
             NotoText.text(post.title, size: 7.3)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.trailing, 46)
+                .padding(.trailing, 54)
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                 .lineLimit(2)
-                .padding(.trailing, 46)
+                .padding(.trailing, 54)
 
             HStack(spacing: 10) {
                 footerItem(
@@ -370,14 +373,19 @@ private struct CommunityPostCard: View {
             }
         }
         .padding(.horizontal, 7)
-        .padding(.vertical, 7)
+        // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」:
+        // 上だけ詰める(下は投稿どうしの間隔を保つため変えない)。
+        .padding(.top, 3)
+        .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .overlay(alignment: .topTrailing) {
             // ユーザー指摘(2026-11-19、13回目)「投稿カード内の四角をもう少し下に下げて」。
             // ユーザー指摘(2026-11-20、2回目)「枠の幅が広い/縦に広いから詰めて」:
-            // 56x56は大きすぎたため、42x38に縮小する。
+            // 56x56は大きすぎたため、42x38に縮小。
+            // ユーザー指摘(2026-11-21)「右の四角のサイズが小さいからもう少し大きくして」:
+            // 42x38は詰めすぎたため、50x44に戻す(タイトル・本文の右余白も合わせて拡大)。
             CommunityChartPlaceholder()
-                .frame(width: 42, height: 38)
+                .frame(width: 50, height: 44)
                 .padding(.top, 17)
                 .padding(.trailing, 7)
         }
