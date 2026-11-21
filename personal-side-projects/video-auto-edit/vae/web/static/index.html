@@ -36,7 +36,7 @@
   .drop input { display:block; margin:12px auto 0; max-width:100%; }
   progress { width:100%; height:20px; }
   .stage { margin:8px 0 0; }
-  .err { background:var(--err-bg); border:1px solid #f5c2bd; }
+  .err, section.card.err, div.card.err { background:var(--err-bg); border:1px solid #f5c2bd; }
   .err h2 { color:var(--err); }
   .render-fail { border-radius:8px; padding:10px 12px; margin-bottom:12px; line-height:1.6; }
   .hint { background:#fff; border-left:4px solid var(--err); padding:8px 12px; margin:8px 0 12px; }
@@ -59,7 +59,54 @@
   .tag.cut { background:#fdecea; color:var(--err); } .tag.keep { background:#e7eaf0; color:var(--muted); }
   .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
   details summary { cursor:pointer; color:var(--muted); }
+  /* マイページ・料金(料金仕様 v1) */
+  header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { flex:1 1 auto; }
+  .acct-sum { font-size:.85rem; color:var(--muted); }
+  .acct-sum b { color:var(--fg); }
+  #mypage { max-width:860px; margin:12px auto 0; padding:0 16px; }
+  #mypage > section { margin-bottom:0; }
+  dl.kv { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:8px 0; }
+  dl.kv dt { color:var(--muted); font-size:.9rem; }
+  dl.kv dd { margin:0; font-weight:bold; }
+  .plan-badge { display:inline-block; background:#e7eaf0; border-radius:4px; padding:0 8px; font-weight:bold; }
+  .precheck { background:#fff8e6; border:1px solid #f0d58a; border-radius:8px; padding:10px 12px; margin:12px 0 0; }
+  .precheck b { color:var(--warn); }
+  .notice { background:#eef4ff; border:1px solid #c9dbfb; border-radius:8px; padding:8px 12px; margin:0 0 12px; }
+  fieldset.concepts { border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin:12px 0; }
+  fieldset.concepts legend { font-size:.9rem; color:var(--muted); padding:0 4px; }
+  .concept-opts { display:flex; gap:6px 16px; flex-wrap:wrap; }
+  .concept-opts label { display:inline-flex; align-items:center; gap:4px; min-height:36px; cursor:pointer; }
+  .concept-opts .lock { font-size:.75rem; background:#fff4d6; color:var(--warn); border-radius:4px; padding:0 6px; }
+  .sub-card { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:16px; }
+  .sub-card h3 { margin:0 0 6px; font-size:1rem; }
+  .remain { font-weight:bold; }
+  ul.versions { list-style:none; padding:0; margin:8px 0; }
+  ul.versions li { display:flex; gap:8px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--line); padding:6px 0; }
+  ul.versions li .vname { flex:1 1 200px; }
+  dialog#upgrade { width:min(720px, 94vw); max-height:90vh; overflow:auto; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  dialog#upgrade::backdrop { background:rgba(20,24,33,.55); }
+  dialog#upgrade h2 { margin:0 0 8px; font-size:1.15rem; }
+  .plans { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:8px; margin:8px 0 12px; }
+  .plan { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .plan.current { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .plan h3 { margin:0; font-size:1rem; }
+  .plan .price { font-size:1.2rem; font-weight:bold; margin:2px 0 4px; }
+  .plan ul { padding-left:1.1em; margin:0; font-size:.88rem; }
+  .terms { background:#f5f6f8; border-radius:8px; padding:8px 12px; font-size:.88rem; }
+  .terms ul { padding-left:1.1em; margin:4px 0; }
+  .buy-note { font-weight:bold; margin:10px 0 4px; }
+  #collect { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:12px; }
+  #collect h3 { margin:0 0 6px; font-size:1rem; }
+  ol.clips { margin:4px 0 8px; padding-left:1.6em; }
+  ol.clips li { padding:2px 0; overflow-wrap:anywhere; }
+  ol.clips .sec { color:var(--muted); white-space:nowrap; }
   @media (max-width: 480px) {
+    header { padding:10px; gap:4px 8px; }
+    header .acct-sum { order:3; flex-basis:100%; }
+    #mypage { padding:0 10px; }
+    dl.kv { grid-template-columns:1fr; gap:0; }
+    dl.kv dd { margin-bottom:6px; }
     main { padding:10px; }
     section.card { padding:12px; }
     table, tbody, tr, td { display:block; width:100%; }
@@ -74,7 +121,28 @@
 </style>
 </head>
 <body>
-<header><h1>動画自動編集AI</h1></header>
+<header>
+  <h1>動画自動編集AI</h1>
+  <span class="acct-sum" id="acct-sum" aria-live="polite"></span>
+  <button class="secondary small" type="button" id="mypage-btn" aria-expanded="false" aria-controls="mypage">マイページ</button>
+</header>
+<div id="mypage" hidden>
+  <section class="card" aria-labelledby="hmy">
+    <h2 id="hmy">マイページ</h2>
+    <dl class="kv">
+      <dt>現在のプラン</dt><dd id="my-plan">-</dd>
+      <dt>契約期間の終わり</dt><dd id="my-expires">-</dd>
+      <dt>自動更新</dt><dd id="my-renew">-</dd>
+      <dt>今月の新規編集の残り</dt><dd id="my-new">-</dd>
+      <dt>この動画の AI 再編集の残り</dt><dd id="my-reedit">-</dd>
+    </dl>
+    <p class="note">字幕の手動修正と、完成した動画の再生・ダウンロードは、回数を使わずにいつでもできます。上限に達しても自動で課金されることはありません。</p>
+    <div class="actions">
+      <button class="secondary small" type="button" data-action="plans">プランと料金を見る</button>
+      <button class="secondary small" type="button" id="mypage-close">閉じる</button>
+    </div>
+  </section>
+</div>
 <main>
   <ol class="steps" aria-label="進み具合">
     <li data-step="1">①<span class="lbl"> 動画を選ぶ</span></li>
@@ -86,30 +154,64 @@
 
   <!-- ① 動画を選ぶ -->
   <section class="card" id="step1" aria-labelledby="h1">
+    <p class="notice" id="step1-notice" role="status" hidden></p>
     <h2 id="h1">① 動画を選ぶ</h2>
-    <p class="note"><span class="free">30秒まで無料</span> 話し声の入った動画を選ぶと、無音と言い淀みを自動でカットし、字幕と BGM を付けます。
-      対応形式: MP4・MOV・M4V・MKV・WEBM(1GB まで)。</p>
+    <p class="note"><span class="free" id="free-badge">30秒まで無料</span> 話し声の入った動画を選ぶと、無音と言い淀みを自動でカットし、字幕と BGM を付けます。
+      対応形式: MP4・MOV・M4V・MKV・WEBM(1GB まで)。<span id="limit-note"></span></p>
+    <fieldset class="concepts" id="concept-new">
+      <legend>編集コンセプト</legend>
+      <div class="concept-opts"></div>
+    </fieldset>
     <label class="drop" id="drop" for="file">
       ここに動画をドラッグするか、下のボタンから選んでください
-      <input type="file" id="file" name="file" accept="video/mp4,video/quicktime,video/x-m4v,video/x-matroska,video/webm,.mp4,.mov,.m4v,.mkv,.webm" aria-describedby="h1">
+      <span class="note" id="multi-note" style="display:block;margin:4px 0 0"></span>
+      <input type="file" id="file" name="file" multiple accept="video/mp4,video/quicktime,video/x-m4v,video/x-matroska,video/webm,.mp4,.mov,.m4v,.mkv,.webm" aria-describedby="h1">
     </label>
+    <div class="precheck" id="precheck" role="alert" hidden>
+      <p style="margin:0"><b>この動画は今のプランの上限を超えています。</b> <span id="precheck-msg"></span></p>
+      <p class="note" style="margin:4px 0 0">上限より短く切り出した動画を選ぶか、上位のプランをご検討ください。最終的な長さの確認はサーバーで行います。</p>
+      <div class="actions">
+        <button type="button" class="small" data-action="plans">プランと料金を見る</button>
+        <button type="button" class="secondary small" id="precheck-other">別の動画を選ぶ</button>
+        <button type="button" class="secondary small" id="precheck-send">このまま送る(サーバーで確認)</button>
+      </div>
+    </div>
     <div id="upload" hidden>
       <p class="stage" id="upload-msg" aria-live="polite">アップロードしています…</p>
       <progress id="upload-bar" max="100" value="0" aria-label="アップロードの進み具合"></progress>
+    </div>
+    <!-- 複数の動画を1本にまとめる(STANDARD / PRO)。状態 collecting の間に表示する -->
+    <div id="collect" aria-labelledby="hcol" hidden>
+      <h3 id="hcol">1本にまとめる動画(この順につなぎます)</h3>
+      <ol class="clips" id="clips"></ol>
+      <p style="margin:0">合計 <b id="clips-total">-</b> <span class="note" id="clips-limit"></span></p>
+      <p class="stage" id="collect-msg" aria-live="polite"></p>
+      <p class="status bad" id="collect-err" role="alert"></p>
+      <div class="actions">
+        <button type="button" id="collect-start">この動画で編集を始める</button>
+        <button type="button" class="secondary" id="collect-add">動画を追加する</button>
+        <button type="button" class="secondary" data-action="restart">やめて別の動画を選ぶ</button>
+      </div>
+      <input type="file" id="file-more" multiple hidden tabindex="-1" aria-hidden="true" accept="video/mp4,video/quicktime,video/x-m4v,video/x-matroska,video/webm,.mp4,.mov,.m4v,.mkv,.webm">
+      <p class="note">編集を始めた時点で、今月の新規編集を1本使います。動画を追加するだけでは回数を使いません。</p>
     </div>
   </section>
 
   <!-- ② 解析中 -->
   <section class="card" id="step2" aria-labelledby="h2" hidden>
     <h2 id="h2">② 解析中</h2>
-    <p class="note">音声を聞き取り、カットする場所と字幕を作っています。このページを開いたままお待ちください。</p>
+    <p class="note" id="analyze-note">音声を聞き取り、カットする場所と字幕を作っています。このページを開いたままお待ちください。</p>
     <progress id="analyze-bar" max="100" value="0" aria-label="解析の進み具合"></progress>
     <p class="stage" id="analyze-msg" role="status" aria-live="polite">順番を待っています</p>
+    <div class="actions">
+      <button class="secondary" type="button" data-action="cancel">キャンセル</button>
+    </div>
+    <p class="note cancel-note">キャンセルしても、利用回数は使いません。<span class="cancel-status" aria-live="polite"></span></p>
   </section>
 
   <!-- ③ 確認と修正 -->
   <section class="card" id="step3" aria-labelledby="h3" hidden>
-    <div class="card err render-fail" id="render-fail-3" role="alert" hidden><b>書き出しに失敗しました。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
+    <div class="card err render-fail" id="render-fail-3" role="alert" hidden><b class="rf-title">書き出しに失敗しました。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
     <h2 id="h3">③ 確認と修正</h2>
     <div class="summary" aria-label="長さ">
       <div>元の長さ <b id="dur-src">-</b></div>
@@ -119,7 +221,7 @@
     <h3>元の動画</h3>
     <video id="src-video" controls preload="metadata" playsinline aria-label="元の動画のプレビュー"></video>
     <h3 id="subs-h">字幕(間違いを直して「保存」)</h3>
-    <p class="note">時間を押すと、元の動画のその場面を再生します。文字を全部消すと、その字幕は表示しません。</p>
+    <p class="note">時間を押すと、元の動画のその場面を再生します。文字を全部消すと、その字幕は表示しません。字幕の手動修正と書き出しは、利用回数を使いません。</p>
     <p id="no-subs" class="note" hidden>字幕はありません。</p>
     <table id="subs" aria-labelledby="subs-h">
       <thead><tr><th scope="col">時間(編集後)</th><th scope="col">字幕</th><th scope="col">操作</th></tr></thead>
@@ -143,18 +245,47 @@
     <p class="note">カット・字幕・BGM を合成しています。初回は BGM の準備に少し時間がかかります。</p>
     <progress id="render-bar" max="100" value="0" aria-label="書き出しの進み具合"></progress>
     <p class="stage" id="render-msg" role="status" aria-live="polite">書き出しの順番を待っています</p>
+    <div class="actions">
+      <button class="secondary" type="button" data-action="cancel">キャンセル</button>
+    </div>
+    <p class="note cancel-note">キャンセルしても、利用回数は使いません。<span class="cancel-status" aria-live="polite"></span></p>
   </section>
 
   <!-- ⑤ 完成 -->
   <section class="card" id="step5" aria-labelledby="h5" hidden>
-    <div class="card err render-fail" id="render-fail-5" role="alert" hidden><b>最新の書き出しに失敗しました。下の動画は前回の書き出し結果です。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
+    <div class="card err render-fail" id="render-fail-5" role="alert" hidden><b class="rf-title">最新の書き出しに失敗しました。下の動画は前回の書き出し結果です。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
     <h2 id="h5">⑤ 完成</h2>
     <p class="note" id="done-note"></p>
+    <p class="note" id="done-res"></p>
     <video id="out-video" controls preload="metadata" playsinline aria-label="完成した動画のプレビュー"></video>
     <div class="actions">
       <a class="button" id="download" href="#" download>ダウンロード</a>
       <button class="secondary" type="button" id="reedit-btn">字幕を直して再書き出し</button>
       <button class="secondary" type="button" data-action="restart">別の動画を選ぶ</button>
+    </div>
+    <p class="note">「字幕を直して再書き出し」は、利用回数を使いません。</p>
+
+    <div class="sub-card" id="ai-reedit" aria-labelledby="hre">
+      <h3 id="hre">AI 再編集(編集コンセプトを変えて作り直す)</h3>
+      <p>この動画の AI 再編集の残り: <span class="remain" id="reedit-remain">-</span></p>
+      <fieldset class="concepts" id="concept-re">
+        <legend>編集コンセプト</legend>
+        <div class="concept-opts"></div>
+      </fieldset>
+      <p class="note" id="reedit-terms">AI 再編集を実行すると、この動画の再編集の回数を1回使います(今と同じコンセプトなら処理せず、回数も使いません)。
+        字幕の文章の手動変更は回数を使いません。AI 再編集では字幕を作り直しますが、手動で直した字幕は、元の動画の同じ場面の字幕に引き継ぎます(対応が決まらないものは作り直した内容になります)。今の動画は「前の版」に残ります。</p>
+      <p class="note" id="reedit-none" hidden>この動画の AI 再編集の回数は残っていません。上位のプランでは回数が増えます。字幕の手動修正と再書き出しは、このまま続けられます。</p>
+      <div class="actions">
+        <button type="button" id="ai-reedit-btn">AI 再編集する(回数を1回使う)</button>
+      </div>
+      <p class="status" id="reedit-status" role="status" aria-live="polite"></p>
+    </div>
+
+    <div class="sub-card" id="versions-box" aria-labelledby="hver" hidden>
+      <h3 id="hver">前の版</h3>
+      <p class="note">AI 再編集の前の完成動画です。再生・ダウンロードできます(保存期間はこの動画の期限までです)。</p>
+      <ul class="versions" id="versions"></ul>
+      <video id="ver-video" controls preload="metadata" playsinline aria-label="前の版のプレビュー" hidden></video>
     </div>
   </section>
 
@@ -163,9 +294,29 @@
     <h2 id="herr">うまくいきませんでした</h2>
     <p id="err-msg"></p>
     <div class="hint"><b>対処:</b> <span id="err-hint"></span></div>
-    <button type="button" data-action="restart">別の動画を選ぶ</button>
+    <div class="actions">
+      <button type="button" data-action="restart">別の動画を選ぶ</button>
+      <button class="secondary" type="button" data-action="plans" id="err-plans" hidden>プランと料金を見る</button>
+    </div>
   </section>
 </main>
+
+<!-- アップグレードの案内(上限に達したとき。閉じれば今の画面に戻る) -->
+<dialog id="upgrade" aria-labelledby="hup">
+  <h2 id="hup">プランと料金</h2>
+  <p class="notice" id="up-reason" hidden></p>
+  <div class="plans" id="up-plans"></div>
+  <div class="terms" id="up-terms-box">
+    <b>購入の前にご確認ください</b>
+    <ul id="up-terms"></ul>
+  </div>
+  <p class="buy-note">有料プランは iOS アプリで購入できます。この Web 画面からは購入できません。</p>
+  <div class="actions">
+    <button type="button" disabled aria-describedby="up-terms-box">購入は iOS アプリで</button>
+    <button class="secondary" type="button" id="up-close">閉じる</button>
+  </div>
+  <p class="note">字幕の手動修正と、完成した動画の再生・ダウンロードは、購入しなくても続けられます。</p>
+</dialog>
 
 <script>
 "use strict";
@@ -173,9 +324,14 @@
   const $ = (id) => document.getElementById(id);
   const MAX_BYTES = 1 << 30;
   const ALLOWED = [".mp4", ".mov", ".m4v", ".mkv", ".webm"];
+  // サーバーの job.error には upgrade が付かないことがあるため、上限系のコードでも判定する
+  const UPGRADE_CODES = ["limit_reached", "over_plan_limit", "multi_video_not_allowed", "concept_unavailable"];
   let jobId = sessionStorage.getItem("vae_job") || null;
   let pollTimer = null;
-  let maxSeconds = 30;
+  let plansInfo = null;          // GET /api/plans
+  let account = null;            // GET /api/account
+  let currentJob = null;
+  let pendingFiles = null;       // 長さの事前確認で止めた動画
 
   function fmtSec(x) {
     if (x == null || isNaN(x)) return "-";
@@ -184,11 +340,37 @@
     const m = Math.floor(x / 60), s = x - m * 60;
     return m + "分" + s.toFixed(1) + "秒";
   }
+  function fmtLimit(sec) {
+    sec = Number(sec);
+    if (sec < 60) return sec + "秒";
+    return (sec % 60 === 0) ? (sec / 60) + "分" : fmtSec(sec);
+  }
   function fmtTime(x) {
     x = Number(x) || 0;
     const m = Math.floor(x / 60), s = x - m * 60;
     return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
   }
+  function fmtJst(epochSec) {
+    if (!epochSec) return "-";
+    return new Date(epochSec * 1000).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "long",
+      day: "numeric", hour: "2-digit", minute: "2-digit" }) + "(日本時間)";
+  }
+  function newKey() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const a = new Uint8Array(16); crypto.getRandomValues(a);
+    return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function needsUpgrade(err) { return !!(err && (err.upgrade || UPGRADE_CODES.indexOf(err.code) >= 0)); }
+  function planLabel(name) {
+    const p = plansInfo && (plansInfo.plans || []).find((x) => x.name === name);
+    return p ? p.label : (name || "").toUpperCase();
+  }
+  function curPlan() {
+    if (account && account.plan) return account.plan;
+    return plansInfo && (plansInfo.plans || []).find((p) => p.name === (plansInfo.default || "free"));
+  }
+
   function show(step) {
     ["step1", "step2", "step3", "step4", "step5", "error"].forEach((id) => { $(id).hidden = true; });
     if (step === "error") { $("error").hidden = false; }
@@ -203,20 +385,34 @@
     err = err || {};
     $("err-msg").textContent = err.message || "処理中に予期しないエラーが起きました。";
     $("err-hint").textContent = err.hint || "もう一度試してください。";
+    const up = needsUpgrade(err);
+    $("err-plans").hidden = !up;
     show("error");
-    $("error").focus && $("error").setAttribute("tabindex", "-1");
+    $("error").setAttribute("tabindex", "-1");
     $("error").focus();
+    if (up) openUpgrade(err);
+    refreshAccount();
   }
-  async function api(method, path, body) {
-    const opt = { method, credentials: "same-origin", headers: {} };
+  async function api(method, path, body, opts) {
+    opts = opts || {};
+    const opt = { method, credentials: "same-origin", headers: Object.assign({}, opts.headers || {}) };
     if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
     let res;
-    try { res = await fetch(path, opt); }
-    catch (e) { throw { code: "network", message: "サーバーにつながりませんでした。", hint: "VAE を起動したまま、ページを再読み込みしてください。" }; }
+    const tries = opts.retries ? opts.retries + 1 : 1;
+    for (let i = 0; i < tries; i++) {
+      try { res = await fetch(path, opt); break; }
+      catch (e) {
+        if (i + 1 >= tries) throw { code: "network", message: "サーバーにつながりませんでした。", hint: "VAE を起動したまま、ページを再読み込みしてください。" };
+        await sleep(1000 * (i + 1));    // 通信の再送は同じ Idempotency-Key で行う(二重に数えない)
+      }
+    }
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
     if (!res.ok) {
-      throw (data && data.error) || { code: "http_" + res.status, message: "エラーが起きました(" + res.status + ")。", hint: "もう一度試してください。" };
+      const err = (data && data.error) || { code: "http_" + res.status, message: "エラーが起きました(" + res.status + ")。", hint: "もう一度試してください。" };
+      err.status = res.status;
+      err.body = data;
+      throw err;
     }
     return data;
   }
@@ -229,15 +425,172 @@
   function restart() {
     stopPoll();
     setJob(null);
+    currentJob = null;
+    shownState = null;
+    pendingFiles = null;
+    $("collect").hidden = true;
+    $("collect-err").textContent = "";
+    $("collect-msg").textContent = "";
+    $("concept-new").hidden = false;
     $("file").value = "";
     $("upload").hidden = true;
     $("drop").hidden = false;
+    $("precheck").hidden = true;
+    $("step1-notice").hidden = true;
     $("src-video").removeAttribute("src"); $("src-video").load();
     $("out-video").removeAttribute("src"); $("out-video").load();
+    $("ver-video").removeAttribute("src"); $("ver-video").hidden = true;
     show(1);
+    renderAccount();
     $("file").focus();
   }
   document.querySelectorAll('[data-action="restart"]').forEach((b) => b.addEventListener("click", restart));
+
+  // ---------------------------------------------------------------- マイページ
+  async function refreshAccount() {
+    try { account = await api("GET", "/api/account"); } catch (e) { return; }
+    renderAccount();
+  }
+  function reeditInfo() {
+    const pj = account && account.projects && jobId ? account.projects[jobId] : null;
+    const p = curPlan();
+    return { remaining: pj ? pj.reedits_remaining : null, limit: p ? p.reedits_per_project : null };
+  }
+  function renderAccount() {
+    const p = curPlan();
+    if (!p) return;
+    const lim = p.monthly_new_edits;
+    const rem = account ? account.new_edits_remaining : null;
+    $("acct-sum").innerHTML = "";
+    const b = document.createElement("b"); b.textContent = p.label + " プラン";
+    $("acct-sum").appendChild(b);
+    if (rem != null) $("acct-sum").appendChild(document.createTextNode(" ・ 今月の新規編集 残り " + rem + " / " + lim + " 本"));
+    $("my-plan").textContent = p.label + "(1本 " + fmtLimit(p.max_project_seconds) + "まで・書き出し " + p.max_short_side + "p まで)";
+    const sub = account && account.subscription;
+    $("my-expires").textContent = sub ? fmtJst(sub.expires_at) : "契約はありません(無料プラン)";
+    $("my-renew").textContent = sub ? (sub.auto_renew ? "あり(期間の終わりに自動で更新されます)" : "なし(期間の終わりまで使えます)") : "なし(無料プランは課金されません)";
+    $("my-new").textContent = rem != null ? ("残り " + rem + " 本 / 月 " + lim + " 本") : "-";
+    const ri = reeditInfo();
+    $("my-reedit").textContent = ri.remaining != null ? ("残り " + ri.remaining + " 回 / " + ri.limit + " 回") : "動画を選ぶと表示します";
+    $("reedit-remain").textContent = ri.remaining != null ? (ri.remaining + " 回 / " + ri.limit + " 回") : "-";
+    $("reedit-none").hidden = ri.remaining !== 0;
+    // ① の案内(プランの上限)
+    if (p.price_jpy === 0) $("free-badge").textContent = fmtLimit(p.max_project_seconds) + "まで無料";
+    else $("free-badge").textContent = p.label + ": " + fmtLimit(p.max_project_seconds) + "まで";
+    $("limit-note").textContent = "今のプラン(" + p.label + ")では、1本 " + fmtLimit(p.max_project_seconds) + "までの動画を編集できます。";
+    $("multi-note").textContent = p.multi_video
+      ? "複数の動画を選ぶと、選んだ順に1本につないで編集します(合計 " + fmtLimit(p.max_project_seconds) + "まで)。"
+      : "複数の動画を1本にまとめる機能は STANDARD・PRO プランで使えます。";
+    renderConcepts("concept-new", selectedConcept("concept-new") || "standard");
+    if (currentJob) renderConcepts("concept-re", selectedConcept("concept-re") || jobConcept(currentJob));
+  }
+  function toggleMypage(open) {
+    const box = $("mypage");
+    box.hidden = open === undefined ? !box.hidden : !open;
+    $("mypage-btn").setAttribute("aria-expanded", String(!box.hidden));
+    if (!box.hidden) refreshAccount();
+  }
+  $("mypage-btn").addEventListener("click", () => toggleMypage());
+  $("mypage-close").addEventListener("click", () => { toggleMypage(false); $("mypage-btn").focus(); });
+
+  // ---------------------------------------------------------------- アップグレードの案内
+  let upgradeOpener = null;
+  function openUpgrade(err) {
+    const dlg = $("upgrade");
+    const reason = $("up-reason");
+    if (err && err.message) { reason.hidden = false; reason.textContent = err.message + (err.hint ? " " + err.hint : ""); }
+    else reason.hidden = true;
+    const box = $("up-plans"); box.textContent = "";
+    const cur = curPlan();
+    ((plansInfo && plansInfo.plans) || []).forEach((p) => {
+      const d = document.createElement("div");
+      d.className = "plan" + (cur && cur.name === p.name ? " current" : "");
+      d.dataset.plan = p.name;
+      const h = document.createElement("h3"); h.textContent = p.label + (cur && cur.name === p.name ? "(今のプラン)" : "");
+      const pr = document.createElement("div"); pr.className = "price";
+      pr.textContent = p.price_jpy === 0 ? "無料" : "月額 " + Number(p.price_jpy).toLocaleString("ja-JP") + "円";
+      const per = { month: "1か月ごとの自動更新", year: "1年ごとの自動更新" }[p.period] || p.period;
+      const ul = document.createElement("ul");
+      [p.price_jpy === 0 ? "期間の定めなし" : "期間: " + per,
+       "1本 " + fmtLimit(p.max_project_seconds) + "まで",
+       "新規編集 月 " + p.monthly_new_edits + " 本",
+       "AI 再編集 1本につき " + p.reedits_per_project + " 回",
+       "書き出し " + p.max_short_side + "p まで" + (p.allow_4k ? "(4K 対応予定)" : ""),
+       p.multi_video ? "複数の動画を1本にまとめられる" : "1本の動画だけ",
+       p.concepts === "all" ? "すべての編集コンセプト" : "基本の編集コンセプト",
+       p.priority ? "優先して処理" : null].filter(Boolean).forEach((t) => {
+        const li = document.createElement("li"); li.textContent = t; ul.appendChild(li);
+      });
+      d.appendChild(h); d.appendChild(pr); d.appendChild(ul);
+      box.appendChild(d);
+    });
+    const terms = $("up-terms"); terms.textContent = "";
+    const tl = (plansInfo && plansInfo.purchase_terms) || (account && account.purchase_terms) || [];
+    tl.forEach((t) => { const li = document.createElement("li"); li.textContent = t; terms.appendChild(li); });
+    upgradeOpener = document.activeElement;
+    if (!dlg.open) dlg.showModal();
+    $("up-close").focus({ preventScroll: true });
+    dlg.scrollTop = 0;                         // 狭い画面でも、価格から読めるように先頭を見せる
+  }
+  function closeUpgrade() {
+    const dlg = $("upgrade");
+    if (dlg.open) dlg.close();
+  }
+  $("upgrade").addEventListener("close", () => { if (upgradeOpener && upgradeOpener.focus) upgradeOpener.focus(); upgradeOpener = null; });
+  $("up-close").addEventListener("click", closeUpgrade);
+  $("upgrade").addEventListener("click", (e) => { if (e.target === $("upgrade")) closeUpgrade(); });   // 外側を押しても閉じる
+  document.querySelectorAll('[data-action="plans"]').forEach((b) => b.addEventListener("click", () => openUpgrade(null)));
+
+  // ---------------------------------------------------------------- 編集コンセプト
+  function availableConcepts() {
+    if (account && account.concepts) return account.concepts.map((c) => c.id);
+    return ((plansInfo && plansInfo.concepts) || []).filter((c) => c.tier === "basic").map((c) => c.id);
+  }
+  function selectedConcept(boxId) {
+    const r = document.querySelector("#" + boxId + " input:checked");
+    return r ? r.value : null;
+  }
+  function jobConcept(job) { return (job && job.settings && job.settings.concept) || "standard"; }
+  function renderConcepts(boxId, selected) {
+    const wrap = document.querySelector("#" + boxId + " .concept-opts");
+    const all = (plansInfo && plansInfo.concepts) || [];
+    if (!all.length) { $(boxId).hidden = true; return; }
+    $(boxId).hidden = false;
+    const ok = availableConcepts();
+    wrap.textContent = "";
+    all.forEach((c) => {
+      const lab = document.createElement("label");
+      const r = document.createElement("input");
+      r.type = "radio"; r.name = boxId; r.value = c.id;
+      const usable = ok.indexOf(c.id) >= 0;
+      r.checked = c.id === selected && usable;
+      r.dataset.locked = usable ? "" : "1";
+      lab.appendChild(r);
+      lab.appendChild(document.createTextNode(c.label));
+      if (!usable) {
+        const t = document.createElement("span"); t.className = "lock"; t.textContent = "上位プラン";
+        lab.appendChild(t);
+        r.setAttribute("aria-description", "今のプランでは使えません。選ぶとプランの案内を表示します");
+      }
+      r.addEventListener("change", () => {
+        if (r.dataset.locked) {
+          // 使えないコンセプト: 選択を戻し、アップグレードの案内を出す(最終判定はサーバー)
+          r.checked = false;
+          const prev = wrap.querySelector('input[value="' + (wrap.dataset.prev || "standard") + '"]');
+          if (prev) prev.checked = true;
+          openUpgrade({ code: "concept_unavailable", message: "「" + c.label + "」は、今のプラン(" + (curPlan() || {}).label + ")では使えません。",
+                        hint: "上位のプランで使えます。" });
+        } else { wrap.dataset.prev = r.value; }
+      });
+      wrap.appendChild(lab);
+    });
+    if (!wrap.querySelector("input:checked")) {
+      const s = wrap.querySelector('input[value="standard"]') || wrap.querySelector("input:not([data-locked='1'])");
+      if (s) s.checked = true;
+    }
+    const chk = wrap.querySelector("input:checked");
+    wrap.dataset.prev = chk ? chk.value : "standard";
+  }
 
   // ---------------------------------------------------------------- ① 動画を選ぶ
   function ext(name) { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); }
@@ -257,53 +610,255 @@
     });
   }
 
-  async function startUpload(file) {
-    if (!file) return;
+  function checkFile(file) {
     if (ALLOWED.indexOf(ext(file.name)) < 0) {
-      return showError({ message: "この形式の動画には対応していません(拡張子 " + (ext(file.name) || "なし") + ")。",
-        hint: "MP4・MOV・M4V・MKV・WEBM の動画を選んでください。スマートフォンで撮影した動画はそのまま使えます。" });
+      return { message: "この形式の動画には対応していません(" + file.name + "、拡張子 " + (ext(file.name) || "なし") + ")。",
+        hint: "MP4・MOV・M4V・MKV・WEBM の動画を選んでください。スマートフォンで撮影した動画はそのまま使えます。" };
     }
     if (file.size > MAX_BYTES) {
-      return showError({ message: "ファイルが大きすぎます(" + (file.size / 1e9).toFixed(1) + "GB)。",
-        hint: "1GB 以下の動画を選んでください。30秒以内に切り出すと小さくなります。" });
+      return { message: "ファイルが大きすぎます(" + file.name + "、" + (file.size / 1e9).toFixed(1) + "GB)。",
+        hint: "1GB 以下の動画を選んでください。30秒以内に切り出すと小さくなります。" };
     }
-    const d = await probeDuration(file);
-    if (d != null && d > maxSeconds + 0.05) {
-      return showError({ message: "動画の長さ(" + d.toFixed(1) + "秒)が、無料プランの上限(" + maxSeconds + "秒)を超えています。",
-        hint: maxSeconds + "秒以内に切り出した動画を選んでください。長い動画は今後の有料プランで対応予定です。" });
+    return null;
+  }
+  function showPrecheck(msg, canSend) {
+    $("precheck-msg").textContent = msg;
+    $("precheck-send").hidden = !canSend;
+    $("precheck").hidden = false;
+    $("precheck").setAttribute("tabindex", "-1");
+    $("precheck").focus();
+  }
+
+  async function startUpload(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    $("step1-notice").hidden = true;
+    $("precheck").hidden = true;
+    for (const f of files) { const bad = checkFile(f); if (bad) return showError(bad); }
+    const p = curPlan();
+    const maxSec = p ? Number(p.max_project_seconds) : 30;
+    if (files.length > 1 && p && !p.multi_video) {
+      // 複数の動画は STANDARD / PRO だけ。送る前に案内する(最終判定はサーバーの multi_video_not_allowed)
+      const err = { code: "multi_video_not_allowed", upgrade: true,
+        message: p.label + " プランでは、1つの編集に動画を1本だけ使えます(" + files.length + "本選ばれています)。",
+        hint: "1本ずつ選んで編集するか、上位のプラン(STANDARD・PRO)で複数の動画を1本にまとめられます。" };
+      pendingFiles = null;
+      showPrecheck(err.message + " " + err.hint, false);
+      openUpgrade(err);
+      return;
     }
+    const durs = await Promise.all(files.map(probeDuration));
+    const known = durs.every((d) => d != null);
+    const total = durs.reduce((a, d) => a + (d || 0), 0);
+    if (total > maxSec + 0.05) {
+      // 送る前に案内する(長い動画の送信を待たせない)。読み違いもあり得るので、そのまま送ることもできる
+      pendingFiles = files;
+      const head = files.length > 1
+        ? "選んだ " + files.length + " 本の合計は " + fmtSec(total) + (known ? "" : " 以上") + "(" +
+          files.map((f, i) => fmtSec(durs[i])).join(" + ") + ")で、"
+        : "動画の長さは " + fmtSec(total) + " で、";
+      showPrecheck(head + (p ? p.label : "") + " プランの上限(1本 " + fmtLimit(maxSec) + ")を " + fmtSec(total - maxSec) + " 超えています。", true);
+      return;
+    }
+    sendFiles(files);
+  }
+  function sendFiles(files) { if (files.length > 1) sendCollect(files); else sendUpload(files[0]); }
+  $("precheck-send").addEventListener("click", () => { const f = pendingFiles; pendingFiles = null; $("precheck").hidden = true; if (f) sendFiles(f); });
+  $("precheck-other").addEventListener("click", () => { pendingFiles = null; $("precheck").hidden = true; $("file").value = ""; $("file").focus(); });
+
+  // 1回の送信(XMLHttpRequest は送信の進み具合を取れる)。通信が切れたら reject
+  function xhrSend(url, file, headers, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      Object.keys(headers).forEach((k) => xhr.setRequestHeader(k, headers[k]));
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded * 100 / e.total)); };
+      xhr.onerror = () => reject({ code: "network", message: "アップロードできませんでした。", hint: "通信状態を確認して、もう一度選んでください。" });
+      xhr.onload = () => {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        if (xhr.status !== 200 || !data || !data.id) {
+          return reject((data && data.error) || { message: "アップロードできませんでした(" + xhr.status + ")。", hint: "もう一度試してください。" });
+        }
+        resolve(data);
+      };
+      xhr.send(file);
+    });
+  }
+  function beginUploadUi() {
     $("drop").hidden = true;
+    $("concept-new").hidden = true;
     $("upload").hidden = false;
     $("upload-bar").value = 0;
     $("upload-msg").textContent = "アップロードしています… 0%";
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/jobs");
-    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
-    xhr.setRequestHeader("X-Plan", "free");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const p = Math.round(e.loaded * 100 / e.total);
-        $("upload-bar").value = p;
-        $("upload-msg").textContent = "アップロードしています… " + p + "%";
-      }
-    };
-    xhr.onerror = () => showError({ message: "アップロードできませんでした。", hint: "通信状態を確認して、もう一度選んでください。" });
-    xhr.onload = () => {
-      let data = null;
-      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
-      if (xhr.status !== 200 || !data || !data.id) {
-        return showError((data && data.error) || { message: "アップロードできませんでした(" + xhr.status + ")。", hint: "もう一度試してください。" });
-      }
-      setJob(data.id);
-      handleJob(data);
-    };
-    xhr.send(file);
   }
-  $("file").addEventListener("change", (e) => startUpload(e.target.files[0]));
+  function uploadDone() { $("concept-new").hidden = false; $("upload").hidden = true; }
+
+  async function sendUpload(file) {
+    const key = newKey();                      // この動画の送信1回につき1つ。通信のリトライでは同じキーを使う
+    const headers = { "X-Filename": encodeURIComponent(file.name), "Idempotency-Key": key,
+                      "X-Concept": selectedConcept("concept-new") || "standard" };
+    beginUploadUi();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const data = await xhrSend("/api/jobs", file, headers, (pc) => {
+          $("upload-bar").value = pc;
+          $("upload-msg").textContent = "アップロードしています… " + pc + "%" + (attempt > 1 ? "(再送 " + (attempt - 1) + " 回目)" : "");
+        });
+        setJob(data.id);
+        refreshAccount();
+        handleJob(data);
+        return;
+      } catch (e) {
+        if (e.code === "network" && attempt < 3) {
+          $("upload-msg").textContent = "通信が切れました。もう一度送っています…";
+          await sleep(1500 * attempt);
+          continue;
+        }
+        uploadDone();
+        return showError(e);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- 複数の動画(STANDARD / PRO)
+  // 1本目を X-Collect: 1 で送り、残りを /videos で1本ずつ足し、最後に /start で編集を始める
+  let collectBusy = false;
+  async function sendCollect(files) {
+    const n = files.length;
+    beginUploadUi();
+    $("upload-msg").textContent = "1本目を送っています(1 / " + n + ")… 0%";
+    let job;
+    try {
+      // 集める段階では利用枠を使わないので、通信の自動再送はしない(二重のプロジェクトを作らないため)
+      job = await xhrSend("/api/jobs", files[0], { "X-Filename": encodeURIComponent(files[0].name), "X-Collect": "1",
+        "Idempotency-Key": newKey(), "X-Concept": selectedConcept("concept-new") || "standard" }, (pc) => {
+        $("upload-bar").value = pc;
+        $("upload-msg").textContent = "1本目を送っています(1 / " + n + ")… " + pc + "%";
+      });
+    } catch (e) { uploadDone(); return showError(e); }
+    $("upload").hidden = true;
+    setJob(job.id);
+    if (job.state !== "collecting") { refreshAccount(); return handleJob(job); }   // 同じ操作の再送など
+    showCollect(job);
+    if (await addClips(files.slice(1), 2, n)) await startCollected();
+  }
+  async function addClips(files, firstNo, n) {
+    collectBusy = true;
+    setCollectButtons();
+    $("collect-err").textContent = "";
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const no = firstNo + i, f = files[i];
+        const bad = checkFile(f);
+        if (bad) { $("collect-err").textContent = bad.message + " " + bad.hint; return false; }
+        $("collect-msg").textContent = no + "本目を送っています(" + no + " / " + n + ")… 0%";
+        try {
+          const job = await xhrSend("/api/jobs/" + jobId + "/videos", f, { "X-Filename": encodeURIComponent(f.name) }, (pc) => {
+            $("collect-msg").textContent = no + "本目を送っています(" + no + " / " + n + ")… " + pc + "%";
+          });
+          renderCollect(job);
+        } catch (e) {
+          $("collect-msg").textContent = "";
+          $("collect-err").textContent = "「" + f.name + "」を追加できませんでした。" + (e.message || "") + (e.hint ? " " + e.hint : "") +
+            " ここまでに追加した動画は残っています。";
+          if (needsUpgrade(e)) openUpgrade(e);
+          return false;
+        }
+      }
+      $("collect-msg").textContent = "";
+      return true;
+    } finally { collectBusy = false; setCollectButtons(); }
+  }
+  async function startCollected() {
+    collectBusy = true; setCollectButtons();
+    $("collect-err").textContent = "";
+    $("collect-msg").textContent = "編集を始めています…";
+    try {
+      const job = await api("POST", "/api/jobs/" + jobId + "/start", {}, { headers: { "Idempotency-Key": newKey() }, retries: 2 });
+      $("collect-msg").textContent = "";
+      refreshAccount();
+      handleJob(job);
+    } catch (e) {
+      $("collect-msg").textContent = "";
+      $("collect-err").textContent = (e.message || "編集を始められませんでした。") + (e.hint ? " " + e.hint : "");
+      if (needsUpgrade(e)) openUpgrade(e);
+      refreshAccount();
+    } finally { collectBusy = false; setCollectButtons(); }
+  }
+  function setCollectButtons() {
+    $("collect-start").disabled = collectBusy;
+    $("collect-add").disabled = collectBusy;
+  }
+  function showCollect(job) {
+    show(1);
+    $("drop").hidden = true;
+    $("concept-new").hidden = true;
+    $("upload").hidden = true;
+    $("collect").hidden = false;
+    renderCollect(job);
+  }
+  function renderCollect(job) {
+    currentJob = job;
+    const list = $("clips"); list.textContent = "";
+    const clips = job.clips || [];
+    let total = 0;
+    clips.forEach((c) => {
+      const li = document.createElement("li");
+      li.appendChild(document.createTextNode((c.filename || "動画") + " "));
+      const sp = document.createElement("span"); sp.className = "sec"; sp.textContent = "(" + fmtSec(c.seconds) + ")";
+      li.appendChild(sp);
+      list.appendChild(li);
+      total += Number(c.seconds) || 0;
+    });
+    const p = curPlan();
+    $("clips-total").textContent = fmtSec(total) + "(" + clips.length + "本)";
+    $("clips-limit").textContent = p ? "上限 " + fmtLimit(p.max_project_seconds) + "・残り " + fmtSec(Math.max(0, p.max_project_seconds - total)) : "";
+  }
+  $("collect-start").addEventListener("click", () => startCollected());
+  $("collect-add").addEventListener("click", () => $("file-more").click());
+  $("file-more").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length || !currentJob) return;
+    const p = curPlan();
+    const have = (currentJob.clips || []).reduce((a, c) => a + (Number(c.seconds) || 0), 0);
+    const durs = await Promise.all(files.map(probeDuration));
+    const total = have + durs.reduce((a, d) => a + (d || 0), 0);
+    if (p && total > p.max_project_seconds + 0.05) {
+      $("collect-err").textContent = "追加すると合計 " + fmtSec(total) + " になり、" + p.label + " プランの上限(" +
+        fmtLimit(p.max_project_seconds) + ")を " + fmtSec(total - p.max_project_seconds) + " 超えます。短い動画を選んでください。";
+      return;
+    }
+    const n0 = (currentJob.clips || []).length;
+    addClips(files, n0 + 1, n0 + files.length);
+  });
+
+  $("file").addEventListener("change", (e) => startUpload(e.target.files));
   const drop = $("drop");
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); startUpload(e.dataTransfer.files[0]); });
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); startUpload(e.dataTransfer.files); });
+
+  // ---------------------------------------------------------------- キャンセル
+  document.querySelectorAll('[data-action="cancel"]').forEach((b) => b.addEventListener("click", async () => {
+    if (!jobId) return;
+    const st = b.closest("section").querySelector(".cancel-status");
+    b.disabled = true;
+    st.textContent = " キャンセルしています…(今の段階が終わったところで止まります)";
+    try {
+      await api("POST", "/api/jobs/" + jobId + "/cancel", {});
+    } catch (e) {
+      b.disabled = false;
+      st.textContent = e.status === 409 ? " すでに処理が終わっていました。" : " " + (e.message || "キャンセルできませんでした。");
+    }
+    schedulePoll();
+  }));
+  function resetCancel(stepId) {
+    const sec = $(stepId);
+    sec.querySelector('[data-action="cancel"]').disabled = false;
+    sec.querySelector(".cancel-status").textContent = "";
+  }
 
   // ---------------------------------------------------------------- 状態の監視
   function schedulePoll() { stopPoll(); pollTimer = setTimeout(poll, 1000); }
@@ -318,9 +873,22 @@
   }
   let shownState = null;
   function handleJob(job) {
+    currentJob = job;
     const pct = Math.round((job.progress || 0) * 100);
-    if (job.state === "queued" || job.state === "analyzing") {
-      if (shownState !== "analyzing") show(2);
+    const reediting = job.run_kind === "reedit";
+    if (job.state === "collecting") {            // 複数の動画を集めている途中(再読み込みでもここに戻る)
+      stopPoll();
+      if (shownState !== "collecting") { shownState = "collecting"; showCollect(job); }
+      else renderCollect(job);
+      return;
+    }
+    // AI 再編集は「解析 → 書き出し」を続けて行う。途中の ready は確認画面を出さずに待つ
+    if (job.state === "queued" || job.state === "analyzing" || (job.state === "ready" && reediting)) {
+      if (shownState !== "analyzing") { show(2); resetCancel("step2"); }
+      $("h2").textContent = reediting ? "② AI 再編集中" : "② 解析中";
+      $("analyze-note").textContent = reediting
+        ? "選んだ編集コンセプトで、カットと字幕を作り直しています。今の動画は残っています。このページを開いたままお待ちください。"
+        : "音声を聞き取り、カットする場所と字幕を作っています。このページを開いたままお待ちください。";
       $("analyze-bar").value = Math.min(100, Math.round(pct / 0.75));
       $("analyze-msg").textContent = (job.message || "解析しています") + "(" + Math.min(100, Math.round(pct / 0.75)) + "%)";
       shownState = "analyzing";
@@ -329,7 +897,7 @@
       stopPoll();
       if (shownState !== "ready") { shownState = "ready"; loadReview(job); }
     } else if (job.state === "rendering") {
-      if (shownState !== "rendering") show(4);
+      if (shownState !== "rendering") { show(4); resetCancel("step4"); }
       const r = Math.max(0, Math.min(100, Math.round((pct - 75) * 4)));
       $("render-bar").value = r;
       $("render-msg").textContent = (job.message || "書き出しています") + "(" + r + "%)";
@@ -341,19 +909,39 @@
     } else if (job.state === "error") {
       stopPoll();
       shownState = "error";
-      showError(job.error || { message: job.message });
+      const err = job.error || { message: job.message };
+      if (err.code === "cancelled") {
+        // 解析中のキャンセル: 最初の画面に戻し、回数を使っていないことを伝える
+        restart();
+        $("step1-notice").textContent = "処理をキャンセルしました。利用回数は使っていません。";
+        $("step1-notice").hidden = false;
+        refreshAccount();
+        return;
+      }
+      showError(err);
     }
   }
 
-  // 書き出しの失敗(ジョブは確認・完成の状態に戻り、error に原因が入る)を表示する
+  // 書き出し・AI 再編集の失敗やキャンセル(ジョブは確認・完成の状態に戻り、error に原因が入る)を表示する
   function showRenderFailure(job, boxId) {
     const box = $(boxId);
-    const failed = job && job.error && job.stage === "render_failed";
+    const err = job && job.error;
+    const failed = !!err && (job.stage === "render_failed" || job.stage === "reedit_failed");
     box.hidden = !failed;
-    if (failed) {
-      box.querySelector(".rf-msg").textContent = job.error.message || "";
-      box.querySelector(".rf-hint").textContent = "対処: " + (job.error.hint || "もう一度書き出してください。");
-    }
+    if (!failed) return;
+    const cancelled = err.code === "cancelled";
+    const reedit = job.stage === "reedit_failed";
+    let title;
+    if (reedit) title = cancelled ? "AI 再編集をキャンセルしました。下の動画は前の完成動画のままです(回数は使っていません)。"
+                                  : "AI 再編集に失敗しました。下の動画は前の完成動画のままです(回数は使っていません)。";
+    else if (cancelled) title = boxId === "render-fail-5" ? "書き出しをキャンセルしました。下の動画は前回の書き出し結果です(回数は使っていません)。"
+                                                         : "書き出しをキャンセルしました(回数は使っていません)。";
+    else title = boxId === "render-fail-5" ? "最新の書き出しに失敗しました。下の動画は前回の書き出し結果です。" : "書き出しに失敗しました。";
+    box.classList.toggle("err", !cancelled);
+    box.classList.toggle("notice", cancelled);
+    box.querySelector(".rf-title").textContent = title;
+    box.querySelector(".rf-msg").textContent = cancelled ? "" : (err.message || "");
+    box.querySelector(".rf-hint").textContent = cancelled ? "" : "対処: " + (err.hint || "もう一度書き出してください。");
   }
 
   // ---------------------------------------------------------------- ③ 確認と修正
@@ -463,17 +1051,94 @@
     $("download").setAttribute("href", "/api/jobs/" + job.id + "/output?download=1");
     const base = (job.filename || "video").replace(/\.[^.]+$/, "");
     $("download").setAttribute("download", base + "_edited.mp4");
-    const v = job.result && job.result.verify;
-    $("done-note").textContent = "編集後の長さ " + fmtSec(job.result && (job.result.out_duration || (v && v.video_sec))) +
+    const res = job.result || {};
+    const v = res.verify;
+    $("done-note").textContent = "編集後の長さ " + fmtSec(res.out_duration || (v && v.video_sec)) +
       (v && v.ok === false ? "(書き出し後の確認で問題が見つかりました。再書き出しをお試しください)" : "");
+    if (res.resolution_class) {
+      const pl = (plansInfo && (plansInfo.plans || []).find((x) => x.name === job.plan)) || curPlan() || {};
+      const lbl = planLabel(job.plan) + " プラン";
+      let txt = res.resolution_class + " で書き出しました(" + lbl + ")";
+      if (Array.isArray(res.output_size)) {
+        const w = res.output_size[0], h = res.output_size[1], short = Math.min(w, h);
+        const cls = parseInt(res.resolution_class, 10) || (res.resolution_class === "4k" ? 2160 : 0);
+        txt = short < cls
+          ? w + "×" + h + " で書き出しました(元の動画の解像度のまま。" + lbl + "の上限は " + (pl.max_short_side || cls) + "p で、拡大はしません)"
+          : res.resolution_class + "(" + w + "×" + h + ")で書き出しました(" + lbl + ")";
+      }
+      $("done-res").textContent = txt;
+      $("done-res").hidden = false;
+    } else $("done-res").hidden = true;
+    renderConcepts("concept-re", jobConcept(job));
+    $("ai-reedit-btn").disabled = false;
+    $("reedit-status").textContent = ""; $("reedit-status").className = "status";
+    renderVersions(job);
+    refreshAccount();
+  }
+  function conceptLabel(id) {
+    const c = ((plansInfo && plansInfo.concepts) || []).find((x) => x.id === id);
+    return c ? c.label : (id || "標準");
+  }
+  function renderVersions(job) {
+    const list = $("versions"); list.textContent = "";
+    const vs = job.versions || [];
+    $("versions-box").hidden = vs.length === 0;
+    vs.slice().reverse().forEach((v) => {
+      const li = document.createElement("li");
+      li.dataset.version = v.name;
+      const url = "/api/jobs/" + job.id + "/versions/" + encodeURIComponent(v.name);
+      const nm = document.createElement("span"); nm.className = "vname";
+      nm.textContent = v.name.replace(/\.mp4$/, "") + "(" + conceptLabel(v.concept) + "・" + fmtJst(v.created) + " 作成)";
+      const play = document.createElement("button"); play.type = "button"; play.className = "secondary small"; play.textContent = "再生";
+      play.setAttribute("aria-label", v.name + " を再生");
+      play.addEventListener("click", () => {
+        const vv = $("ver-video"); vv.hidden = false;
+        if (vv.getAttribute("src") !== url) vv.setAttribute("src", url);
+        vv.play().catch(() => {});
+      });
+      const dl = document.createElement("a"); dl.className = "button secondary small"; dl.textContent = "ダウンロード";
+      dl.href = url;
+      dl.setAttribute("download", (job.filename || "video").replace(/\.[^.]+$/, "") + "_" + v.name);
+      dl.setAttribute("aria-label", v.name + " をダウンロード");
+      li.appendChild(nm); li.appendChild(play); li.appendChild(dl);
+      list.appendChild(li);
+    });
   }
   $("reedit-btn").addEventListener("click", () => { shownState = "ready"; loadReview({ id: jobId }); });
 
+  $("ai-reedit-btn").addEventListener("click", async () => {
+    const btn = $("ai-reedit-btn"), st = $("reedit-status");
+    const concept = selectedConcept("concept-re") || jobConcept(currentJob);
+    btn.disabled = true;
+    st.className = "status"; st.textContent = "AI 再編集を受け付けています…";
+    const key = newKey();                      // 1回の操作につき1つ。通信のリトライでは同じキー
+    try {
+      const job = await api("POST", "/api/jobs/" + jobId + "/reedit", { concept },
+                            { headers: { "Idempotency-Key": key }, retries: 2 });
+      if (job.no_change) {
+        btn.disabled = false;
+        st.className = "status ok";
+        st.textContent = "変更がないため処理しませんでした(回数は使っていません)。別の編集コンセプトを選ぶと作り直せます。";
+        refreshAccount();
+        return;
+      }
+      shownState = null;
+      refreshAccount();
+      handleJob(job);
+    } catch (e) {
+      btn.disabled = false;
+      st.className = "status bad";
+      st.textContent = (e.message || "AI 再編集を始められませんでした。") + (e.hint ? " " + e.hint : "");
+      if (needsUpgrade(e)) openUpgrade(e);
+      refreshAccount();
+    }
+  });
+
   // ---------------------------------------------------------------- 起動
-  api("GET", "/api/plans").then((d) => {
-    const free = (d.plans || []).find((p) => p.name === "free");
-    if (free) maxSeconds = free.max_seconds;
-  }).catch(() => {});
+  Promise.all([
+    api("GET", "/api/plans").then((d) => { plansInfo = d; }).catch(() => {}),
+    refreshAccount(),
+  ]).then(() => { renderAccount(); if (!jobId) renderConcepts("concept-new", "standard"); });
   show(1);
   if (jobId) poll();   // 再読み込みしても続きから
 })();
