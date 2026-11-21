@@ -22,7 +22,7 @@
 | 字幕の修正(AC-S6) | ✅ | `tests/test_pipeline.py::test_ac_s6...`、`tests/test_web.py`、UI 操作テスト(修正が書き出しに反映) |
 | 書き出しの検証(AC-E1, E2) | ✅ | `vae.render.verify`: 実動画3本でフレーム数と音声長の一致・解像度・fps・True Peak すべて合格 |
 | 一時ファイル(AC-E3) | ✅ | `tests/test_pipeline.py::test_ac_e3...`、`tests/test_jobs.py::test_ac_e3...`(期限切れの削除) |
-| 安全フック | ✅ | `.claude/hooks/test_vae_hooks.py` 80/80(HOME=/root と /home/runner、PR #16)。find の削除は、-o で分けた削除の枝ごとに「否定されていない、すべてに一致しない名前の条件」があるかを見る。**限界**: 変数に入れたパス、`$(...)`、ヒアドキュメント、find の -regex 以外の複雑な式(例: -newer だけで絞った削除を名前なしとして止める側の誤り)。CLAUDE.md の「限界」と同じ扱い |
+| 安全フック | ✅ | `.claude/hooks/test_vae_hooks.py` 85/85(HOME=/root と /home/runner、PR #16)。find の削除は、括弧のまとまりを1語にまとめてから -o で枝に分け、削除する枝ごとに「否定されていない、すべてに一致しない名前の条件」があるかを見る。**限界**(安全網であり、すべては止められない): 変数に入れたパス、`$(...)`、ヒアドキュメントの中のコマンド、FIND_ALL_MATCH 以外の全一致の書き方(例 `-path '*/*'`)。**止める側の誤り**: 保護対象の親(リポジトリのルートなど)で `-name '*.*'` や、名前でなく `-newer`・`-size` だけで絞った削除 |
 | UI(AC-U1〜U5) | ✅ | `tests/test_web.py` 8件、`tools/ui_smoke.mjs`(実ブラウザ、HQ が再実行して PASS、スクリーンショット12枚(書き出し失敗の表示を含む、PR #16)。10枚版: `video-eval-output/hq_2026-11-21/ui_screenshots/`) |
 | 無料枠・プラン(AC-B1〜B4) | ✅ | `tests/test_jobs.py`(30秒超は受付前に拒否、プラン設定、端末ごとの重複検出、1日の回数上限)、UI でも 31秒は over_plan_limit |
 | コスト(AC-B3) | ✅ | 外部 API 0円(ジョブ結果に `external_cost_jpy: 0`)。処理時間: 実動画で 35〜71秒(medium、4 vCPU) |

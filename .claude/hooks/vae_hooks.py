@@ -151,10 +151,51 @@ FIND_NAME_OPTS = ("-name", "-iname", "-path", "-ipath", "-wholename")
 FIND_ALL_MATCH = re.compile(r"[*?]+|\*\.\*|\[!\.\]\*|\./[*?]+|\.\*")
 
 
+def _narrowing(alt):
+    """括弧を含まない1つの選択肢が、否定されていない「すべてに一致しない名前の条件」を持つか"""
+    for i, a in enumerate(alt[:-1]):
+        if a in FIND_NAME_OPTS and not (i > 0 and alt[i - 1] in ("-not", "!")):
+            if not FIND_ALL_MATCH.fullmatch(alt[i + 1]):
+                return True
+    return False
+
+
+def _collapse_groups(args):
+    """括弧のまとまりを1語に置き換える。中の選択肢(-o で分けたもの)がすべて名前で絞っていれば
+    「-name <絞りあり>」、そうでなければ「-true」。否定された括弧(! ( ... ))は絞りにならないので「-true」(r6-1)"""
+    out, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a == "(":
+            depth, j = 1, i + 1
+            while j < len(args) and depth:
+                depth += {"(": 1, ")": -1}.get(args[j], 0)
+                j += 1
+            inner = _collapse_groups(args[i + 1:j - 1])
+            alts, cur = [], []
+            for t in inner:
+                if t in ("-o", "-or"):
+                    alts.append(cur)
+                    cur = []
+                else:
+                    cur.append(t)
+            alts.append(cur)
+            negated = bool(out) and out[-1] in ("!", "-not")
+            if negated:
+                out.pop()
+            out += ["-name", "__narrowed__"] if (not negated and all(_narrowing(x) for x in alts)) else ["-true"]
+            i = j
+        else:
+            out.append(a)
+            i += 1
+    return out
+
+
 def _find_unfiltered(args):
-    """find の削除が、名前で対象を絞っていないか(r5-1・独立レビュー m1/m2)。
-    式を -o / -or で分け、削除する枝(-delete / -exec / -execdir を含む)ごとに、
+    """find の削除が、名前で対象を絞っていないか(r5-1・独立レビュー m1/m2・r6-1)。
+    括弧のまとまりを先に1語にまとめ、残りの式を -o / -or で分け、削除する枝(-delete / -exec / -execdir を含む)ごとに、
     否定されていない名前の条件のうち「すべてに一致する形」(*、?*、**、[!.]*、./*)以外が1つでもあるかを見る"""
+    args = _collapse_groups(list(args))
     branches, cur = [], []
     for a in args:
         if a in ("-o", "-or"):
@@ -164,14 +205,7 @@ def _find_unfiltered(args):
             cur.append(a)
     branches.append(cur)
     for br in branches:
-        if not any(a in ("-delete", "-exec", "-execdir") for a in br):
-            continue
-        narrowed = False
-        for i, a in enumerate(br[:-1]):
-            if a in FIND_NAME_OPTS and not (i > 0 and br[i - 1] in ("-not", "!")):
-                if not FIND_ALL_MATCH.fullmatch(br[i + 1]):
-                    narrowed = True
-        if not narrowed:
+        if any(a in ("-delete", "-exec", "-execdir") for a in br) and not _narrowing(br):
             return True
     return False
 
@@ -217,7 +251,8 @@ def _check_segment(seg, state, depth=0):
         check_args = args
     elif prog == "mv":
         check_args = [a for a in args if not a.startswith("-")][:-1]   # 移動元だけ(保護フォルダへの移動は許可)
-    elif prog == "find" and ("-delete" in args or (("-exec" in args or "-execdir" in args) and "rm" in args)):
+    elif prog == "find" and ("-delete" in args or (("-exec" in args or "-execdir" in args)
+                                                   and any(os.path.basename(a) in ("rm", "unlink", "shred") for a in args))):
         starts = []
         for a in args:                                     # 起点(最初の式より前の引数)。無ければ現在の場所
             if a.startswith("-") or a in ("(", "!"):

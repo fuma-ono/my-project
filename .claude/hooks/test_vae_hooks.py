@@ -103,6 +103,12 @@ CASES = [
     ("-name '[!.]*' の削除を止める", "guard", "find . -name '[!.]*' -delete", 2),
     ("-path './*' の削除を止める", "guard", "find . -path './*' -delete", 2),
     ("-execdir rm を止める", "guard", "find . -type f -execdir rm {} +", 2),
+    # --- 同 再確認 r6-1・r6-2: 括弧の中の -o・括弧ごとの否定・-exec /bin/rm ---
+    ("( -type f -o -name ) の削除を止める", "guard", "find . \\( -type f -o -name '*.pyc' \\) -delete", 2),
+    ("! ( -name ) の削除を止める", "guard", "find . ! \\( -name '*.py' \\) -delete", 2),
+    ("-not ( -name -o -name ) の削除を止める", "guard", "find . -not \\( -name '*.py' -o -name '*.md' \\) -delete", 2),
+    ("-exec /bin/rm を止める", "guard", "find . -type f -exec /bin/rm {} +", 2),
+    ("他事業での括弧付きの後片付けは通す", "guard", "find fx-event-analyzer \\( -name '*.pyc' -o -name '*.pyo' \\) -delete", 0),
 ]
 
 # フックの入力の cwd(実行場所)を使うケース: (説明, cwd, コマンド, 期待)
