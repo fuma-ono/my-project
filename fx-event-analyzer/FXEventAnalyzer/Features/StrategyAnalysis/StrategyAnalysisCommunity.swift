@@ -304,7 +304,11 @@ private struct CommunityPostCard: View {
     // する。これによりタイトル・本文はアバター(アイコン)と同じ左端の、カード全体に
     // またがる別行として配置できる(通貨ペア行の下に間延びしない)。
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // ユーザー指摘(2026-11-21、2回目)「考えますとインフレの粘着性の縦の余白、
+        // ハートと1回にとどまるの縦の余白ももう少し詰めて」: VStack全体の一律の間隔
+        // (spacing: 5)をやめ、行ごとに個別の余白を指定する(アイコン行↔タイトルは
+        // 5のまま、タイトル↔本文・本文↔フッターだけ詰める)。
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 6) {
                 ZStack {
                     Circle().fill(post.avatarColor)
@@ -338,6 +342,7 @@ private struct CommunityPostCard: View {
                     }
                 }
             }
+            .padding(.bottom, 5)
 
             // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
             // 折り返して」: チャート枠の幅の分だけ右の余白を確保し、枠と重ならない幅で
@@ -347,10 +352,12 @@ private struct CommunityPostCard: View {
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.trailing, 54)
+                .padding(.bottom, 2)
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                 .lineLimit(2)
                 .padding(.trailing, 54)
+                .padding(.bottom, 2)
 
             HStack(spacing: 10) {
                 footerItem(
@@ -373,9 +380,10 @@ private struct CommunityPostCard: View {
             }
         }
         .padding(.horizontal, 7)
-        // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」:
-        // 上だけ詰める(下は投稿どうしの間隔を保つため変えない)。
-        .padding(.top, 3)
+        // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」→
+        // 「詰まりすぎている、もう少し広くして」: 3では詰めすぎだったため6に戻す
+        // (下は投稿どうしの間隔を保つため変えない)。
+        .padding(.top, 6)
         .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .overlay(alignment: .topTrailing) {
