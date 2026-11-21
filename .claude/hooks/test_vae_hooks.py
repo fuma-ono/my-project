@@ -76,6 +76,16 @@ CASES = [
     ("sudo -u root rm を止める", "guard", "sudo -u root rm -rf video-eval-output", 2),
     ("find / で動画をまとめて消すのを止める", "guard", "find / -name '*.MOV' -delete", 2),
     ("保護フォルダの中を起点にした find の削除を止める", "guard", "find video-eval-output -name '*.md' -delete", 2),
+    # --- 独立レビュー4回目で見つかった見逃し(r4-1, r4-2) ---
+    ("time -p rm を止める", "guard", "time -p rm -rf video-eval-output", 2),
+    ("command -p rm を止める", "guard", "command -p rm -rf video-eval-output", 2),
+    ("xargs -t rm を止める", "guard", "xargs -t rm -rf video-eval-output", 2),
+    ("xargs -r rm を止める", "guard", "xargs -r rm -rf video-eval-output", 2),
+    ("env -S rm を止める", "guard", "env -S rm -rf video-eval-output", 2),
+    ("ルートでの find . -delete を止める", "guard", "find . -delete", 2),
+    ("ルートでの find . -type f -mtime +7 -delete を止める", "guard", "find . -type f -mtime +7 -delete", 2),
+    ("ルートでの find -regex の動画削除を止める", "guard", "find . -regex '.*\\.mp4' -delete", 2),
+    ("他事業のフォルダでの名前条件なしの find 削除は通す", "guard", "find fx-event-analyzer/tmp -type f -mtime +7 -delete", 0),
 ]
 
 # フックの入力の cwd(実行場所)を使うケース: (説明, cwd, コマンド, 期待)

@@ -61,7 +61,11 @@ def _tokens(seg):
 
 HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\2[ \t]*(?=\n|$)", re.S)
 WRAPPERS = ("sudo", "env", "nohup", "time", "nice", "ionice", "timeout", "xargs", "command", "exec")
-VALUE_OPTS = ("-u", "-g", "-U", "-C", "-D", "-h", "-p", "-r", "-t", "-s", "-k", "-n", "-c", "-S", "--signal", "--kill-after", "--user", "--group")
+# ラッパーごとの「値を取るオプション」(time -p、xargs -t などの値を取らないものを値付きとして扱わない)
+VALUE_OPTS = {"sudo": ("-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U", "--user", "--group"),
+              "timeout": ("-s", "-k", "--signal", "--kill-after"), "nice": ("-n",), "ionice": ("-c", "-n"),
+              "env": ("-u", "-C"), "xargs": ("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a")}
+MEDIA_RE = r"\.\(?(mp4|mov|m4v|mkv|webm|wav|mp3|m4a|aac|flac)"
 MEDIA_GLOB = re.compile(r"\*\.(mp4|mov|m4v|mkv|webm|wav|mp3|m4a|aac|flac)\b", re.I)
 
 
@@ -131,10 +135,11 @@ def _protected_hit(toks, cwd, ancestors=True):
 def _unwrap(toks):
     """sudo / env / timeout などの前置きを外し、bash -c '...' は中身を返す"""
     while toks and os.path.basename(toks[0]) in WRAPPERS:
+        vopts = VALUE_OPTS.get(os.path.basename(toks[0]), ())
         toks = toks[1:]
         while toks and (toks[0].startswith("-") or "=" in toks[0] or re.fullmatch(r"\d+[smh]?", toks[0])):
             # 値を取るオプション(sudo -u root、timeout -s KILL、nice -n 10 など)は値ごと外す
-            toks = toks[2:] if toks[0] in VALUE_OPTS and len(toks) > 1 else toks[1:]
+            toks = toks[2:] if toks[0] in vopts and len(toks) > 1 else toks[1:]
     if toks and os.path.basename(toks[0]) in ("bash", "sh", "zsh") and "-c" in toks:
         i = toks.index("-c")
         if i + 1 < len(toks):
@@ -195,7 +200,11 @@ def _check_segment(seg, state, depth=0):
         above = any(t.startswith(r.rstrip(os.sep) + os.sep) for r in roots for t in tgts)
         # 保護対象の中を起点にした削除は止める。保護対象の親を起点にした削除は、動画・音声を対象にするときだけ止める
         # (他事業や scratchpad での __pycache__ の後片付け、他フォルダの動画の削除は止めない)
-        if inside or (above and MEDIA_GLOB.search(" ".join(args))):
+        joined = " ".join(args)
+        media = MEDIA_GLOB.search(joined) or (re.search(r"-i?regex", joined) and re.search(MEDIA_RE, joined, re.I))
+        no_name = not any(a in ("-name", "-iname", "-path", "-ipath", "-wholename") for a in args)
+        # 名前の条件が無い削除(find . -delete、-mtime だけ など)は保護対象を巻き込むので止める
+        if inside or (above and (media or no_name)):
             block("ユーザーの動画素材・確認用出力を find で削除することは禁止されています(" + ", ".join(PROTECTED_MEDIA) + ")。")
     elif prog == "rsync" and any(a.startswith("--delete") for a in args):
         check_args = [a for a in args if not a.startswith("-")][-1:]

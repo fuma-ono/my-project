@@ -15,7 +15,7 @@
 ## 進行中
 | ID | タスク | 担当 | 完了条件 |
 |---|---|---|---|
-| T-08 | 独立レビュー(1〜3回目: マージ不可 → 指摘に対応済み。4回目のレビュー待ち) | independent-reviewer | 2回目で blocker・major が0件 |
+| T-08 | 独立レビュー(1〜3回目: マージ不可 → 対応。**4回目: マージ可**、blocker・major 0。minor r4-1・r4-2 も対応済み) | independent-reviewer | blocker・major が0件(4回目で達成) |
 | T-09 | CI の初回実行と修正 | release-manager | 現在の HEAD で CI 成功 |
 
 ## 未着手(優先順)
