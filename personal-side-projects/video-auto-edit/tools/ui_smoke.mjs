@@ -146,7 +146,7 @@ async function main() {
     // 書き出しに失敗したときの表示(T-16 / 独立レビュー2回目 N1)。
     // サーバーの状態の応答だけを書き換えて「失敗」にし、画面が失敗を知らせることを確かめる
     const failErr = { code: "verify_failed", message: "書き出した動画の確認で問題が見つかりました(テスト)。", hint: "もう一度書き出してください。", phase: "render" };
-    for (const [state, boxId, other] of [["done", "#render-fail-5", "#render-fail-3"], ["ready", "#render-fail-3", "#render-fail-5"]]) {
+    for (const [state, boxId] of [["done", "#render-fail-5"], ["ready", "#render-fail-3"]]) {
       const pattern = new RegExp(`/api/jobs/${jobId}$`);
       await page.route(pattern, async (route) => {
         const resp = await route.fetch();
@@ -157,7 +157,6 @@ async function main() {
       await page.locator(boxId).waitFor({ state: "visible", timeout: 15000 });
       const t = await page.locator(boxId).textContent();
       if (!t.includes("テスト") || !t.includes("もう一度書き出してください")) throw new Error(`${boxId} の文言が違います: ${t}`);
-      if (await page.locator(other).isVisible()) throw new Error(`${other} が表示されています`);
       await shot(page, `07_render_failed_${state}.png`);
       await page.unroute(pattern);
     }

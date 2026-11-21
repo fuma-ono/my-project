@@ -147,6 +147,35 @@ def _unwrap(toks):
     return toks, None
 
 
+FIND_NAME_OPTS = ("-name", "-iname", "-path", "-ipath", "-wholename")
+FIND_ALL_MATCH = re.compile(r"[*?]+|\*\.\*|\[!\.\]\*|\./[*?]+|\.\*")
+
+
+def _find_unfiltered(args):
+    """find の削除が、名前で対象を絞っていないか(r5-1・独立レビュー m1/m2)。
+    式を -o / -or で分け、削除する枝(-delete / -exec / -execdir を含む)ごとに、
+    否定されていない名前の条件のうち「すべてに一致する形」(*、?*、**、[!.]*、./*)以外が1つでもあるかを見る"""
+    branches, cur = [], []
+    for a in args:
+        if a in ("-o", "-or"):
+            branches.append(cur)
+            cur = []
+        else:
+            cur.append(a)
+    branches.append(cur)
+    for br in branches:
+        if not any(a in ("-delete", "-exec", "-execdir") for a in br):
+            continue
+        narrowed = False
+        for i, a in enumerate(br[:-1]):
+            if a in FIND_NAME_OPTS and not (i > 0 and br[i - 1] in ("-not", "!")):
+                if not FIND_ALL_MATCH.fullmatch(br[i + 1]):
+                    narrowed = True
+        if not narrowed:
+            return True
+    return False
+
+
 def _git_sub(args):
     """git の -C <dir> などの前置きを外して (サブコマンド, 残り, -C の場所) を返す"""
     cdir = None
@@ -188,7 +217,7 @@ def _check_segment(seg, state, depth=0):
         check_args = args
     elif prog == "mv":
         check_args = [a for a in args if not a.startswith("-")][:-1]   # 移動元だけ(保護フォルダへの移動は許可)
-    elif prog == "find" and ("-delete" in args or ("-exec" in args and "rm" in args)):
+    elif prog == "find" and ("-delete" in args or (("-exec" in args or "-execdir" in args) and "rm" in args)):
         starts = []
         for a in args:                                     # 起点(最初の式より前の引数)。無ければ現在の場所
             if a.startswith("-") or a in ("(", "!"):
@@ -202,12 +231,7 @@ def _check_segment(seg, state, depth=0):
         # (他事業や scratchpad での __pycache__ の後片付け、他フォルダの動画の削除は止めない)
         joined = " ".join(args)
         media = MEDIA_GLOB.search(joined) or (re.search(r"-i?regex", joined) and re.search(MEDIA_RE, joined, re.I))
-        name_opts = ("-name", "-iname", "-path", "-ipath", "-wholename")
-        no_name = not any(a in name_opts for a in args)
-        # 否定・「または」・すべてに一致する名前(-name '*')は、名前で対象を絞っていないのと同じ(r5-1)
-        loose = any(a in ("-not", "!", "-o", "-or") for a in args) or \
-            any(args[i] in name_opts and args[i + 1] in ("*", "*.*") for i in range(len(args) - 1))
-        no_name = no_name or loose
+        no_name = _find_unfiltered(args)
         # 名前の条件が無い削除(find . -delete、-mtime だけ など)は保護対象を巻き込むので止める
         if inside or (above and (media or no_name)):
             block("ユーザーの動画素材・確認用出力を find で削除することは禁止されています(" + ", ".join(PROTECTED_MEDIA) + ")。")

@@ -22,8 +22,8 @@
 | 字幕の修正(AC-S6) | ✅ | `tests/test_pipeline.py::test_ac_s6...`、`tests/test_web.py`、UI 操作テスト(修正が書き出しに反映) |
 | 書き出しの検証(AC-E1, E2) | ✅ | `vae.render.verify`: 実動画3本でフレーム数と音声長の一致・解像度・fps・True Peak すべて合格 |
 | 一時ファイル(AC-E3) | ✅ | `tests/test_pipeline.py::test_ac_e3...`、`tests/test_jobs.py::test_ac_e3...`(期限切れの削除) |
-| 安全フック | ✅ | `.claude/hooks/test_vae_hooks.py` 66/66(HOME=/root と /home/runner)。限界(変数のパス、`$(...)`、ヒアドキュメント、r5-1)は CLAUDE.md と T-17 に記録 |
-| UI(AC-U1〜U5) | ✅ | `tests/test_web.py` 8件、`tools/ui_smoke.mjs`(実ブラウザ、HQ が再実行して PASS、スクリーンショット10枚: `video-eval-output/hq_2026-11-21/ui_screenshots/`) |
+| 安全フック | ✅ | `.claude/hooks/test_vae_hooks.py` 80/80(HOME=/root と /home/runner、PR #16)。find の削除は、-o で分けた削除の枝ごとに「否定されていない、すべてに一致しない名前の条件」があるかを見る。**限界**: 変数に入れたパス、`$(...)`、ヒアドキュメント、find の -regex 以外の複雑な式(例: -newer だけで絞った削除を名前なしとして止める側の誤り)。CLAUDE.md の「限界」と同じ扱い |
+| UI(AC-U1〜U5) | ✅ | `tests/test_web.py` 8件、`tools/ui_smoke.mjs`(実ブラウザ、HQ が再実行して PASS、スクリーンショット12枚(書き出し失敗の表示を含む、PR #16)。10枚版: `video-eval-output/hq_2026-11-21/ui_screenshots/`) |
 | 無料枠・プラン(AC-B1〜B4) | ✅ | `tests/test_jobs.py`(30秒超は受付前に拒否、プラン設定、端末ごとの重複検出、1日の回数上限)、UI でも 31秒は over_plan_limit |
 | コスト(AC-B3) | ✅ | 外部 API 0円(ジョブ結果に `external_cost_jpy: 0`)。処理時間: 実動画で 35〜71秒(medium、4 vCPU) |
 | 回帰 | ✅ | `pytest -m "not slow"`: 82 passed(main f497d68、2026-11-21)。`pytest -m slow`: 1 passed(dcdbc17 時点)。実動画3本の再評価(3f3459b)で指標は前回と同一 |
