@@ -3,6 +3,9 @@
   python -m vae run 入力.mp4 -o 出力.mp4 [--model medium] [--work 作業フォルダ] [--plan free|standard|none]
   python -m vae verify 出力.mp4
   python -m vae web [--host 127.0.0.1] [--port 8765] [--data data]
+  python -m vae costs [--data data]                          プラン別・処理の種類別・解像度別の原価の集計(料金仕様 v1)
+  VAE_DEV_BILLING=1 python -m vae dev-grant --client <端末ID> --plan standard|pro [--days 30] [--data data]
+                                                             DEV 用: 本物の購入が無い環境で有料プランの動作を確かめる
 """
 import argparse
 import json
@@ -32,7 +35,15 @@ def main(argv=None):
     w = sub.add_parser("web", help="ローカル Web UI を起動する")
     w.add_argument("--host", default="127.0.0.1")
     w.add_argument("--port", type=int, default=8765)
-    w.add_argument("--data", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
+    default_data = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    w.add_argument("--data", default=default_data)
+    c = sub.add_parser("costs", help="原価の集計を表示する")
+    c.add_argument("--data", default=default_data)
+    g = sub.add_parser("dev-grant", help="DEV 用: 有料プランの購読を作る(VAE_DEV_BILLING=1 のときだけ)")
+    g.add_argument("--client", required=True, help="Web の端末 ID(Cookie vae_client)")
+    g.add_argument("--plan", required=True, choices=["standard", "pro"])
+    g.add_argument("--days", type=float, default=30)
+    g.add_argument("--data", default=default_data)
     a = ap.parse_args(argv)
 
     if a.cmd == "verify":
@@ -41,6 +52,24 @@ def main(argv=None):
     if a.cmd == "web":
         from .web.server import serve
         serve(a.host, a.port, a.data)
+        return 0
+    if a.cmd in ("costs", "dev-grant"):
+        import time
+        from .billing import config as bconfig
+        from .billing import store as bstore
+        cfg = bconfig.load()
+        b = bstore.BillingStore(os.path.join(a.data, "vae.db"), cfg)
+        if a.cmd == "costs":
+            print(json.dumps(b.cost_summary(), ensure_ascii=False, indent=1))
+            return 0
+        if os.environ.get("VAE_DEV_BILLING") != "1":
+            print("エラー: dev-grant は DEV 専用です(VAE_DEV_BILLING=1 のときだけ使えます)。本番では使えません。", file=sys.stderr)
+            return 1
+        acc = b.account_for_client(a.client)
+        product = cfg.plan(a.plan).product_ids[0]
+        sub_ = b.upsert_subscription(acc["id"], f"dev-{acc['id']}-{a.plan}", product, time.time() + a.days * 86400, source="dev")
+        print(json.dumps({"account": acc["id"], "plan": sub_["plan"], "expires_at": sub_["expires_at"], "source": "dev"},
+                         ensure_ascii=False, indent=1))
         return 0
     try:
         if a.plan != "none":

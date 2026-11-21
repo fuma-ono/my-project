@@ -42,7 +42,7 @@ def _video(tmp_path, name, segs=((0.5, False), (1.5, True), (0.6, False)), size=
 
 def _grant(store, client, product, days=30):
     acc = store.account_for(client)
-    store.billing.upsert_subscription(acc["id"], f"ot-{client}-{product}", product, time.time() + days * 86400, source="dev")
+    store.billing.upsert_subscription(acc["id"], f"ot-{client}-{product}", product, time.time() + days * 86400, source="apple")
     return acc
 
 
@@ -380,3 +380,65 @@ def _wait(store, job_id, timeout=120):
                 return
         time.sleep(0.1)
     raise TimeoutError(job_id)
+
+
+# ------------------------------------------------------------ AC-P6 複数動画(STANDARD / PRO)
+def test_ac_p6_multi_video_combine_for_paid(store, tmp_path):
+    _grant(store, "c1", STD)
+    a = _video(tmp_path, "m1.mp4", segs=((0.4, False), (1.2, True), (0.4, False)), size=(160, 284))
+    b = _video(tmp_path, "m2.mp4", segs=((0.3, False), (1.0, True), (0.5, False)), size=(320, 180), tone=330)
+    j = store.create(a, "m1.mp4", client_id="c1", collect=True)
+    assert j["state"] == "collecting" and store.account_status("c1")["new_edits_used"] == 0   # 開始まで予約しない
+    j = store.add_clip(j["id"], b, "m2.mp4", "c1")
+    assert len(j["clips"]) == 2 and abs(j["media"]["duration"] - 3.8) < 0.15
+    job = store.start_collected(j["id"], "c1", idempotency_key="start-1")
+    again = store.start_collected(j["id"], "c1", idempotency_key="start-1")
+    assert again.get("duplicate")
+    for _ in range(600):
+        if store.get(j["id"])["state"] in ("ready", "error"):
+            break
+        time.sleep(0.1)
+    job = store.get(j["id"])
+    assert job["state"] == "ready", job.get("error")
+    assert job["input_name"] == "combined.mp4" and job["media"]["width"] == 160 and job["media"]["height"] == 284
+    assert abs(job["media"]["duration"] - 3.8) < 0.15
+    d = store.paths(j["id"])["dir"]
+    assert os.path.exists(os.path.join(d, "input.mp4")) and os.path.exists(os.path.join(d, "clip1.mp4"))   # 元動画を残す
+    assert store.run_render(j["id"])
+    assert store.get(j["id"])["result"]["verify"]["ok"]
+    assert store.account_status("c1")["new_edits_used"] == 1
+
+
+def test_ac_p6_free_cannot_add_second_video(store, tmp_path):
+    j = store.create(_video(tmp_path, "f1.mp4"), "f1.mp4", client_id="c1", collect=True)
+    with pytest.raises(errors.VAEError) as e:
+        store.add_clip(j["id"], _video(tmp_path, "f2.mp4", tone=410), "f2.mp4", "c1")
+    assert e.value.code == "multi_video_not_allowed" and e.value.extra["upgrade"]
+
+
+def test_ac_p6_multi_video_total_limit(store, tmp_path):
+    _grant(store, "c1", STD)
+    j = store.create(_video(tmp_path, "t1.mp4", segs=((100.0, True),), size=(64, 64)), "t1.mp4", client_id="c1", collect=True)
+    with pytest.raises(errors.VAEError) as e:
+        store.add_clip(j["id"], _video(tmp_path, "t2.mp4", segs=((90.0, True),), size=(64, 64), tone=300), "t2.mp4", "c1")
+    assert e.value.code == "over_plan_limit" and e.value.extra["limit"] == 180
+    assert len(store.get(j["id"])["clips"]) == 1
+    assert not os.path.exists(os.path.join(store.paths(j["id"])["dir"], "clip1.mp4"))
+
+
+# ------------------------------------------------------------ CLI(原価の集計・DEV 用の購読)
+def test_cli_costs_and_dev_grant(tmp_path, monkeypatch, capsys):
+    from vae import cli
+    data = str(tmp_path / "data")
+    monkeypatch.delenv("VAE_DEV_BILLING", raising=False)
+    assert cli.main(["dev-grant", "--client", "x" * 32, "--plan", "pro", "--data", data]) == 1   # DEV 以外では使えない
+    monkeypatch.setenv("VAE_DEV_BILLING", "1")
+    assert cli.main(["dev-grant", "--client", "x" * 32, "--plan", "pro", "--data", data]) == 0
+    b = bstore.BillingStore(os.path.join(data, "vae.db"), bconfig.load())
+    assert b.effective_plan(b.account_for_client("x" * 32)["id"])[0].name == "pro"
+    monkeypatch.delenv("VAE_DEV_BILLING")
+    assert b.effective_plan(b.account_for_client("x" * 32)["id"])[0].name == "free"     # DEV 以外では DEV の購読は効かない
+    monkeypatch.setenv("VAE_DEV_BILLING", "1")
+    capsys.readouterr()
+    assert cli.main(["costs", "--data", data]) == 0
+    assert "margin" in capsys.readouterr().out

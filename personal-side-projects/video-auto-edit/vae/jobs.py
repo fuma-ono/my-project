@@ -30,7 +30,7 @@ from .billing import store as bstore
 
 MIN_FREE_GB = 2.0
 EXPIRE_HOURS = 24.0
-STATES = ("queued", "analyzing", "ready", "rendering", "done", "error")
+STATES = ("collecting", "queued", "analyzing", "ready", "rendering", "done", "error")
 BUSY = ("queued", "analyzing", "rendering")
 
 
@@ -174,7 +174,7 @@ class JobStore:
         return st.free / 1e9
 
     def create(self, src_path, filename, plan_name=None, client_id="local", settings=None, move=False,
-               idempotency_key=None, concept=None):
+               idempotency_key=None, concept=None, collect=False):
         """アップロードされたファイルを受け付け、新規編集の利用枠を予約する。問題があれば VAEError。戻り値: job
         plan_name は互換のために残す(プランはサーバー側の購読の状態で決める。クライアントの申告は使わない)"""
         free = self.free_gb()
@@ -199,7 +199,7 @@ class JobStore:
             info = media.validate(dst, max_seconds=plan.max_project_seconds, plan_name=plan.label)
             h = plans.file_hash(dst)
             # 同じ動画の判定は端末ごと(別の端末の結果は返さない。他人の動画の存在も漏らさない)
-            other = self.ledger.find(f"{client_id}:{h}")
+            other = None if collect else self.ledger.find(f"{client_id}:{h}")
             if other:                                      # 同じ動画は既存のジョブを返す(利用枠を使わない)
                 try:
                     existing = self.get(other)
@@ -217,24 +217,118 @@ class JobStore:
                 raise errors.project_too_long(e.total, e.limit, plan.label)
             except bstore.MultiVideoNotAllowed:
                 raise errors.multi_video_not_allowed(plan.label)
-            try:
-                usage = self.billing.reserve(acc["id"], job_id, "new_edit", idempotency_key)
-            except bstore.LimitReached as e:
-                raise errors.limit_reached("new_edit", e.limit, e.used, plan.label)
+            if not collect:                                # 複数動画を集めるときは、開始の時点で予約する
+                try:
+                    usage = self.billing.reserve(acc["id"], job_id, "new_edit", idempotency_key)
+                except bstore.LimitReached as e:
+                    raise errors.limit_reached("new_edit", e.limit, e.used, plan.label)
         except Exception:
             shutil.rmtree(d, ignore_errors=True)           # 失敗したら受付時のファイルを残さない
             if usage:
                 self._release(usage["id"], "create_failed")
             raise
-        job = {"id": job_id, "state": "queued", "stage": "queued", "progress": 0.0, "message": "順番を待っています",
+        job = {"id": job_id, "state": "collecting" if collect else "queued", "stage": "collecting" if collect else "queued",
+               "progress": 0.0, "message": "動画を追加できます" if collect else "順番を待っています",
                "created": time.time(), "updated": time.time(), "expires": time.time() + EXPIRE_HOURS * 3600,
                "filename": os.path.basename(filename or "")[:120], "input_name": "input" + ext, "plan": plan.name,
                "priority": plan.priority, "client_id": client_id, "account_id": acc["id"], "hash": h,
                "media": info.to_dict(), "settings": s.__dict__, "error": None, "result": None,
-               "usage_id": usage["id"], "run_kind": "new_edit", "versions": [], "reedits": 0}
+               "usage_id": usage["id"] if usage else None, "run_kind": "new_edit", "versions": [], "reedits": 0,
+               "clips": [{"name": "input" + ext, "filename": os.path.basename(filename or "")[:120],
+                          "seconds": info.duration, "width": info.width, "height": info.height}]}
         self._put(job)
-        self.ledger.remember(f"{client_id}:{h}", job_id)
+        if not collect:
+            self.ledger.remember(f"{client_id}:{h}", job_id)
         return job
+
+    # ------------------------------------------------------------ 複数動画(STANDARD / PRO)
+    def add_clip(self, job_id, src_path, filename, client_id, move=False):
+        """集めている途中のプロジェクトに動画を足す。合計時間・複数動画の可否はサーバー側で検証する"""
+        with self._lock:
+            job = self.get(job_id)
+            if job["state"] != "collecting":
+                raise ValueError(job["state"])
+            acc = self.account_for(client_id)
+            if acc["id"] != job.get("account_id"):
+                raise KeyError(job_id)
+            plan, _ = self.billing.effective_plan(acc["id"])
+            if not plan.multi_video:
+                raise errors.multi_video_not_allowed(plan.label)
+            if len(job["clips"]) >= 20:
+                raise errors.VAEError("too_many_videos", "1つのプロジェクトに追加できる動画は20本までです。", "")
+            ext = os.path.splitext(filename or "")[1].lower()
+            if ext not in media.ALLOWED_EXT:
+                raise errors.unsupported(f"(拡張子 {ext or 'なし'})")
+            d = self._dir(job_id)
+            name = f"clip{len(job['clips'])}{ext}"
+            dst = os.path.join(d, name)
+            try:
+                (shutil.move if move else shutil.copyfile)(src_path, dst)
+                total, _ = self.billing.project_seconds(job_id)
+                info = media.validate(dst, max_seconds=max(0.0, plan.max_project_seconds - total), plan_name=plan.label)
+                try:
+                    self.billing.add_video(job_id, info.duration, plan, info.width, info.height, plans.file_hash(dst))
+                except bstore.ProjectTooLong as e:
+                    raise errors.project_too_long(e.total, e.limit, plan.label)
+                except bstore.MultiVideoNotAllowed:
+                    raise errors.multi_video_not_allowed(plan.label)
+            except errors.VAEError as e:
+                if os.path.exists(dst):
+                    os.remove(dst)
+                if e.code == "over_plan_limit":                # 合計の長さで案内する
+                    total, _ = self.billing.project_seconds(job_id)
+                    try:
+                        dur = media.probe(src_path if os.path.exists(src_path) else dst).duration
+                    except Exception:
+                        dur = 0.0
+                    raise errors.project_too_long(total + dur, plan.max_project_seconds, plan.label)
+                raise
+            except Exception:
+                if os.path.exists(dst):
+                    os.remove(dst)
+                raise
+            job["clips"].append({"name": name, "filename": os.path.basename(filename or "")[:120], "seconds": info.duration,
+                                 "width": info.width, "height": info.height})
+            job["media"]["duration"] = round(sum(c["seconds"] for c in job["clips"]), 3)
+            job["updated"] = time.time()
+            self._put(job)
+            return job
+
+    def start_collected(self, job_id, client_id, idempotency_key=None):
+        """集めた動画で新規編集を始める(利用枠をここで予約する)"""
+        with self._lock:
+            job = self.get(job_id)
+            acc = self.account_for(client_id)
+            if acc["id"] != job.get("account_id"):
+                raise KeyError(job_id)
+            if job["state"] != "collecting":
+                if idempotency_key and job.get("usage_id"):
+                    return dict(job, duplicate=True)
+                raise ValueError(job["state"])
+            plan, _ = self.billing.effective_plan(acc["id"])
+            try:
+                self.billing.check_project_fits(job_id, plan)
+                usage = self.billing.reserve(acc["id"], job_id, "new_edit", idempotency_key)
+            except bstore.LimitReached as e:
+                raise errors.limit_reached("new_edit", e.limit, e.used, plan.label)
+            except bstore.ProjectTooLong as e:
+                raise errors.project_too_long(e.total, e.limit, plan.label)
+            except bstore.MultiVideoNotAllowed:
+                raise errors.multi_video_not_allowed(plan.label)
+            job.update(state="queued", stage="queued", message="順番を待っています", usage_id=usage["id"],
+                       needs_combine=len(job["clips"]) > 1, plan=plan.name, priority=plan.priority, updated=time.time())
+            self._put(job)
+        self.start(job_id, "analyze")
+        return job
+
+    def _combine_if_needed(self, job_id):
+        job = self.get(job_id)
+        if not job.get("needs_combine"):
+            return
+        d = self._dir(job_id)
+        self._update(job_id, stage="combine", progress=0.01, message="動画をつないでいます")
+        info = media.combine([os.path.join(d, c["name"]) for c in job["clips"]], os.path.join(d, "combined.mp4"))
+        self._update(job_id, input_name="combined.mp4", needs_combine=False, media=info.to_dict())
 
     def _job_for_key(self, key, account_id):
         try:
@@ -305,6 +399,8 @@ class JobStore:
             try:
                 self._check_cancel(job_id)
                 self._update(job_id, state="analyzing", message="解析を始めます")
+                self._combine_if_needed(job_id)
+                p = self.paths(job_id)
                 pipeline.analyze(p["input"], p["work"], s, transcriber=self._transcriber(s.model), vad_fn=self.vad_fn,
                                  progress=self._progress_cb(job_id))
                 self._update(job_id, state="ready", progress=0.75, message="編集内容ができました。確認して書き出してください")
@@ -529,7 +625,7 @@ class JobStore:
         now = now or time.time()
         removed = []
         for job in self.list():
-            if job.get("expires", now + 1) < now and job["state"] in ("done", "error", "ready"):
+            if job.get("expires", now + 1) < now and job["state"] in ("done", "error", "ready", "collecting"):
                 self.delete(job["id"], force=True)
                 removed.append(job["id"])
         return removed

@@ -13,6 +13,8 @@
   POST   /api/jobs/<id>/render               書き出し開始(字幕の手動変更の反映。利用枠は使わない)
   POST   /api/jobs/<id>/reedit               {"concept": "..."} AI 再編集(利用枠を使う)。Idempotency-Key
   POST   /api/jobs/<id>/cancel               処理のキャンセル(利用枠は返却)
+  POST   /api/jobs/<id>/videos               動画を足す(STANDARD / PRO の複数動画。POST /api/jobs に X-Collect: 1 で作ったもの)
+  POST   /api/jobs/<id>/start                集めた動画で新規編集を始める(利用枠をここで予約)。Idempotency-Key
   GET    /api/jobs/<id>/versions/<name>      AI 再編集の前の完成動画
   POST   /api/billing/apple/transactions     {"signedTransactions": [...]} iOS の購入・復元の取引(JWS)を検証して反映
   POST   /api/billing/apple/notifications    App Store Server Notifications V2({"signedPayload": "..."})
@@ -85,6 +87,8 @@ def public_job(job):
     if isinstance(res, dict):
         out["result"] = {k: res[k] for k in ("verify", "mix_metrics", "timings_sec", "out_duration", "output_size",
                                              "resolution_class") if k in res}
+    if isinstance(out.get("clips"), list):
+        out["clips"] = [{"filename": c.get("filename"), "seconds": c.get("seconds")} for c in out["clips"]]
     if isinstance(out.get("versions"), list):
         out["versions"] = [{"name": v.get("name"), "created": v.get("created"),
                             "concept": (v.get("settings") or {}).get("concept")} for v in out["versions"]]
@@ -266,6 +270,15 @@ class Handler(BaseHTTPRequestHandler):
             self._read_json()
             ok = self.store.cancel(job_id)
             return self._send_json(202 if ok else 409, {"cancelled": ok, "job": public_job(self.store.get(job_id))})
+        if rest == "/videos" and method == "POST":
+            return self._add_video(job)
+        if rest == "/start" and method == "POST":
+            self._read_json()
+            try:
+                job = self.store.start_collected(job_id, self._client(), idempotency_key=self._idempotency_key())
+            except ValueError:
+                raise HTTPError(409, "not_collecting", "この編集はすでに始まっています。", "")
+            return self._send_json(202, public_job(job))
         vm = re.match(r"^/versions/([^/]+)$", rest)
         if vm and method in ("GET", "HEAD"):
             name = vm.group(1)
@@ -317,6 +330,7 @@ class Handler(BaseHTTPRequestHandler):
         plan_name = None                                # プランはサーバー側で決める(X-Plan は使わない)
         self._idem = self._idempotency_key()
         self._concept = (self.headers.get("X-Concept") or "").strip()[:40] or None
+        self._collect = (self.headers.get("X-Collect") or "").strip() == "1"
         free = self.store.free_gb()                     # 受け取る前にディスクの空きを確認する
         if free < self.store.min_free_gb + length / 1e9:
             raise HTTPError(507, "disk_full", f"保存領域の空きが足りません(残り {free:.1f}GB)。",
@@ -330,9 +344,36 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
         dup = bool(job.get("duplicate"))
-        if not dup:
+        if not dup and job["state"] != "collecting":
             self.store.start(job["id"], "analyze")
         return self._send_json(200, dict(public_job(job), duplicate=dup))
+
+    def _add_video(self, job):
+        length = self.headers.get("Content-Length")
+        if self.headers.get("Transfer-Encoding") or length is None:
+            raise HTTPError(411, "length_required", "ファイルの大きさが分かりませんでした。", "もう一度選んでください。")
+        try:
+            length = int(length)
+        except ValueError:
+            raise HTTPError(400, "bad_request", "ファイルの大きさが正しくありません。", "もう一度選んでください。")
+        if length <= 0 or length > MAX_UPLOAD_BYTES:
+            raise HTTPError(413 if length > 0 else 400, "too_large" if length > 0 else "broken_file",
+                            "ファイルの大きさが正しくありません。", "1GB 以下の動画を選んでください。")
+        free = self.store.free_gb()
+        if free < self.store.min_free_gb + length / 1e9:
+            raise HTTPError(507, "disk_full", f"保存領域の空きが足りません(残り {free:.1f}GB)。", "古いジョブを削除してください。")
+        filename = os.path.basename(urllib.parse.unquote(self.headers.get("X-Filename") or "").replace("\\", "/"))[:200]
+        tmp = self._receive_body(length)
+        try:
+            job = self.store.add_clip(job["id"], tmp, filename, self._client(), move=True)
+        except ValueError:
+            raise HTTPError(409, "not_collecting", "この編集にはもう動画を追加できません。", "")
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        return self._send_json(200, public_job(job))
 
     def _receive_body(self, length):
         """本文を少しずつ一時ファイルへ書く(全体をメモリに読まない)"""
@@ -359,7 +400,7 @@ class Handler(BaseHTTPRequestHandler):
     def _create_from_tmp(self, tmp, filename, plan_name):
         cid = self._client()
         job = self.store.create(tmp, filename, plan_name, cid, move=True,      # コピーせず移動(ディスクを2倍使わない)
-                                idempotency_key=self._idem, concept=self._concept)
+                                idempotency_key=self._idem, concept=self._concept, collect=self._collect)
         if not job.get("duplicate"):
             return job
         if job.get("state") == "error":

@@ -133,7 +133,8 @@ class BillingStore:
         rows = self._conn().execute(
             "SELECT * FROM subscriptions WHERE account_id=? AND revoked_at IS NULL AND expires_at > ?",
             (account_id, now)).fetchall()
-        return [dict(r) for r in rows]
+        dev_ok = os.environ.get("VAE_DEV_BILLING") == "1"   # DEV 用の購読は DEV のときだけ有効(本番で効かない)
+        return [dict(r) for r in rows if r["source"] != "dev" or dev_ok]
 
     def effective_plan(self, account_id, now=None):
         """有効な購読のうち最上位のプラン。無ければ free。戻り値: (PlanSpec, 購読 or None)"""

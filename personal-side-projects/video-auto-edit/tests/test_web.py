@@ -286,3 +286,19 @@ def test_bad_idempotency_key(srv):
     st, _, data = req(srv, "POST", "/api/jobs", body=b"x", headers={"X-Filename": "a.mp4", "Idempotency-Key": "bad key!"},
                       client=CLIENT_C)
     assert st == 400
+
+
+def test_collect_videos_free_and_start_ac_p6(srv):
+    cid = "e" * 32
+    src = testing.make_video(str(srv["vids"] / "col1.mp4"), SEGMENTS)
+    with open(src, "rb") as f:
+        body = f.read()
+    st, _, data = req(srv, "POST", "/api/jobs", body=body, headers={"X-Filename": "col1.mp4", "X-Collect": "1"}, client=cid)
+    job = jbody(data)
+    assert st == 200 and job["state"] == "collecting" and job["clips"] == [{"filename": "col1.mp4", "seconds": job["clips"][0]["seconds"]}]
+    st, _, data = req(srv, "POST", f"/api/jobs/{job['id']}/videos", body=body, headers={"X-Filename": "col2.mp4"}, client=cid)
+    assert st == 400 and jbody(data)["error"]["code"] == "multi_video_not_allowed"      # FREE は1本だけ
+    st, _, data = req(srv, "POST", f"/api/jobs/{job['id']}/start", body={}, headers={"Idempotency-Key": "start-col-0001"}, client=cid)
+    assert st == 202
+    wait_state(srv, job["id"], ("ready",), client=cid)
+    assert req(srv, "POST", f"/api/jobs/{job['id']}/videos", body=body, headers={"X-Filename": "x.mp4"}, client=cid)[0] in (400, 409)
