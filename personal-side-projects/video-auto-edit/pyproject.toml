@@ -16,6 +16,7 @@ dependencies = [
 test = ["pytest>=8", "pyopenjtalk-plus>=0.3"]
 bgm = ["scipy>=1.11"]
 billing = ["cryptography>=42"]
+highlight = ["opencv-python-headless>=4.9", "onnxruntime>=1.17", "tokenizers>=0.15"]
 
 [tool.pytest.ini_options]
 markers = [
