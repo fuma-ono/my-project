@@ -95,8 +95,9 @@ def _segments(cmd):
 
 def _protected_targets():
     home = os.path.expanduser("~")
-    return [os.path.join(home, ".claude", "uploads"), os.path.join(ROOT, "video-eval-output"),
-            os.path.join(ROOT, PRODUCT, "data")]
+    # HOME が変わっても(CI・sudo など)実際のアップロード先 /root/.claude/uploads は守る
+    uploads = {os.path.join(home, ".claude", "uploads"), "/root/.claude/uploads"}
+    return sorted(uploads) + [os.path.join(ROOT, "video-eval-output"), os.path.join(ROOT, PRODUCT, "data")]
 
 
 def _resolve(t, cwd):
