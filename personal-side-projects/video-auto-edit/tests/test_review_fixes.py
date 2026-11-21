@@ -1,4 +1,5 @@
 """独立レビュー(2026-11-21)の指摘に対する回帰テスト: M1, M2, M3, m7, m8, m10, m11, m13"""
+import errno
 import os
 import sys
 import time
@@ -170,3 +171,37 @@ def test_n5_ass_name_must_be_safe(tmp_path):
     with pytest.raises(ValueError):
         render.render_video("x.mp4", [(0, 1)], render.Fraction(30), "a.wav", str(tmp_path / "o.mp4"), str(tmp_path),
                             ass=str(tmp_path / "su b's.ass"))
+
+
+# --- 独立レビュー3回目の指摘(m1, m3, m4) ---
+@pytest.mark.parametrize("method", ["select", "legacy", "segments"])
+def test_r3_m1_render_with_ass_in_odd_work_dir(tmp_path, method):
+    """作業フォルダのパスに ' , : や空白があっても、3方式とも字幕付きで書き出せる"""
+    src = str(tmp_path / "src.mp4")
+    testing.make_video(src, [(2, True)], size=(160, 120))
+    work = tmp_path / "w o'rk,x:y"
+    work.mkdir()
+    wav = str(work / "a.wav")
+    proc.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "1", wav], timeout=60)
+    ass = str(work / "subs.ass")
+    with open(ass, "w", encoding="utf-8") as f:
+        f.write(subtitles.to_ass([dict(s=0, e=1, lines=["テスト"])], 160, 120, 20, 2, 8, 10))
+    out = str(work / "o.mp4")
+    render.render_video(src, [(0, 15), (30, 45)], render.Fraction(30), wav, out, str(work), method=method, ass=ass)
+    assert os.path.getsize(out) > 0
+    assert render.verify(out)["frames"] == 30
+
+
+def test_r3_m3_output_on_other_filesystem(tmp_path, monkeypatch):
+    src, dst = tmp_path / "c.mp4", tmp_path / "out.mp4"
+    src.write_bytes(b"new")
+    dst.write_bytes(b"old")
+    real = os.replace
+
+    def exdev(a, b):
+        if str(a) == str(src):
+            raise OSError(errno.EXDEV, "cross-device link")
+        return real(a, b)
+    monkeypatch.setattr(pipeline.os, "replace", exdev)
+    pipeline._move_into_place(str(src), str(dst))
+    assert dst.read_bytes() == b"new" and not src.exists() and not os.path.exists(str(dst) + ".part")

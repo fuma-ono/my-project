@@ -66,6 +66,23 @@ CASES = [
     ("保護フォルダへの移動(コピー先)は通す", "guard", "mv /tmp/x.mp4 video-eval-output/hq/", 0),
     ("後の cd で場所が変われば前の cd は効かない", "guard", "cd personal-side-projects/video-auto-edit; cd /tmp/s; rm -rf data", 0),
     ("他事業のフォルダで find の後片付けは通す", "guard", "find threads-affiliate -name __pycache__ -exec rm -rf {} +", 0),
+    # --- 独立レビュー3回目で見つかった誤検知(M-1)と見逃し(m2) ---
+    ("ルートでの __pycache__ の後片付けは通す", "guard", "cd /home/user/my-project && find . -name __pycache__ -exec rm -rf {} +", 0),
+    ("BGM 事業の作業フォルダの wav の削除は通す", "guard", "find bgm-pipeline/tmp -name '*.wav' -delete", 0),
+    ("scratchpad の検証用 mp4 の削除は通す", "guard", "find /tmp/claude-0 -name '*.mp4' -delete", 0),
+    ("python -c の '..' は親フォルダの削除と見なさない", "guard", "python3 -c \"import os; print('..'); os.remove('/tmp/x')\"", 0),
+    ("ルートでの rm -rf * を止める", "guard", "rm -rf *", 2),
+    ("サブシェルで cd して data を消すのを止める", "guard", "(cd personal-side-projects/video-auto-edit && rm -rf data)", 2),
+    ("sudo -u root rm を止める", "guard", "sudo -u root rm -rf video-eval-output", 2),
+    ("find / で動画をまとめて消すのを止める", "guard", "find / -name '*.MOV' -delete", 2),
+    ("保護フォルダの中を起点にした find の削除を止める", "guard", "find video-eval-output -name '*.md' -delete", 2),
+]
+
+# フックの入力の cwd(実行場所)を使うケース: (説明, cwd, コマンド, 期待)
+CWD_CASES = [
+    ("data フォルダで rm -rf * を止める", "personal-side-projects/video-auto-edit/data", "rm -rf *", 2),
+    ("他事業のフォルダでの rm -rf * は通す", "fx-event-analyzer", "rm -rf *", 0),
+    ("製品フォルダで data を消すのを止める", "personal-side-projects/video-auto-edit", "rm -rf data", 2),
 ]
 
 
@@ -76,12 +93,18 @@ def main():
         ok = code == want
         fails += not ok
         print(("OK  " if ok else "NG  ") + f"{desc}: 終了コード {code}(期待 {want})" + ("" if ok else "\n    " + out.strip()[:300]))
+    for desc, rel, cmd, want in CWD_CASES:
+        code, out = run("guard", {"cwd": os.path.join(ROOT, rel), "tool_input": {"command": cmd}})
+        ok = code == want
+        fails += not ok
+        print(("OK  " if ok else "NG  ") + f"{desc}: 終了コード {code}(期待 {want})" + ("" if ok else "\n    " + out.strip()[:300]))
     # stop: stop_hook_active のときは必ず通す(無限ループ防止)
     code, _ = run("stop", {"stop_hook_active": True})
     ok = code == 0
     fails += not ok
     print(("OK  " if ok else "NG  ") + f"stop_hook_active=true は通す: 終了コード {code}")
-    print(f"\n{len(CASES) + 1 - fails}/{len(CASES) + 1} 件成功")
+    n = len(CASES) + len(CWD_CASES) + 1
+    print(f"\n{n - fails}/{n} 件成功")
     sys.exit(1 if fails else 0)
 
 

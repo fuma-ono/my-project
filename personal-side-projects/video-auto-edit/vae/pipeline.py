@@ -4,6 +4,7 @@
 - render_plan(): plan.json から書き出す(字幕の修正後は、これだけをやり直す)
 - 元動画は読むだけで変更しない(AC-V5)。一時ファイルは work/ に置き、終わったら大きなファイルを消す(AC-E3)
 """
+import errno
 import json
 import os
 import re
@@ -239,7 +240,7 @@ def render_plan(plan, src, out, work, settings=None, progress=None, bgm_cache=No
         failed = [k for k, v in ver["checks"].items() if not v]
         raise errors.VAEError("verify_failed", "書き出した動画の確認で問題が見つかりました(" + ", ".join(failed) + ")。",
                               "もう一度書き出してください。続く場合は、元の動画を撮影アプリで保存し直してから試してください。")
-    os.replace(candidate, out)
+    _move_into_place(candidate, out)
     import resource
     result = {"output": out, "out_duration": plan["out_duration"], "render": rinfo, "verify": ver, "mix": mix_info,
               "mix_metrics": metrics, "bgm_source": bgm_src,
@@ -249,6 +250,23 @@ def render_plan(plan, src, out, work, settings=None, progress=None, bgm_cache=No
               "external_cost_jpy": 0}
     cleanup_work(work)
     return result
+
+
+def _move_into_place(src, dst):
+    """検証済みの出力を置く。作業フォルダと出力先が別のファイルシステムなら、出力先の隣にコピーしてから置き換える"""
+    try:
+        os.replace(src, dst)
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+        tmp = dst + ".part"
+        try:
+            shutil.copyfile(src, tmp)
+            os.replace(tmp, dst)
+        finally:
+            for f in (tmp, src):
+                if os.path.exists(f):
+                    os.remove(f)
 
 
 def cleanup_work(work, keep=("plan.json", "subs.ass", "result.json")):

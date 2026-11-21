@@ -61,6 +61,7 @@ def _tokens(seg):
 
 HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\2[ \t]*(?=\n|$)", re.S)
 WRAPPERS = ("sudo", "env", "nohup", "time", "nice", "ionice", "timeout", "xargs", "command", "exec")
+VALUE_OPTS = ("-u", "-g", "-U", "-C", "-D", "-h", "-p", "-r", "-t", "-s", "-k", "-n", "-c", "-S", "--signal", "--kill-after", "--user", "--group")
 MEDIA_GLOB = re.compile(r"\*\.(mp4|mov|m4v|mkv|webm|wav|mp3|m4a|aac|flac)\b", re.I)
 
 
@@ -101,7 +102,6 @@ def _protected_targets():
 
 
 def _resolve(t, cwd):
-    import fnmatch  # noqa: F401
     home = os.path.expanduser("~")
     t = t.replace("${HOME}", home).replace("$HOME", home)
     if t.startswith("~"):
@@ -133,7 +133,8 @@ def _unwrap(toks):
     while toks and os.path.basename(toks[0]) in WRAPPERS:
         toks = toks[1:]
         while toks and (toks[0].startswith("-") or "=" in toks[0] or re.fullmatch(r"\d+[smh]?", toks[0])):
-            toks = toks[1:]
+            # 値を取るオプション(sudo -u root、timeout -s KILL、nice -n 10 など)は値ごと外す
+            toks = toks[2:] if toks[0] in VALUE_OPTS and len(toks) > 1 else toks[1:]
     if toks and os.path.basename(toks[0]) in ("bash", "sh", "zsh") and "-c" in toks:
         i = toks.index("-c")
         if i + 1 < len(toks):
@@ -157,6 +158,10 @@ def _git_sub(args):
 
 def _check_segment(seg, state, depth=0):
     toks = _tokens(seg)
+    if toks:                                               # サブシェル (cd x && rm y) の括弧を外す
+        toks[0] = toks[0].lstrip("(")
+        toks[-1] = toks[-1].rstrip(")")
+        toks = [t for t in toks if t]
     toks, inner = _unwrap(toks)
     if inner is not None:
         if depth < 3:
@@ -179,20 +184,30 @@ def _check_segment(seg, state, depth=0):
     elif prog == "mv":
         check_args = [a for a in args if not a.startswith("-")][:-1]   # 移動元だけ(保護フォルダへの移動は許可)
     elif prog == "find" and ("-delete" in args or ("-exec" in args and "rm" in args)):
-        if MEDIA_GLOB.search(" ".join(args)):
-            block("動画・音声ファイルを find でまとめて削除することは禁止されています(ユーザーの動画素材を巻き込むおそれ)。")
-        check_args = [a for a in args if not a.startswith("-")][:1] or ["."]
-        ancestors = False                                  # 条件に合うものだけを消すので、親フォルダの指定は許可
+        starts = []
+        for a in args:                                     # 起点(最初の式より前の引数)。無ければ現在の場所
+            if a.startswith("-") or a in ("(", "!"):
+                break
+            starts.append(a)
+        roots = [_resolve(a, cwd) for a in (starts or ["."])]
+        tgts = _protected_targets()
+        inside = any(r == t or r.startswith(t + os.sep) for r in roots for t in tgts)
+        above = any(t.startswith(r.rstrip(os.sep) + os.sep) for r in roots for t in tgts)
+        # 保護対象の中を起点にした削除は止める。保護対象の親を起点にした削除は、動画・音声を対象にするときだけ止める
+        # (他事業や scratchpad での __pycache__ の後片付け、他フォルダの動画の削除は止めない)
+        if inside or (above and MEDIA_GLOB.search(" ".join(args))):
+            block("ユーザーの動画素材・確認用出力を find で削除することは禁止されています(" + ", ".join(PROTECTED_MEDIA) + ")。")
     elif prog == "rsync" and any(a.startswith("--delete") for a in args):
         check_args = [a for a in args if not a.startswith("-")][-1:]
         ancestors = False
     elif prog.startswith("python") and "-c" in args and re.search(r"rmtree|remove|unlink|rmdir", " ".join(args)):
-        check_args = re.findall(r"['\"]([^'\"]+)['\"]", " ".join(args))
+        check_args = [q for q in re.findall(r"['\"]([^'\"]+)['\"]", " ".join(args)) if q not in (".", "..")]
     if check_args is not None:
-        globbed = [a for a in check_args if a in ("*", "./*", ".") ]
+        globbed = [a for a in check_args if a in ("*", "./*", ".", "./")]
+        here = cwd or ROOT                                 # 場所が分からないときはリポジトリのルートとみなす
         if _protected_hit([a for a in check_args if a not in globbed], cwd, ancestors) or \
-                (globbed and cwd and any(cwd == t or cwd.startswith(t + os.sep) or t.startswith(cwd + os.sep)
-                                         for t in _protected_targets())):
+                (globbed and any(here == t or here.startswith(t + os.sep) or t.startswith(here + os.sep)
+                                 for t in _protected_targets())):
             block("ユーザーの動画素材・確認用出力の削除・移動は禁止されています(" + ", ".join(PROTECTED_MEDIA) +
                   ")。不要なら HQ が BLOCKERS に記録し、人間に確認してください。")
     if prog == "git":
@@ -224,7 +239,8 @@ def guard(data):
     cmd = (data.get("tool_input") or {}).get("command", "")
     if not cmd:
         return
-    state = {"cwd": None}
+    cwd = data.get("cwd")                                  # フックの入力にある実行場所(無ければルート)
+    state = {"cwd": os.path.normpath(cwd) if isinstance(cwd, str) and cwd.startswith("/") else None}
     for seg in _segments(cmd):
         _check_segment(seg, state)
 

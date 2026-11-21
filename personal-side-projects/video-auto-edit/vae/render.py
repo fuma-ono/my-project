@@ -37,8 +37,7 @@ def _fr(fps):
 
 
 def _ass_filter(ass):
-    # フィルタの引数として安全な文字だけのパスを使う(作業フォルダに ' などが含まれても壊れないように、
-    # 呼び出し側で安全な一時パスへコピーしてから渡す)
+    # ass には英数字と _ . - だけのファイル名を渡す(render_video が FFmpeg を字幕のフォルダで起動する)
     return f",ass={ass}"
 
 
@@ -104,7 +103,7 @@ def _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, me
             r = proc.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{ss:.6f}", "-i", src, "-an", "-frames:v", str(k1 - k0),
                           "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0", sp], timeout=timeout, mem_limit_mb=mem_limit_mb, cwd=cwd)
             peak, secs = max(peak, r["peak_mb"]), secs + r["seconds"]
-            lst.append(f"file '{sp}'")
+            lst.append("file '" + sp.replace("'", "'\\''") + "'")      # concat の書式で ' をエスケープ
         listf = _write(os.path.join(work, "segs.txt"), "\n".join(lst) + "\n")
         r = proc.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listf, "-i", audio_wav,
                       "-vf", f"setpts=N/({fr})/TB{sub}", "-map", "0:v", "-map", "1:a", *encode, "-r", fr, tmp_out],
