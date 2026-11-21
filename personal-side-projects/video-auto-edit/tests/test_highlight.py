@@ -182,3 +182,15 @@ def test_llm_no_key_no_call(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError):
         pl.plan_with_llm(_clips3(), run=True, ledger_path=str(tmp_path / "l.json"), with_images=False)
+
+
+def test_metrics_flags_duplicates_defects_and_speech_cuts():
+    clips = [_clip(0, 20, 1000, 5, speech=[(2.0, 5.0)]), _clip(1, 20, 2000, 5), _clip(2, 20, 3000, 2, sharp=0.0, bright=0.0)]
+    planner.frame_scores(clips)
+    edl = {"segments": [
+        {"clip": 0, "start": 2.5, "end": 4.0, "dur": 1.5, "cat": "scenery"},          # 話(2.0〜5.0)の途中で始まって切れる
+        {"clip": 1, "start": 1.0, "end": 3.0, "dur": 2.0, "cat": "scenery"},          # clip0 とほぼ同じ映像
+        {"clip": 2, "start": 0.0, "end": 2.0, "dur": 2.0, "cat": "scenery"}]}         # 真っ黒でぼやけている
+    m = planner.metrics(clips, edl, beat=0.5)
+    assert m["near_duplicate_pairs"] == 1 and m["defect_segments"] == 1 and m["speech_cut_segments"] == 1
+    assert m["clips_used"] == 3 and m["beat_error"] == 0.0 and m["ends_with_scenery"]

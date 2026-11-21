@@ -226,3 +226,38 @@ def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93,
     return {"target_sec": round(target, 2), "material_good_sec": round(material, 2), "mood": mood,
             "total_sec": round(sum(c["dur"] for c in chosen), 2), "segments": edl, "rejected": rejected,
             "n_candidates": len(cands)}
+
+
+def metrics(clips, edl, beat=None, dup_sim=0.93):
+    """完成した構成を、同じ物差しで測る客観指標(無料版と Sonnet 版の比較・6項目の評価の材料)。
+    聴感・映像の好み・満足度は測れない(人の確認が必要)"""
+    by = {c["idx"]: c for c in clips}
+    segs = edl["segments"]
+    embs, scores, defects, speech_cut = [], [], 0, 0
+    for s in segs:
+        c = by[s["clip"]]
+        ia, ib = int(s["start"] * FPS), max(int(s["start"] * FPS) + 1, int(s["end"] * FPS))
+        fr = c["frames"][ia:ib] or c["frames"][-1:]
+        scores.append(float(np.mean([f.get("score", 0.0) for f in fr])))
+        e = c["emb"][ia:ib].mean(axis=0) if len(c["emb"][ia:ib]) else c["emb"][-1]
+        embs.append(e / (np.linalg.norm(e) + 1e-6))
+        sharp = float(np.mean([f["sharp"] for f in fr]))
+        bright = float(np.mean([f["bright"] for f in fr]))
+        motion = float(np.mean([f["motion"] for f in fr]))
+        defects += bool(sharp < 5 or motion > 40 or bright < 35 or bright > 230)
+        for sa, sb in c["speech"]:                                  # 話の途中で切れているか(区間に掛かる発話が丸ごと入っていない)
+            if sa < s["end"] and sb > s["start"] and (sa < s["start"] - 0.15 or sb > s["end"] + 0.15):
+                speech_cut += 1
+    dup = sum(1 for i in range(len(embs)) for j in range(i + 1, len(embs)) if float(embs[i] @ embs[j]) > dup_sim)
+    beat_err = None
+    if beat and segs:
+        beat_err = round(float(np.mean([abs(s["dur"] / beat - round(s["dur"] / beat)) for s in segs])), 3)
+    pool = [f.get("score", 0.0) for c in clips for f in c["frames"]]
+    cats = [s.get("cat") for s in segs]
+    return {"segments": len(segs), "total_sec": round(sum(s["dur"] for s in segs), 1),
+            "clips_used": len({s["clip"] for s in segs}), "clips_total": len(clips),
+            "mean_score": round(float(np.mean(scores)), 2) if scores else None, "pool_mean_score": round(float(np.mean(pool)), 2) if pool else None,
+            "defect_segments": defects, "near_duplicate_pairs": dup, "speech_cut_segments": speech_cut,
+            "categories_used": len(set(cats)), "beat_error": beat_err,
+            "opens_with_score_rank": (sorted(scores, reverse=True).index(scores[0]) + 1) if scores else None,
+            "ends_with_scenery": bool(cats) and cats[-1] in ENDING_CATS}

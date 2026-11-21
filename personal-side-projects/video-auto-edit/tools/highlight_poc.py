@@ -67,6 +67,8 @@ def main(argv=None):
     ap.add_argument("--no-transcribe", action="store_true")
     ap.add_argument("--model", default="small")
     ap.add_argument("--short", type=int, default=1080)
+    ap.add_argument("--manifest", help="stock_dataset.py の台帳(manifest.json)。ストック動画には撮影日時が無いので、台帳の順を"
+                                       "擬似の撮影順(15分おき)として使う。擬似であることを Sonnet にも伝え、評価シートにも書く")
     ap.add_argument("--llm", choices=["off", "dry", "run"], default="off",
                     help="Sonnet 5.5 による構成判断との比較。dry は送らずに見積もりだけ、run は1回だけ実際に送る(予算 500 円の上限つき。"
                          "API キーは環境変数 ANTHROPIC_API_KEY)")
@@ -92,6 +94,12 @@ def main(argv=None):
         for i, f in enumerate(files):
             print(f"[{i + 1}/{len(files)}] 解析: {os.path.basename(f)}", file=sys.stderr, flush=True)
             clips.append(analyzer.clip_file(f, i))
+        if a.manifest:
+            with open(a.manifest, encoding="utf-8") as mf:
+                order = {os.path.basename(it["file"]): k for k, it in enumerate(json.load(mf)["items"])}
+            for c in clips:
+                c["created"] = 1_700_000_000 + order.get(c["name"], len(order)) * 900.0
+                c["created_source"] = "simulated(台帳の順)"
         t["analyze"] = time.time() - t0 - t["model_load"]
         t1 = time.time()
         first = planner.plan(clips, target=a.target, mood=a.mood)
@@ -121,6 +129,9 @@ def main(argv=None):
         shutil.rmtree(work, ignore_errors=True)
     total, cpu_s = time.time() - t0, cpu() - c0
     src_total = sum(c["duration"] for c in clips)
+    edl["metrics"] = planner.metrics(clips, edl, 60.0 / bpm)
+    if llm_edl:
+        llm_edl["metrics"] = planner.metrics(clips, llm_edl, 60.0 / bpm)
     edl.update(render=info, timings_sec={k: round(v, 1) for k, v in t.items()}, total_sec=round(total, 1),
                cpu_sec=round(cpu_s, 1), source_total_sec=round(src_total, 1), n_clips=len(clips), external_cost_jpy=0,
                python_peak_mb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024)
@@ -160,9 +171,25 @@ def write_compare(clips, free, llm, info, path):
             L += ["- Sonnet の出力で捨てたもの: " + "; ".join(llm["problems"])]
     elif info.get("problems"):
         L += ["", "Sonnet の出力は使えませんでした: " + "; ".join(info["problems"])]
-    L += ["", "## 人による比較(記入欄)", "", "| 項目 | 無料版 | Sonnet 版 | メモ |", "|---|---|---|---|",
-          "| 見どころの選択 | | | |", "| 不要シーンの除外 | | | |", "| ストーリーの自然さ | | | |",
-          "| カットのタイミング | | | |", "| BGM と映像 | | | |", "| 完成動画としての満足 | | | |", ""]
+    mf, ml = free.get("metrics"), (llm or {}).get("metrics")
+    if mf:
+        def row(label, key, fmt="{}"):
+            return f"| {label} | {fmt.format(mf.get(key))} | {fmt.format(ml.get(key)) if ml else '-'} |"
+        L += ["", "## 客観指標(同じ物差しで測った値。好み・聴感・満足度は測れません)", "", "| 指標 | 無料版 | Sonnet 版 |", "|---|---|---|",
+              row("区間の数", "segments"), row("完成の長さ(秒)", "total_sec"),
+              row("使った動画の数", "clips_used"), row("機械評価の平均(全体の平均 " + str(mf.get("pool_mean_score")) + ")", "mean_score"),
+              row("欠陥のある区間(暗い・ぶれ・白飛び)", "defect_segments"), row("ほぼ同じ場面の組", "near_duplicate_pairs"),
+              row("会話が途中で切れた区間", "speech_cut_segments"), row("場面の種類の数", "categories_used"),
+              row("拍とのずれ(拍の何倍か、0 が理想)", "beat_error"), row("冒頭の区間の評価順位(1 が最高)", "opens_with_score_rank"),
+              row("景色で締めているか", "ends_with_scenery")]
+    L += ["", "## 6項目の評価(根拠の種類を分けて記入)", "",
+          "| 項目 | 無料版 | Sonnet 版 | 根拠 |", "|---|---|---|---|",
+          "| 見どころの選択 | | | 客観指標(機械評価)+ 完成動画・コンタクトシートの目視 |",
+          "| 不要シーンの除外 | | | 客観指標(欠陥・重複)+ 目視 |",
+          "| ストーリーの自然さ | | | 目視と構成の説明(撮影順は擬似の場合あり) |",
+          "| カットのタイミング | | | 客観指標(拍とのずれ・会話の切断)。動きとして自然かは視聴が必要 |",
+          "| BGM との相性 | | | **聴感は未確認**(拍の同期は指標のみ) |",
+          "| 完成動画の満足度 | | | **視聴者の判断が必要**(ストック動画は実動画の品質と同一視しない) |", ""]
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(L))
 
@@ -173,7 +200,9 @@ def write_report(clips, edl, path):
          f"({edl['render']['segments']} 区間、{edl['render']['size'][0]}x{edl['render']['size'][1]})",
          f"- 雰囲気: {edl['mood']}(BGM {edl['bpm']} BPM、PoC 用の自動生成の音楽)",
          f"- 処理時間: 全体 {edl['total_sec']} 秒(CPU {edl['cpu_sec']} 秒)。内訳 {edl['timings_sec']}",
-         f"- 外部費用: 0円(すべてローカル処理)", "",
+         f"- 外部費用: 0円(すべてローカル処理)",
+         *(["- **撮影順は擬似**(ストック動画に撮影日時が無いため、台帳の順を15分おきの時刻として使用)"]
+           if any(str(c["created_source"]).startswith("simulated") for c in clips) else []), "",
          "## 採用した区間(完成動画の順)", "", "| # | 動画 | 元の時刻 | 長さ | 場面 | 顔 | 会話 | 評価 | 理由 |", "|---|---|---|---|---|---|---|---|---|"]
     for i, s in enumerate(edl["segments"]):
         L.append(f"| {i + 1} | {s['name']} | {s['start']:.1f}〜{s['end']:.1f} | {s['dur']:.1f} | {s['cat_ja']} | {s['faces']} | "

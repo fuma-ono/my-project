@@ -124,7 +124,10 @@ def build_request(clips, cands, with_images=True, max_images=MAX_IMAGES):
     """候補区間の一覧と画像から、送る内容(content ブロックの一覧)を作る。戻り値: (content, 画像の枚数, 画像のトークン見積もり)"""
     by = {c["idx"]: c for c in clips}
     total = sum(c["duration"] for c in clips)
-    head = (f"素材は {len(clips)} 本、合計 {total:.0f} 秒です。撮影日時の順に並べています。"
+    sim = any(str(c.get("created_source", "")).startswith("simulated") for c in clips)
+    note = ("(この素材は別々の撮影者のストック動画で、撮影日時は実際のものではなく**擬似**です。時刻の順は物語の順の手がかりにしないでください)"
+            if sim else "")
+    head = (f"素材は {len(clips)} 本、合計 {total:.0f} 秒です。撮影日時の順に並べています。{note}"
             "完成動画の長さは素材の内容で決めてください(目安 15〜75 秒)。\n\n## 動画一覧\n")
     for c in sorted(clips, key=lambda c: c["created"]):
         head += (f"- 動画{c['idx']}: {c['name']} {c['duration']:.1f}秒 {c['width']}x{c['height']} "
