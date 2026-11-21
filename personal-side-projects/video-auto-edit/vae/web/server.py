@@ -175,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
             self._drain_if_needed(404)
             self._send_json(404, {"error": {"code": "not_found", "message": "見つかりませんでした。",
                                             "hint": "最初の画面から、もう一度動画を選んでください。"}})
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):   # 配信の途中で読み込みが止まった場合も同じ扱い
             self.close_connection = True
         except Exception:
             log.exception("内部エラー: %s %s", method, self.path)     # 詳細はサーバー側にだけ残す

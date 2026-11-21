@@ -108,6 +108,7 @@
 
   <!-- ③ 確認と修正 -->
   <section class="card" id="step3" aria-labelledby="h3" hidden>
+    <div class="card err render-fail" id="render-fail-3" role="alert" hidden><b>書き出しに失敗しました。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
     <h2 id="h3">③ 確認と修正</h2>
     <div class="summary" aria-label="長さ">
       <div>元の長さ <b id="dur-src">-</b></div>
@@ -145,6 +146,7 @@
 
   <!-- ⑤ 完成 -->
   <section class="card" id="step5" aria-labelledby="h5" hidden>
+    <div class="card err render-fail" id="render-fail-5" role="alert" hidden><b>最新の書き出しに失敗しました。下の動画は前回の書き出し結果です。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
     <h2 id="h5">⑤ 完成</h2>
     <p class="note" id="done-note"></p>
     <video id="out-video" controls preload="metadata" playsinline aria-label="完成した動画のプレビュー"></video>
@@ -342,8 +344,20 @@
     }
   }
 
+  // 書き出しの失敗(ジョブは確認・完成の状態に戻り、error に原因が入る)を表示する
+  function showRenderFailure(job, boxId) {
+    const box = $(boxId);
+    const failed = job && job.error && job.stage === "render_failed";
+    box.hidden = !failed;
+    if (failed) {
+      box.querySelector(".rf-msg").textContent = job.error.message || "";
+      box.querySelector(".rf-hint").textContent = "対処: " + (job.error.hint || "もう一度書き出してください。");
+    }
+  }
+
   // ---------------------------------------------------------------- ③ 確認と修正
   async function loadReview(job) {
+    showRenderFailure(job, "render-fail-3");
     let plan;
     try { plan = await api("GET", "/api/jobs/" + job.id + "/plan"); }
     catch (e) { return showError(e); }
@@ -442,6 +456,7 @@
   // ---------------------------------------------------------------- ⑤ 完成
   function showDone(job) {
     show(5);
+    showRenderFailure(job, "render-fail-5");
     const out = "/api/jobs/" + job.id + "/output?t=" + Math.round((job.updated || Date.now()) * 1000);
     $("out-video").setAttribute("src", out);
     $("download").setAttribute("href", "/api/jobs/" + job.id + "/output?download=1");

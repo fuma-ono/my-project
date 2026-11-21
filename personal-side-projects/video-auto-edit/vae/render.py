@@ -56,34 +56,34 @@ def render_video(src, frames, fps, audio_wav, out, work, method="select", ass=No
     os.makedirs(work, exist_ok=True)
     if not frames:
         raise ValueError("残す区間がありません")
-    import shutil
-    import tempfile
-    safe_dir = None
+    # 字幕ファイルは作業フォルダに置いたまま、FFmpeg をそのフォルダで起動してファイル名だけを渡す
+    # (パスに ' , : などが含まれてもフィルタの書式が壊れない。個人の字幕文を作業フォルダの外に出さない)
+    src, audio_wav, out, work = (os.path.abspath(x) for x in (src, audio_wav, out, work))
+    cwd = None
     if ass:
-        safe_dir = tempfile.mkdtemp(prefix="vae_ass_")              # 英数字だけのパス
-        shutil.copyfile(ass, os.path.join(safe_dir, "subs.ass"))
-        ass = os.path.join(safe_dir, "subs.ass")
+        ass = os.path.abspath(ass)
+        cwd, name = os.path.dirname(ass), os.path.basename(ass)
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+            raise ValueError(f"字幕ファイル名に使えない文字があります: {name}")
+        ass = name
     sub = (_even_crop(*size) if size else "") + (_ass_filter(ass) if ass else "")
     fr = _fr(fps)
     tmp_out = os.path.join(work, "render.part.mp4")                 # 途中のファイルは作業フォルダに置く
-    peak, secs = 0, 0.0
     try:
-        return _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, mem_limit_mb, timeout, encode)
+        return _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, mem_limit_mb, timeout, encode, cwd)
     finally:
         if os.path.exists(tmp_out):
             os.remove(tmp_out)
-        if safe_dir:
-            shutil.rmtree(safe_dir, ignore_errors=True)
 
 
-def _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, mem_limit_mb, timeout, encode):
+def _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, mem_limit_mb, timeout, encode, cwd=None):
     peak, secs = 0, 0.0
     if method == "select":
         expr = "+".join(f"between(n\\,{k0}\\,{k1 - 1})" for k0, k1 in frames)
         g = _write(os.path.join(work, "fg_select.txt"),
                    f"[0:v]fps={fr},select='{expr}',setpts=N/FRAME_RATE/TB{sub}[vout]")
         r = proc.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-i", audio_wav, "-filter_complex_script", g,
-                      "-map", "[vout]", "-map", "1:a", *encode, "-r", fr, tmp_out], timeout=timeout, mem_limit_mb=mem_limit_mb)
+                      "-map", "[vout]", "-map", "1:a", *encode, "-r", fr, tmp_out], timeout=timeout, mem_limit_mb=mem_limit_mb, cwd=cwd)
         peak, secs = r["peak_mb"], r["seconds"]
     elif method == "legacy":
         secs_l = frames_to_sec(frames, fps)
@@ -92,7 +92,7 @@ def _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, me
         parts.append("".join(f"[v{i}]" for i in range(len(secs_l))) + f"concat=n={len(secs_l)}:v=1:a=0{tail}")
         g = _write(os.path.join(work, "fg_legacy.txt"), ";".join(parts))
         r = proc.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-i", audio_wav, "-filter_complex_script", g,
-                      "-map", "[vout]", "-map", "1:a", *encode, tmp_out], timeout=timeout, mem_limit_mb=mem_limit_mb)
+                      "-map", "[vout]", "-map", "1:a", *encode, tmp_out], timeout=timeout, mem_limit_mb=mem_limit_mb, cwd=cwd)
         peak, secs = r["peak_mb"], r["seconds"]
     elif method == "segments":
         seg_dir = os.path.abspath(os.path.join(work, "segs"))
@@ -102,13 +102,13 @@ def _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, me
             sp = os.path.join(seg_dir, f"s{i:04d}.mkv")
             ss = max(0.0, float((Fraction(k0) - Fraction(1, 2)) / fps))
             r = proc.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{ss:.6f}", "-i", src, "-an", "-frames:v", str(k1 - k0),
-                          "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0", sp], timeout=timeout, mem_limit_mb=mem_limit_mb)
+                          "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0", sp], timeout=timeout, mem_limit_mb=mem_limit_mb, cwd=cwd)
             peak, secs = max(peak, r["peak_mb"]), secs + r["seconds"]
             lst.append(f"file '{sp}'")
         listf = _write(os.path.join(work, "segs.txt"), "\n".join(lst) + "\n")
         r = proc.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listf, "-i", audio_wav,
                       "-vf", f"setpts=N/({fr})/TB{sub}", "-map", "0:v", "-map", "1:a", *encode, "-r", fr, tmp_out],
-                     timeout=timeout, mem_limit_mb=mem_limit_mb)
+                     timeout=timeout, mem_limit_mb=mem_limit_mb, cwd=cwd)
         peak, secs = max(peak, r["peak_mb"]), secs + r["seconds"]
         for f in os.listdir(seg_dir):
             os.remove(os.path.join(seg_dir, f))

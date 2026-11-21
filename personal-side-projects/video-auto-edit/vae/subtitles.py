@@ -33,6 +33,7 @@ class Measurer:
         self.fs, self.outline = font_size, outline
 
     def width(self, text):
+        text = ass_text(text)                       # 実際に描画する文字(全角に置き換えた後)で測る
         if self.font:
             w = self.font.getlength(text)
         else:

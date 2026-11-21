@@ -59,9 +59,15 @@ def _tokens(seg):
         return seg.split()
 
 
+HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\2[ \t]*(?=\n|$)", re.S)
+WRAPPERS = ("sudo", "env", "nohup", "time", "nice", "ionice", "timeout", "xargs", "command", "exec")
+MEDIA_GLOB = re.compile(r"\*\.(mp4|mov|m4v|mkv|webm|wav|mp3|m4a|aac|flac)\b", re.I)
+
+
 def _segments(cmd):
-    """; && || | 改行 で区切る(引用符の中は区切らない)。ヒアドキュメントの本文は除く"""
-    cmd = re.sub(r"<<-?\s*'?\"?(\w+)'?\"?\n.*?\n\1\b", "", cmd, flags=re.S)   # ヒアドキュメントの本文は実行されない
+    """; && || | 改行 で区切る(引用符の中は区切らない)。ヒアドキュメントの本文は実行されないので除く
+    (区切り記号の後ろにリダイレクトがある `cat <<'EOF' > file` の形にも対応)"""
+    cmd = HEREDOC_RE.sub(lambda m: m.group(3), cmd)
     out, cur, q = [], "", None
     i = 0
     while i < len(cmd):
@@ -87,77 +93,139 @@ def _segments(cmd):
     return [s.strip() for s in out if s.strip()]
 
 
-def _protected_hit(toks, cwd_hints):
-    """引数のどれかが保護対象(ユーザーの動画素材・確認用出力・製品の data/)を指すか"""
+def _protected_targets():
     home = os.path.expanduser("~")
+    return [os.path.join(home, ".claude", "uploads"), os.path.join(ROOT, "video-eval-output"),
+            os.path.join(ROOT, PRODUCT, "data")]
+
+
+def _resolve(t, cwd):
+    import fnmatch  # noqa: F401
+    home = os.path.expanduser("~")
+    t = t.replace("${HOME}", home).replace("$HOME", home)
+    if t.startswith("~"):
+        t = home + t[1:]
+    base = cwd if cwd else ROOT
+    return os.path.normpath(t if t.startswith("/") else os.path.join(base, t))
+
+
+def _protected_hit(toks, cwd, ancestors=True):
+    """引数のどれかが保護対象(ユーザーの動画素材・確認用出力・製品の data/)そのもの、その中身、またはその親フォルダを指すか"""
+    import fnmatch
+    targets = _protected_targets()
     for t in toks:
-        t2 = t.replace("${HOME}", home).replace("$HOME", home)
-        if t2.startswith("~"):
-            t2 = home + t2[1:]
-        parts = [x for x in t2.split("/") if x not in ("", ".")]
-        joined = "/" + "/".join(parts)
-        # パスの区切りごとに完全一致で判定する(名前の一部に含むだけのパスは止めない)
-        if "video-eval-output" in parts:
-            return True
-        if "/.claude/uploads" in joined + "/" and (joined + "/").find("/.claude/uploads/") >= 0 or joined.endswith("/.claude/uploads"):
-            return True
-        if "/video-auto-edit/data" in joined and (joined.endswith("/video-auto-edit/data") or "/video-auto-edit/data/" in joined):
-            return True
-        first = parts[0] if parts and not t2.startswith("/") else ""
-        if first == "uploads" and any(".claude" in h for h in cwd_hints):
-            return True
-        if first == "data" and any("video-auto-edit" in h for h in cwd_hints):
-            return True
+        if not t or t.startswith("-"):
+            continue
+        p = _resolve(t, cwd)
+        for tgt in targets:
+            if p == tgt or p.startswith(tgt + os.sep):           # 保護対象そのもの・中身
+                return True
+            if ancestors and tgt.startswith(p + os.sep) and p not in ("/", "/tmp"):   # 親フォルダごと消す
+                return True
+            if any(ch in t for ch in "*?[") and (fnmatch.fnmatch(tgt, p) or fnmatch.fnmatch(tgt, p + "/*")):
+                return True                                       # ワイルドカード(video-eval-* など)
     return False
+
+
+def _unwrap(toks):
+    """sudo / env / timeout などの前置きを外し、bash -c '...' は中身を返す"""
+    while toks and os.path.basename(toks[0]) in WRAPPERS:
+        toks = toks[1:]
+        while toks and (toks[0].startswith("-") or "=" in toks[0] or re.fullmatch(r"\d+[smh]?", toks[0])):
+            toks = toks[1:]
+    if toks and os.path.basename(toks[0]) in ("bash", "sh", "zsh") and "-c" in toks:
+        i = toks.index("-c")
+        if i + 1 < len(toks):
+            return None, toks[i + 1]
+    return toks, None
+
+
+def _git_sub(args):
+    """git の -C <dir> などの前置きを外して (サブコマンド, 残り, -C の場所) を返す"""
+    cdir = None
+    while args and args[0].startswith("-"):
+        if args[0] == "-C" and len(args) > 1:
+            cdir = args[1]
+            args = args[2:]
+        elif args[0] in ("-c",) and len(args) > 1:
+            args = args[2:]
+        else:
+            args = args[1:]
+    return (args[0] if args else ""), args[1:], cdir
+
+
+def _check_segment(seg, state, depth=0):
+    toks = _tokens(seg)
+    toks, inner = _unwrap(toks)
+    if inner is not None:
+        if depth < 3:
+            for s2 in _segments(inner):
+                _check_segment(s2, state, depth + 1)
+        return
+    if not toks:
+        return
+    prog = os.path.basename(toks[0])
+    args = toks[1:]
+    if prog == "cd":
+        target = args[0] if args else os.path.expanduser("~")
+        state["cwd"] = _resolve(target, state["cwd"])            # 最後の cd だけを有効にする
+        return
+    cwd = state["cwd"]
+    # 1) ユーザーの動画素材の削除・移動(実行されるコマンドの引数だけを見る)
+    check_args, ancestors = None, True
+    if prog in ("rm", "shred", "truncate", "unlink"):
+        check_args = args
+    elif prog == "mv":
+        check_args = [a for a in args if not a.startswith("-")][:-1]   # 移動元だけ(保護フォルダへの移動は許可)
+    elif prog == "find" and ("-delete" in args or ("-exec" in args and "rm" in args)):
+        if MEDIA_GLOB.search(" ".join(args)):
+            block("動画・音声ファイルを find でまとめて削除することは禁止されています(ユーザーの動画素材を巻き込むおそれ)。")
+        check_args = [a for a in args if not a.startswith("-")][:1] or ["."]
+        ancestors = False                                  # 条件に合うものだけを消すので、親フォルダの指定は許可
+    elif prog == "rsync" and any(a.startswith("--delete") for a in args):
+        check_args = [a for a in args if not a.startswith("-")][-1:]
+        ancestors = False
+    elif prog.startswith("python") and "-c" in args and re.search(r"rmtree|remove|unlink|rmdir", " ".join(args)):
+        check_args = re.findall(r"['\"]([^'\"]+)['\"]", " ".join(args))
+    if check_args is not None:
+        globbed = [a for a in check_args if a in ("*", "./*", ".") ]
+        if _protected_hit([a for a in check_args if a not in globbed], cwd, ancestors) or \
+                (globbed and cwd and any(cwd == t or cwd.startswith(t + os.sep) or t.startswith(cwd + os.sep)
+                                         for t in _protected_targets())):
+            block("ユーザーの動画素材・確認用出力の削除・移動は禁止されています(" + ", ".join(PROTECTED_MEDIA) +
+                  ")。不要なら HQ が BLOCKERS に記録し、人間に確認してください。")
+    if prog == "git":
+        sub, rest, cdir = _git_sub(args)
+        if sub == "clean" and any(re.match(r"^-[a-zA-Z]*[xX]", a) for a in rest):
+            block("`git clean -x` / `-X` は .gitignore 対象(動画素材・確認用出力・data/)を消すため禁止されています。")
+        # 2) main/master への強制 push(refspec だけを見る。他事業のブランチ名に main を含んでも止めない)
+        if sub == "push":
+            opts = [a for a in rest if a.startswith("-")]
+            pos = [a for a in rest if not a.startswith("-")]
+            refs = pos[1:]
+            force = any(o == "--force" or o.startswith("--force-with-lease") or
+                        (re.fullmatch(r"-[a-zA-Z]+", o) and "f" in o) for o in opts) or any(r.startswith("+") for r in refs)
+            if force:
+                cur = git("branch", "--show-current").strip()
+                targets = [r.lstrip("+").split(":")[-1] for r in refs] or [cur]
+                if any(t in ("main", "master", "refs/heads/main", "refs/heads/master") or (t == "HEAD" and cur in ("main", "master"))
+                       for t in targets):
+                    block("main/master への強制 push は禁止されています。")
+    # 3) VAE の本番公開(人間の承認が必要)。deploy 系のコマンドで、VAE を対象にしたものだけ
+    deploy = prog in ("vercel", "netlify", "fly", "flyctl", "firebase", "render", "railway") or \
+        "deploy" in args[:3] or prog.endswith("deploy")
+    vae_ctx = "video-auto-edit" in seg or (cwd and "video-auto-edit" in cwd)
+    if deploy and vae_ctx and any(a in ("--prod", "--production", "production", "prod") for a in args):
+        block("本番公開には人間の承認が必要です。RELEASE_STATUS.md に記録して停止してください。")
 
 
 def guard(data):
     cmd = (data.get("tool_input") or {}).get("command", "")
     if not cmd:
         return
-    segs = _segments(cmd)
-    cwd_hints = []
-    for seg in segs:
-        toks = _tokens(seg)
-        if not toks:
-            continue
-        prog = os.path.basename(toks[0])
-        if prog == "cd" and len(toks) > 1:
-            cwd_hints.append(toks[1])
-            continue
-        args = toks[1:]
-        # 1) ユーザーの動画素材の削除・移動(実行されるコマンドの引数だけを見る。コメントや文字列の中は見ない)
-        destructive = prog in ("rm", "shred", "truncate", "unlink", "mv") or \
-            (prog == "find" and ("-delete" in args or ("-exec" in args and "rm" in args))) or \
-            (prog == "rsync" and any(a.startswith("--delete") for a in args)) or \
-            (prog.startswith("python") and "-c" in args and re.search(r"rmtree|remove|unlink", " ".join(args)))
-        check_args = args
-        if prog.startswith("python") and "-c" in args:
-            # コードの中の引用符で囲まれた文字列をパスとして調べる
-            check_args = re.findall(r"['\"]([^'\"]+)['\"]", " ".join(args))
-        if destructive and _protected_hit(check_args, cwd_hints):
-            block("ユーザーの動画素材・確認用出力の削除・移動は禁止されています(" + ", ".join(PROTECTED_MEDIA) +
-                  ")。不要なら HQ が BLOCKERS に記録し、人間に確認してください。")
-        if prog == "git" and args[:1] == ["clean"] and any(re.match(r"^-[a-zA-Z]*[xX]", a) for a in args[1:]):
-            block("`git clean -x` / `-X` は .gitignore 対象(動画素材・確認用出力・data/)を消すため禁止されています。")
-        # 2) main/master への強制 push(refspec だけを見る。他事業のブランチ名に main を含んでも止めない)
-        if prog == "git" and args[:1] == ["push"]:
-            opts = [a for a in args[1:] if a.startswith("-")]
-            pos = [a for a in args[1:] if not a.startswith("-")]
-            refs = pos[1:]
-            force = any(o in ("-f", "--force") or o.startswith("--force-with-lease") for o in opts) or \
-                any(r.startswith("+") for r in refs)
-            if force:
-                targets = [r.lstrip("+").split(":")[-1] for r in refs] or [git("branch", "--show-current").strip()]
-                if any(t in ("main", "master", "refs/heads/main", "refs/heads/master") or
-                       (t == "HEAD" and git("branch", "--show-current").strip() in ("main", "master")) for t in targets):
-                    block("main/master への強制 push は禁止されています。")
-        # 3) VAE の本番公開(人間の承認が必要)。deploy 系のコマンドで、VAE を対象にしたものだけ
-        deploy = prog in ("vercel", "netlify", "fly", "flyctl", "firebase", "render", "railway") or \
-            "deploy" in args[:3] or prog.endswith("deploy")
-        vae_ctx = any("video-auto-edit" in x for x in [seg] + cwd_hints)
-        if deploy and vae_ctx and any(a in ("--prod", "--production", "production", "prod") for a in args):
-            block("本番公開には人間の承認が必要です。RELEASE_STATUS.md に記録して停止してください。")
+    state = {"cwd": None}
+    for seg in _segments(cmd):
+        _check_segment(seg, state)
 
 
 def find_python():

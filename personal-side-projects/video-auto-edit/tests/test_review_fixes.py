@@ -129,3 +129,44 @@ def test_m13_cli_removes_temp_work(tmp_path, monkeypatch, speechy_video):
     monkeypatch.setattr(pipeline, "run", lambda *a, **k: (_ for _ in ()).throw(errors.no_speech()))
     assert cli.main(["run", speechy_video, "-o", str(tmp_path / "o.mp4")]) == 1
     assert made and not os.path.exists(made[0])
+
+
+# --- 独立レビュー2回目の指摘(N1〜N5) ---
+def test_n2_rerender_verify_failure_keeps_previous_output(store, speechy_video, monkeypatch):
+    j = store.create(speechy_video, "a.mp4", "free")
+    assert store.run_all(j["id"])
+    out = store.paths(j["id"])["output"]
+    before = open(out, "rb").read()
+    real = render.verify
+
+    def bad(path, **k):
+        r = real(path, **k)
+        r["checks"]["frames_match"] = False
+        r["ok"] = False
+        return r
+    monkeypatch.setattr(render, "verify", bad)
+    assert store.run_render(j["id"]) is False
+    job = store.get(j["id"])
+    assert job["state"] == "done" and job["stage"] == "render_failed" and job["error"]["code"] == "verify_failed"
+    assert open(out, "rb").read() == before                                   # 不合格の出力で上書きしない
+    assert not os.path.exists(os.path.join(store.paths(j["id"])["work"], "candidate.mp4"))
+
+
+def test_n1_api_exposes_render_failure(store, speechy_video, monkeypatch):
+    j = store.create(speechy_video, "a.mp4", "free")
+    assert store.run_analyze(j["id"])
+    monkeypatch.setattr(render, "render_video", lambda *a, **k: (_ for _ in ()).throw(proc.ProcError(["ffmpeg"], 1, "x")))
+    assert store.run_render(j["id"]) is False
+    pub = store.get(j["id"])
+    assert pub["stage"] == "render_failed" and pub["error"]["message"]        # UI はこの2つで失敗を表示する
+
+
+def test_n4_width_measured_after_escape():
+    m = subtitles.Measurer(54, 4)
+    assert m.width("{a}") == m.width("｛a｝")
+
+
+def test_n5_ass_name_must_be_safe(tmp_path):
+    with pytest.raises(ValueError):
+        render.render_video("x.mp4", [(0, 1)], render.Fraction(30), "a.wav", str(tmp_path / "o.mp4"), str(tmp_path),
+                            ass=str(tmp_path / "su b's.ass"))

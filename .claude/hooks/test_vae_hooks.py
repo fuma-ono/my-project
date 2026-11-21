@@ -50,6 +50,22 @@ CASES = [
     ("コミットメッセージ内の文字列は通す", "guard", "git commit -m 'chore: rm old files under video-eval-output'", 0),
     ("ヒアドキュメントの本文は通す", "guard", "cat > notes.md <<'EOF'\nrm -rf video-eval-output は禁止\nEOF", 0),
     ("git clean -fd(.gitignore 対象は消さない)は通す", "guard", "git clean -fd", 0),
+    # --- 独立レビュー2回目で見つかった見逃し ---
+    ("フラグをまとめた main への強制 push を止める", "guard", "git push -fu origin main", 2),
+    ("sudo rm を止める", "guard", "sudo rm -rf video-eval-output", 2),
+    ("bash -c の中の rm を止める", "guard", "bash -c 'rm -rf video-eval-output'", 2),
+    ("env rm を止める", "guard", "env FOO=1 rm -rf video-eval-output", 2),
+    ("親フォルダごとの削除を止める", "guard", "rm -rf personal-side-projects", 2),
+    ("~/.claude ごとの削除を止める", "guard", "rm -rf ~/.claude", 2),
+    ("ワイルドカードでの削除を止める", "guard", "rm -rf video-eval-*", 2),
+    ("git -C での clean -x を止める", "guard", "git -C /home/user/my-project clean -fdx", 2),
+    ("find で動画をまとめて消すのを止める", "guard", "find . -name '*.mp4' -delete", 2),
+    ("data に cd して中身を消すのを止める", "guard", "cd personal-side-projects/video-auto-edit/data && rm -rf ./*", 2),
+    # --- 独立レビュー2回目で見つかった誤検知 ---
+    ("cat <<EOF > file は通す", "guard", "cat <<'EOF' > /tmp/t.txt\nrm -rf video-eval-output\nEOF", 0),
+    ("保護フォルダへの移動(コピー先)は通す", "guard", "mv /tmp/x.mp4 video-eval-output/hq/", 0),
+    ("後の cd で場所が変われば前の cd は効かない", "guard", "cd personal-side-projects/video-auto-edit; cd /tmp/s; rm -rf data", 0),
+    ("他事業のフォルダで find の後片付けは通す", "guard", "find threads-affiliate -name __pycache__ -exec rm -rf {} +", 0),
 ]
 
 
