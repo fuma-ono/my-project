@@ -334,16 +334,16 @@ private struct CommunityPostCard: View {
             }
 
             // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
-            // 折り返して」: チャート枠(56pt幅、右上にoverlay)の分だけ右の余白を確保し、
-            // 枠と重ならない幅で折り返させる。
+            // 折り返して」: チャート枠の幅の分だけ右の余白を確保し、枠と重ならない幅で
+            // 折り返させる(枠を42ptに縮小したのに合わせて余白も46ptに調整)。
             NotoText.text(post.title, size: 7.3)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.trailing, 60)
+                .padding(.trailing, 46)
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                 .lineLimit(2)
-                .padding(.trailing, 60)
+                .padding(.trailing, 46)
 
             HStack(spacing: 10) {
                 footerItem(icon: "heart.fill", value: "\(post.likeCount)", color: Color(red: 0.95, green: 0.32, blue: 0.52))
@@ -362,8 +362,10 @@ private struct CommunityPostCard: View {
         .frame(width: 214, alignment: .leading)
         .overlay(alignment: .topTrailing) {
             // ユーザー指摘(2026-11-19、13回目)「投稿カード内の四角をもう少し下に下げて」。
+            // ユーザー指摘(2026-11-20、2回目)「枠の幅が広い/縦に広いから詰めて」:
+            // 56x56は大きすぎたため、42x38に縮小する。
             CommunityChartPlaceholder()
-                .frame(width: 56, height: 56)
+                .frame(width: 42, height: 38)
                 .padding(.top, 17)
                 .padding(.trailing, 7)
         }
