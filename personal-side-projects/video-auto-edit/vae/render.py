@@ -37,21 +37,46 @@ def _fr(fps):
 
 
 def _ass_filter(ass):
-    # ass フィルタのパスは : と \ と ' をエスケープする
-    p = ass.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-    return f",ass='{p}'"
+    # フィルタの引数として安全な文字だけのパスを使う(作業フォルダに ' などが含まれても壊れないように、
+    # 呼び出し側で安全な一時パスへコピーしてから渡す)
+    return f",ass={ass}"
+
+
+def _even_crop(width, height):
+    """yuv420p / libx264 は幅・高さが偶数でないと書き出せないため、奇数なら1画素切り詰める"""
+    if width % 2 or height % 2:
+        return f",crop={width - width % 2}:{height - height % 2}:0:0"
+    return ""
 
 
 def render_video(src, frames, fps, audio_wav, out, work, method="select", ass=None,
-                 mem_limit_mb=DEFAULT_MEM_LIMIT_MB, timeout=None, encode=ENCODE):
+                 mem_limit_mb=DEFAULT_MEM_LIMIT_MB, timeout=None, encode=ENCODE, size=None):
     """残すフレーム区間 frames の映像に、用意済みの音声 audio_wav を付けて out に書き出す。
     戻り値: dict(method, seconds, ffmpeg_peak_mb)"""
     os.makedirs(work, exist_ok=True)
     if not frames:
         raise ValueError("残す区間がありません")
-    sub = _ass_filter(ass) if ass else ""
+    import shutil
+    import tempfile
+    safe_dir = None
+    if ass:
+        safe_dir = tempfile.mkdtemp(prefix="vae_ass_")              # 英数字だけのパス
+        shutil.copyfile(ass, os.path.join(safe_dir, "subs.ass"))
+        ass = os.path.join(safe_dir, "subs.ass")
+    sub = (_even_crop(*size) if size else "") + (_ass_filter(ass) if ass else "")
     fr = _fr(fps)
-    tmp_out = out + ".part.mp4"
+    tmp_out = os.path.join(work, "render.part.mp4")                 # 途中のファイルは作業フォルダに置く
+    peak, secs = 0, 0.0
+    try:
+        return _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, mem_limit_mb, timeout, encode)
+    finally:
+        if os.path.exists(tmp_out):
+            os.remove(tmp_out)
+        if safe_dir:
+            shutil.rmtree(safe_dir, ignore_errors=True)
+
+
+def _render(src, frames, fps, fr, audio_wav, out, work, method, sub, tmp_out, mem_limit_mb, timeout, encode):
     peak, secs = 0, 0.0
     if method == "select":
         expr = "+".join(f"between(n\\,{k0}\\,{k1 - 1})" for k0, k1 in frames)
@@ -130,9 +155,8 @@ def verify(path, expect_frames=None, expect_size=None, expect_fps=None):
 
 
 def _ebur(path):
-    import subprocess
-    e = subprocess.run(["ffmpeg", "-nostats", "-i", path, "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"],
-                       capture_output=True, text=True).stderr
+    e = proc.run_stderr(["ffmpeg", "-nostats", "-i", path, "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"],
+                        timeout=1800)
     i = re.findall(r"I:\s+(-?[\d.]+) LUFS", e)
     p = re.findall(r"Peak:\s+(-?(?:inf|nan|[\d.]+)) dBFS", e)
     return {"integrated_lufs": float(i[-1]) if i else None, "true_peak_dbtp": float(p[-1]) if p else None}

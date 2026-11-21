@@ -25,13 +25,13 @@ class Timeout(ProcError):
     pass
 
 
-def run(cmd, timeout=None, mem_limit_mb=None, capture_stdout=False, poll=0.1):
+def run(cmd, timeout=None, mem_limit_mb=None, capture_stdout=False, poll=0.1, cwd=None, env=None):
     """cmd を実行し、dict(returncode, peak_mb, seconds, stdout) を返す。失敗したら ProcError"""
     cmd = [str(c) for c in cmd]
     errf = tempfile.TemporaryFile()
     outf = tempfile.TemporaryFile() if capture_stdout else subprocess.DEVNULL
     t0 = time.time()
-    proc = subprocess.Popen(cmd, stdout=outf, stderr=errf, stdin=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, stdout=outf, stderr=errf, stdin=subprocess.DEVNULL, cwd=cwd, env=env)
     peak = 0
 
     def tail():
@@ -73,7 +73,10 @@ def run(cmd, timeout=None, mem_limit_mb=None, capture_stdout=False, poll=0.1):
 
 def run_text(cmd, timeout=120):
     """短い問い合わせ用(ffprobe など)。stdout を文字列で返す"""
-    r = subprocess.run([str(c) for c in cmd], capture_output=True, text=True, timeout=timeout)
+    try:
+        r = subprocess.run([str(c) for c in cmd], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as e:
+        raise Timeout([str(c) for c in cmd], -9, f"timeout after {timeout}s") from e
     if r.returncode != 0:
         raise ProcError(cmd, r.returncode, r.stderr[-2000:])
     return r.stdout
@@ -81,7 +84,25 @@ def run_text(cmd, timeout=120):
 
 def run_bytes(cmd, timeout=600):
     """stdout をバイト列で受け取る(音声の読み込みなど)"""
-    r = subprocess.run([str(c) for c in cmd], capture_output=True, timeout=timeout)
+    try:
+        r = subprocess.run([str(c) for c in cmd], capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as e:
+        raise Timeout([str(c) for c in cmd], -9, f"timeout after {timeout}s") from e
     if r.returncode != 0:
         raise ProcError(cmd, r.returncode, r.stderr[-2000:].decode(errors="replace"))
     return r.stdout
+
+
+def run_stderr(cmd, timeout=600):
+    """解析系(ebur128・silencedetect など)用。stderr を文字列で返す。終了コードは問わないが、時間切れは Timeout"""
+    try:
+        r = subprocess.run([str(c) for c in cmd], capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as e:
+        raise Timeout([str(c) for c in cmd], -9, f"timeout after {timeout}s") from e
+    return r.stderr
+
+
+def timeout_for(seconds, factor=10.0, base=300.0):
+    """処理対象の長さ(秒)に比例したタイムアウト"""
+    return base + factor * max(0.0, float(seconds or 0))

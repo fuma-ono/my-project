@@ -96,6 +96,7 @@ class VAEServer(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
+    timeout = 60                                         # 遅いクライアントに接続を占有されないように
     server_version = "VAE"
     sys_version = ""
     protocol_version = "HTTP/1.1"
@@ -220,9 +221,10 @@ class Handler(BaseHTTPRequestHandler):
         if rest == "" and method in ("GET", "HEAD"):
             return self._send_json(200, public_job(job))
         if rest == "" and method == "DELETE":
-            if job["state"] in BUSY_STATES:
+            try:
+                self.store.delete(job_id)               # 状態の確認と削除は JobStore のロックの中で行う
+            except ValueError:
                 raise HTTPError(409, "busy", "処理中のため削除できません。", "処理が終わってから削除してください。")
-            self.store.delete(job_id)
             return self._send_json(200, {"deleted": job_id})
         if rest == "/plan" and method in ("GET", "HEAD"):
             return self._send_json(200, public_plan(self._load_plan(job)))
@@ -273,6 +275,10 @@ class Handler(BaseHTTPRequestHandler):
         plan_name = (self.headers.get("X-Plan") or plans.DEFAULT_PLAN).strip()
         if plan_name not in AVAILABLE_PLANS:
             raise HTTPError(400, "plan_unavailable", "このプランはまだ利用できません。", "無料プラン(30秒まで)を使ってください。")
+        free = self.store.free_gb()                     # 受け取る前にディスクの空きを確認する
+        if free < self.store.min_free_gb + length / 1e9:
+            raise HTTPError(507, "disk_full", f"保存領域の空きが足りません(残り {free:.1f}GB)。",
+                            "古いジョブを削除してから、もう一度試してください。")
         tmp = self._receive_body(length)
         try:
             job = self._create_from_tmp(tmp, filename, plan_name)
@@ -310,13 +316,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _create_from_tmp(self, tmp, filename, plan_name):
         cid = self._client()
-        job = self.store.create(tmp, filename, plan_name, cid)
+        job = self.store.create(tmp, filename, plan_name, cid, move=True)   # コピーせず移動(ディスクを2倍使わない)
         if not job.get("duplicate"):
             return job
-        if job.get("client_id") != cid:
-            # 同じ内容の動画を別の端末が処理済み。中身は見せず、受け付けない
-            raise HTTPError(409, "duplicate_elsewhere", "この動画はすでに別の端末で処理されています。",
-                            "少しでも内容が違う動画なら受け付けられます。別の動画を選んでください。")
         if job.get("state") == "error":
             # 以前失敗した同じ動画はやり直せるようにする
             self.store.delete(job["id"])

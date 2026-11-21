@@ -19,7 +19,8 @@ def main(argv=None):
     r = sub.add_parser("run", help="動画を自動編集して書き出す")
     r.add_argument("input")
     r.add_argument("-o", "--output", required=True)
-    r.add_argument("--work")
+    r.add_argument("--work", help="作業フォルダ(指定しない場合は一時フォルダを使い、終了時に削除する)")
+    r.add_argument("--keep-work", action="store_true", help="一時の作業フォルダを残す(文字起こし全文を含むので注意)")
     r.add_argument("--model", default="medium")
     r.add_argument("--cut-mode", default="vad", choices=["vad", "volume"])
     r.add_argument("--mix", default="duck_vad", choices=["duck_vad", "duck_sc", "legacy"])
@@ -51,7 +52,12 @@ def main(argv=None):
                               subtitles=not a.no_subtitles)
         work = a.work or tempfile.mkdtemp(prefix="vae_")
         cb = lambda st, fr, msg: print(f"[{fr * 100:5.1f}%] {msg}", file=sys.stderr, flush=True)
-        plan, res = pipeline.run(a.input, a.output, work, s, progress=cb)
+        try:
+            plan, res = pipeline.run(a.input, a.output, work, s, progress=cb)
+        finally:
+            if not a.work and not a.keep_work:
+                import shutil
+                shutil.rmtree(work, ignore_errors=True)   # 一時の作業フォルダ(文字起こし全文を含む)を残さない
         print(json.dumps({"output": a.output, "work": work, "out_duration": plan["out_duration"], "verify": res["verify"],
                           "mix_metrics": res["mix_metrics"], "timings_sec": res["timings_sec"],
                           "render_peak_mb": res["render"]["ffmpeg_peak_mb"]}, ensure_ascii=False, indent=1))

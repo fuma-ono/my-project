@@ -31,6 +31,25 @@ CASES = [
     ("&& の後ろの削除も止める", "guard", "ls && rm /root/.claude/uploads/a/b.MOV", 2),
     ("他事業の本番 deploy は対象外", "guard", "cd threads-affiliate && deploy --prod", 0),
     ("コミット以外の git は precommit 対象外", "precommit", "git status", 0),
+    # --- 独立レビュー(2026-11-21)で見つかった見逃し ---
+    ("git clean -fdx を止める", "guard", "git clean -fdx", 2),
+    ("cd してから data を消すのを止める", "guard", "cd personal-side-projects/video-auto-edit && rm -rf data", 2),
+    ("~ で始まる uploads の削除を止める", "guard", "rm -rf ~/.claude/uploads", 2),
+    ("cd /root/.claude してから uploads を消すのを止める", "guard", "cd /root/.claude && rm -rf uploads", 2),
+    ("確認用出力の移動を止める", "guard", "mv video-eval-output /tmp/trash", 2),
+    ("rsync --delete で確認用出力を消すのを止める", "guard", "rsync -a --delete empty/ video-eval-output/", 2),
+    ("python -c の rmtree を止める", "guard", "python3 -c \"import shutil; shutil.rmtree('video-eval-output')\"", 2),
+    ("$HOME で始まる uploads の削除を止める", "guard", "rm -rf $HOME/.claude/uploads/x", 2),
+    ("+main への push を止める", "guard", "git push origin +main", 2),
+    # --- 独立レビューで見つかった誤検知(他事業の作業を止めない) ---
+    ("他事業ブランチ名に main を含む強制 push は通す", "guard", "git push -f origin fx/main-page-fix", 0),
+    ("強制 push と別の部分の git log main は通す", "guard", "git push --force origin feature-x && git log main", 0),
+    ("production を含む grep は通す", "guard", "grep -rn production personal-side-projects/video-auto-edit/", 0),
+    ("他事業の production ビルドは通す", "guard", "cd threads && npm run build -- --mode production # see video-auto-edit notes", 0),
+    ("名前の一部が一致するだけのパスの削除は通す", "guard", "rm -rf /tmp/my-video-eval-output-copy", 0),
+    ("コミットメッセージ内の文字列は通す", "guard", "git commit -m 'chore: rm old files under video-eval-output'", 0),
+    ("ヒアドキュメントの本文は通す", "guard", "cat > notes.md <<'EOF'\nrm -rf video-eval-output は禁止\nEOF", 0),
+    ("git clean -fd(.gitignore 対象は消さない)は通す", "guard", "git clean -fd", 0),
 ]
 
 

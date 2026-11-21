@@ -8,7 +8,6 @@
 """
 import os
 import re
-import subprocess
 from fractions import Fraction
 
 import numpy as np
@@ -55,9 +54,18 @@ def boundary_steps(a, sr, frames, fps):
     return steps
 
 
+def _seconds(path):
+    """wav の長さ(秒)。タイムアウトの計算用"""
+    try:
+        import soundfile as sf
+        return sf.info(path).duration
+    except Exception:  # noqa: BLE001
+        return 600.0
+
+
 def _ebur_text(path):
-    return subprocess.run(["ffmpeg", "-nostats", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-"],
-                          capture_output=True, text=True).stderr
+    return proc.run_stderr(["ffmpeg", "-nostats", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-"],
+                           timeout=proc.timeout_for(_seconds(path), factor=2.0))
 
 
 def integrated_lufs(path):
@@ -69,8 +77,8 @@ def integrated_lufs(path):
 
 def momentary(path):
     """100ms ごとの momentary ラウドネス(400ms 窓)。(時刻, LUFS)"""
-    err = subprocess.run(["ffmpeg", "-nostats", "-i", path, "-af", "ebur128=metadata=1,ametadata=print:key=lavfi.r128.M",
-                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    err = proc.run_stderr(["ffmpeg", "-nostats", "-i", path, "-af", "ebur128=metadata=1,ametadata=print:key=lavfi.r128.M",
+                           "-f", "null", "-"], timeout=proc.timeout_for(_seconds(path), factor=2.0))
     t = [float(x) for x in re.findall(r"pts_time:([\d.]+)", err)]
     m = [float(x) for x in re.findall(r"lavfi\.r128\.M=(-?(?:inf|nan|[\d.]+))", err)]
     n = min(len(t), len(m))
@@ -117,6 +125,7 @@ def mix(voice_path, bgm_path, work, speech, mode="duck_vad", sr=SR, voice_target
     p = lambda name: os.path.join(work, name)
     v = read_audio(voice_path, sr)
     n = len(v)
+    tmo = proc.timeout_for(n / sr, factor=4.0)
     write_wav(p("voice_in.wav"), v, sr)
     has_bgm = bool(bgm_path)
     bgm = _fit_bgm(read_audio(bgm_path, sr), n, sr) if has_bgm else np.zeros((n, 2), np.float32)
@@ -130,13 +139,13 @@ def mix(voice_path, bgm_path, work, speech, mode="duck_vad", sr=SR, voice_target
         g = ("[0:a]asplit=3[v1][key][vst];[1:a]volume=0.35,asplit=2[b0][braw];"
              "[b0][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400,asplit=2[duck][bst];"
              "[v1][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[out]")
-        proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-i", p("bgm_in.wav"), "-filter_complex", g, *out])
+        proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-i", p("bgm_in.wav"), "-filter_complex", g, *out], timeout=tmo)
         return info
     # 声を基準にそろえる(静的な音量変更なのでポンピングは起きない)
     vi, _ = integrated_lufs(p("voice_in.wav"))
     vgain = float(np.clip(voice_target - (vi if vi is not None else voice_target), -20, 30))
     vchain = f"volume={vgain:.2f}dB,acompressor=threshold=-18dB:ratio=3:attack=10:release=200:makeup=1"
-    proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-af", vchain, "-c:a", "pcm_f32le", p("voice_pass1.wav")])
+    proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-af", vchain, "-c:a", "pcm_f32le", p("voice_pass1.wav")], timeout=tmo)
     v1, _ = integrated_lufs(p("voice_pass1.wav"))
     corr = float(np.clip(voice_target - v1, -6, 12)) if v1 is not None else 0.0
     vchain += f",volume={corr:.2f}dB"
@@ -152,7 +161,7 @@ def mix(voice_path, bgm_path, work, speech, mode="duck_vad", sr=SR, voice_target
         g = (f"[0:a]{vchain},asplit=3[v1][key][vst];[1:a]volume={bgain:.2f}dB,asplit=2[b0][braw];"
              f"[b0][key]sidechaincompress=threshold=0.02:ratio=4:knee=6:attack=80:release=700,asplit=2[duck][bst];"
              f"[v1][duck]amix=inputs=2:duration=first:normalize=0,{limiter}[out]")
-        proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-i", p("bgm_in.wav"), "-filter_complex", g, *out])
+        proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-i", p("bgm_in.wav"), "-filter_complex", g, *out], timeout=tmo)
     elif mode == "duck_vad":
         curve = speech_gain_curve(n, sr, speech, duck_db)
         write_wav(p("bgm_ducked_pre.wav"), bgm * curve[:, None], sr)
@@ -160,7 +169,7 @@ def mix(voice_path, bgm_path, work, speech, mode="duck_vad", sr=SR, voice_target
              f"[2:a]volume={bgain:.2f}dB[braw];"
              f"[v1][b0]amix=inputs=2:duration=first:normalize=0,{limiter}[out]")
         proc.run(["ffmpeg", "-y", "-v", "error", "-i", p("voice_in.wav"), "-i", p("bgm_ducked_pre.wav"),
-                  "-i", p("bgm_in.wav"), "-filter_complex", g, *out])
+                  "-i", p("bgm_in.wav"), "-filter_complex", g, *out], timeout=tmo)
     else:
         raise ValueError(mode)
     return info

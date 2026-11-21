@@ -1,3 +1,11 @@
+---
+paths:
+  - "personal-side-projects/video-auto-edit/**"
+  - "docs/autonomous-hq/**"
+  - "docs/projects/video-auto-edit/**"
+  - ".github/workflows/video-auto-edit-ci.yml"
+---
+
 # セキュリティ規則(VAE)
 
 1. 認証情報・API キー・トークンをコード・ログ・コミット・評価シートに書かない。コミット前フックが代表的な形式を検出して止める

@@ -1,3 +1,11 @@
+---
+paths:
+  - "personal-side-projects/video-auto-edit/**"
+  - "docs/autonomous-hq/**"
+  - "docs/projects/video-auto-edit/**"
+  - ".github/workflows/video-auto-edit-ci.yml"
+---
+
 # メディア品質規則(VAE)
 
 ## 客観評価(自動で判定してよい)

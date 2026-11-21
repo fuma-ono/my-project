@@ -7,6 +7,7 @@ on:
       - "personal-side-projects/video-auto-edit/**"
       - ".github/workflows/video-auto-edit-ci.yml"
       - ".claude/hooks/**"
+      - ".claude/settings.json"
   push:
     branches:
       - "claude/video-autoedit-**"
@@ -14,6 +15,7 @@ on:
       - "personal-side-projects/video-auto-edit/**"
       - ".github/workflows/video-auto-edit-ci.yml"
       - ".claude/hooks/**"
+      - ".claude/settings.json"
   workflow_dispatch:
     inputs:
       slow:

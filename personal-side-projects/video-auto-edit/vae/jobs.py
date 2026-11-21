@@ -107,6 +107,8 @@ class JobStore:
             if other:                                      # 同じ動画は既存のジョブを返す(無料枠の重複消費を防ぐ)
                 try:
                     existing = self.get(other)
+                    if move:                                   # 呼び出し側がやり直せるよう、移動したファイルを戻す
+                        shutil.move(dst, src_path)
                     shutil.rmtree(d, ignore_errors=True)
                     return dict(existing, duplicate=True)
                 except KeyError:
@@ -144,7 +146,7 @@ class JobStore:
                                  progress=self._progress_cb(job_id))
                 self._update(job_id, state="ready", progress=0.75, message="編集内容ができました。確認して書き出してください")
             except Exception as e:
-                self._fail(job_id, e)
+                self._fail(job_id, e, phase="analyze")
                 return False
         return True
 
@@ -160,9 +162,10 @@ class JobStore:
                                            progress=self._progress_cb(job_id), bgm_cache=self.bgm_cache)
                 with open(os.path.join(p["work"], "result.json"), "w", encoding="utf-8") as f:
                     json.dump(res, f, ensure_ascii=False, indent=1, default=str)
-                self._update(job_id, state="done", progress=1.0, stage="done", message="完了しました", result=res)
+                self._update(job_id, state="done", progress=1.0, stage="done", message="完了しました", result=res,
+                             error=None, rendered_once=True)
             except Exception as e:
-                self._fail(job_id, e)
+                self._fail(job_id, e, phase="render")
                 return False
         return True
 
@@ -201,26 +204,45 @@ class JobStore:
         th.start()
         return th
 
-    def _fail(self, job_id, e):
+    def _fail(self, job_id, e, phase="analyze"):
         if isinstance(e, errors.VAEError):
             err = e.to_dict()
         else:
             err = errors.internal().to_dict()
             err["detail"] = "".join(traceback.format_exception_only(type(e), e))[-500:]
-        pipeline.cleanup_work(self.paths(job_id)["work"])
+        p = self.paths(job_id)
+        pipeline.cleanup_work(p["work"])
+        err["phase"] = phase
+        if phase == "render" and os.path.exists(p["plan"]):
+            # 書き出しの失敗では、解析結果(字幕の修正を含む)を残し、やり直せる状態に戻す(M1)。
+            # 以前に書き出しが成功していれば、その出力を引き続き取り出せる
+            job = self.get(job_id)
+            state = "done" if job.get("rendered_once") and os.path.exists(p["output"]) else "ready"
+            self._update(job_id, state=state, progress=1.0 if state == "done" else 0.75, stage="render_failed",
+                         message="書き出しに失敗しました。" + err["message"], error=err)
+            return
         self._update(job_id, state="error", message=err["message"], error=err)
 
     # ------------------------------------------------------------ 後始末
-    def delete(self, job_id):
+    def delete(self, job_id, force=False):
+        """ジョブを削除する。処理中(queued / analyzing / rendering)は force が無ければ ValueError"""
         d = self._dir(job_id)
-        self.ledger.forget_job(job_id)
-        shutil.rmtree(d, ignore_errors=True)
+        with self._lock:
+            if not force:
+                try:
+                    state = self.get(job_id)["state"]
+                except KeyError:
+                    state = None
+                if state in ("queued", "analyzing", "rendering"):
+                    raise ValueError(state)
+            self.ledger.forget_job(job_id)
+            shutil.rmtree(d, ignore_errors=True)
 
     def cleanup_expired(self, now=None):
         now = now or time.time()
         removed = []
         for job in self.list():
             if job.get("expires", now + 1) < now and job["state"] in ("done", "error", "ready"):
-                self.delete(job["id"])
+                self.delete(job["id"], force=True)
                 removed.append(job["id"])
         return removed

@@ -189,6 +189,14 @@ def build_events(words, remap_snap, vw, font_size, outline, margin_lr, min_dur=0
     return out
 
 
+_ASS_ESCAPE = str.maketrans({"\\": "＼", "{": "｛", "}": "｝", "\n": "", "\r": ""})
+
+
+def ass_text(line):
+    """字幕の文言を ASS に安全に書く。バックスラッシュと { } は ASS の命令になるため全角に置き換える(文字の消失・巨大化を防ぐ)"""
+    return line.translate(_ASS_ESCAPE)
+
+
 def to_ass(events, vw, vh, font_size, outline, margin_lr, margin_v):
     def ts(x):
         x = max(0.0, x)
@@ -198,5 +206,6 @@ def to_ass(events, vw, vh, font_size, outline, margin_lr, margin_v):
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
             f"Style: Default,IPAGothic,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,{outline},1,2,{margin_lr},{margin_lr},{margin_v},1",
             "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
-    body = [f"Dialogue: 0,{ts(e['s'])},{ts(e['e'])},Default,,0,0,0,," + "\\N".join(e["lines"]) for e in events]
+    body = [f"Dialogue: 0,{ts(e['s'])},{ts(e['e'])},Default,,0,0,0,," + "\\N".join(ass_text(l) for l in e["lines"][:2])
+            for e in events]
     return "\n".join(head + body) + "\n"

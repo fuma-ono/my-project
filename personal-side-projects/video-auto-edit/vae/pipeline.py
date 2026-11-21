@@ -78,7 +78,8 @@ def analyze(src, work, settings=None, transcriber=None, vad_fn=None, progress=No
         raise errors.no_audio()
     fps = info.fps
     wav16 = os.path.join(work, "a16k.wav")
-    proc.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", wav16], timeout=1800)
+    proc.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", wav16],
+             timeout=proc.timeout_for(info.duration, factor=2.0))
     import soundfile as sf
     a16, _ = sf.read(wav16, dtype="float32")
     t["extract_audio"] = time.time() - t0
@@ -225,13 +226,22 @@ def render_plan(plan, src, out, work, settings=None, progress=None, bgm_cache=No
             f.write(subtitles.to_ass(evs, plan["source"]["width"], plan["source"]["height"], st["font_size"],
                                      st["outline"], st["margin_lr"], st["margin_v"]))
     _progress(progress, "render", 0.85, "動画を書き出しています")
-    rinfo = render.render_video(src, frames, fps, os.path.join(work, "mix.wav"), out, work, method=s.render_method, ass=ass)
+    w, h = plan["source"]["width"], plan["source"]["height"]
+    rinfo = render.render_video(src, frames, fps, os.path.join(work, "mix.wav"), out, work, method=s.render_method, ass=ass,
+                                timeout=proc.timeout_for(plan["source"]["duration"], factor=15.0), size=(w, h))
     t["render"] = rinfo["seconds"]
     _progress(progress, "verify", 0.97, "書き出した動画を確認しています")
     expect = sum(k1 - k0 for k0, k1 in frames)
-    ver = render.verify(out, expect_frames=expect, expect_size=(plan["source"]["width"], plan["source"]["height"]),
-                        expect_fps=plan["source"]["fps"])
-    result = {"output": out, "render": rinfo, "verify": ver, "mix": mix_info, "mix_metrics": metrics, "bgm_source": bgm_src,
+    ver = render.verify(out, expect_frames=expect, expect_size=(w - w % 2, h - h % 2), expect_fps=plan["source"]["fps"])
+    if not ver["ok"]:                                       # AC-E1 を満たさない出力は完成扱いにしない
+        failed = [k for k, v in ver["checks"].items() if not v]
+        raise errors.VAEError("verify_failed", "書き出した動画の確認で問題が見つかりました(" + ", ".join(failed) + ")。",
+                              "もう一度書き出してください。続く場合は、元の動画を撮影アプリで保存し直してから試してください。")
+    import resource
+    result = {"output": out, "out_duration": plan["out_duration"], "render": rinfo, "verify": ver, "mix": mix_info,
+              "mix_metrics": metrics, "bgm_source": bgm_src,
+              "peak_memory_mb": {"python": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024,
+                                 "render_ffmpeg": rinfo["ffmpeg_peak_mb"]},
               "boundary_step_max": round(max(steps), 4) if steps else 0.0, "timings_sec": {k: round(v, 2) for k, v in t.items()},
               "external_cost_jpy": 0}
     cleanup_work(work)
@@ -249,7 +259,7 @@ def cleanup_work(work, keep=("plan.json", "subs.ass", "result.json")):
         if os.path.isdir(p):
             if name != "bgm_cache":
                 shutil.rmtree(p, ignore_errors=True)
-        elif name.endswith((".wav", ".part.mp4", ".txt", ".mkv")):
+        elif name.endswith((".wav", ".part.mp4", ".txt", ".mkv", ".tmp")):
             os.remove(p)
 
 
@@ -257,8 +267,12 @@ def run(src, out, work, settings=None, transcriber=None, vad_fn=None, progress=N
     """解析から書き出しまで。戻り値: (plan, result)"""
     s = settings or Settings()
     t0 = time.time()
-    plan = analyze(src, work, s, transcriber=transcriber, vad_fn=vad_fn, progress=progress)
-    result = render_plan(plan, src, out, work, s, progress=progress, bgm_cache=bgm_cache)
+    try:
+        plan = analyze(src, work, s, transcriber=transcriber, vad_fn=vad_fn, progress=progress)
+        result = render_plan(plan, src, out, work, s, progress=progress, bgm_cache=bgm_cache)
+    except Exception:
+        cleanup_work(work)                                  # 失敗しても大きな一時ファイルを残さない
+        raise
     result["total_seconds"] = round(time.time() - t0, 2)
     result["timings_sec"] = {**plan["timings_sec"], **result["timings_sec"]}
     with open(os.path.join(work, "result.json"), "w", encoding="utf-8") as f:

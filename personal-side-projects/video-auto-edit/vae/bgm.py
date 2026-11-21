@@ -7,10 +7,11 @@
 """
 import math
 import os
-import subprocess
 import sys
 
 import numpy as np
+
+from . import proc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_BGM = os.path.abspath(os.path.join(HERE, "..", "..", "..", "bgm-pipeline"))
@@ -44,12 +45,12 @@ def prepare(seconds, cache_dir, preset="study_lofi_chill"):
         return path, "cache"
     if os.path.isdir(os.path.join(REPO_BGM, "bgm_pipeline")):
         try:
-            subprocess.run([sys.executable, "-m", "bgm_pipeline.generate", "--preset", preset, "--minutes", str(minutes),
-                            "--out", path + ".tmp.wav", "--seed", "1"], check=True, capture_output=True, cwd=REPO_BGM,
-                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), timeout=600)
+            proc.run([sys.executable, "-m", "bgm_pipeline.generate", "--preset", preset, "--minutes", str(minutes),
+                      "--out", path + ".tmp.wav", "--seed", "1"], timeout=600, mem_limit_mb=4000,
+                     cwd=REPO_BGM, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
             os.replace(path + ".tmp.wav", path)
             return path, "bgm-pipeline"
-        except (subprocess.SubprocessError, OSError):
+        except (proc.ProcError, OSError):
             if os.path.exists(path + ".tmp.wav"):
                 os.remove(path + ".tmp.wav")
     _builtin(path + ".tmp.wav", minutes * 60)

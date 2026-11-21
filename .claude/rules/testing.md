@@ -1,3 +1,11 @@
+---
+paths:
+  - "personal-side-projects/video-auto-edit/**"
+  - "docs/autonomous-hq/**"
+  - "docs/projects/video-auto-edit/**"
+  - ".github/workflows/video-auto-edit-ci.yml"
+---
+
 # テスト規則(VAE)
 
 1. テストは `personal-side-projects/video-auto-edit/` で `pytest` を実行する

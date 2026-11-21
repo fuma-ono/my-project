@@ -76,6 +76,8 @@ class UsageLedger:
             if plan.daily_limit and used >= plan.daily_limit:
                 return False, f"本日の{plan.label}プランの利用回数の上限({plan.daily_limit}回)に達しました。"
             d["usage"][key] = used + 1
+            cutoff = time.strftime("%Y-%m-%d", time.gmtime((now or time.time()) - 7 * 86400))
+            d["usage"] = {k: v for k, v in d["usage"].items() if k.rsplit(":", 1)[-1] >= cutoff}   # 古い日付を消す
             self._save(d)
             return True, None
 

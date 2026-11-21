@@ -1,3 +1,11 @@
+---
+paths:
+  - "personal-side-projects/video-auto-edit/**"
+  - "docs/autonomous-hq/**"
+  - "docs/projects/video-auto-edit/**"
+  - ".github/workflows/video-auto-edit-ci.yml"
+---
+
 # コスト管理規則(VAE)
 
 1. 有料 API・有料サービスを使わない。使う必要が出たら、実行前に停止して HQ が人間に報告する(費用・影響・必要性・無料の代替案)

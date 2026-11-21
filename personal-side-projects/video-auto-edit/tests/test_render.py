@@ -1,4 +1,5 @@
 """AC-V2〜V5、AC-E1: フレーム境界・欠落/重複なし・解像度/fps 維持・同期・メモリ・失敗時の保護"""
+import os
 from fractions import Fraction
 
 import numpy as np
@@ -38,9 +39,10 @@ def test_ac_v3_frames_exact_no_drop_no_dup(tmp_path, speechy_video, method):
     assert ver["checks"]["av_within_1_frame"]                                                          # AC-E1
 
 
+@pytest.mark.skipif(not os.path.exists("/proc/self/status"), reason="/proc が無い環境ではメモリを測れない")
 def test_ac_v4_select_memory_is_bounded(tmp_path, speechy_video):
     _, _, _, r = _render(tmp_path, speechy_video, [(0.0, 7.5)], "select")
-    assert r["ffmpeg_peak_mb"] < 1000
+    assert 0 < r["ffmpeg_peak_mb"] < 1000
 
 
 def test_ac_v5_failed_render_keeps_existing_output(tmp_path, speechy_video):

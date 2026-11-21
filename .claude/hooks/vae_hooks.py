@@ -51,30 +51,113 @@ def read_input():
         return {}
 
 
+def _tokens(seg):
+    import shlex
+    try:
+        return shlex.split(seg, comments=True)
+    except ValueError:
+        return seg.split()
+
+
+def _segments(cmd):
+    """; && || | 改行 で区切る(引用符の中は区切らない)。ヒアドキュメントの本文は除く"""
+    cmd = re.sub(r"<<-?\s*'?\"?(\w+)'?\"?\n.*?\n\1\b", "", cmd, flags=re.S)   # ヒアドキュメントの本文は実行されない
+    out, cur, q = [], "", None
+    i = 0
+    while i < len(cmd):
+        c = cmd[i]
+        if q:
+            cur += c
+            if c == q:
+                q = None
+        elif c in "'\"":
+            q = c
+            cur += c
+        elif cmd.startswith("&&", i) or cmd.startswith("||", i):
+            out.append(cur)
+            cur = ""
+            i += 1
+        elif c in ";|\n":
+            out.append(cur)
+            cur = ""
+        else:
+            cur += c
+        i += 1
+    out.append(cur)
+    return [s.strip() for s in out if s.strip()]
+
+
+def _protected_hit(toks, cwd_hints):
+    """引数のどれかが保護対象(ユーザーの動画素材・確認用出力・製品の data/)を指すか"""
+    home = os.path.expanduser("~")
+    for t in toks:
+        t2 = t.replace("${HOME}", home).replace("$HOME", home)
+        if t2.startswith("~"):
+            t2 = home + t2[1:]
+        parts = [x for x in t2.split("/") if x not in ("", ".")]
+        joined = "/" + "/".join(parts)
+        # パスの区切りごとに完全一致で判定する(名前の一部に含むだけのパスは止めない)
+        if "video-eval-output" in parts:
+            return True
+        if "/.claude/uploads" in joined + "/" and (joined + "/").find("/.claude/uploads/") >= 0 or joined.endswith("/.claude/uploads"):
+            return True
+        if "/video-auto-edit/data" in joined and (joined.endswith("/video-auto-edit/data") or "/video-auto-edit/data/" in joined):
+            return True
+        first = parts[0] if parts and not t2.startswith("/") else ""
+        if first == "uploads" and any(".claude" in h for h in cwd_hints):
+            return True
+        if first == "data" and any("video-auto-edit" in h for h in cwd_hints):
+            return True
+    return False
+
+
 def guard(data):
     cmd = (data.get("tool_input") or {}).get("command", "")
     if not cmd:
         return
-    # 1) ユーザーの動画素材の削除。コマンドを ; && || | 改行 で区切り、
-    #    削除系コマンドと同じ部分に保護パスがある場合だけ止める(別の部分のコピー等で誤検知しない)
-    segments = re.split(r"\|\||&&|[;|\n]", cmd)
-
-    def deleting(seg):
-        seg = " " + seg.strip() + " "
-        if re.search(r"\s(rm|shred|truncate|unlink)\s", seg):
-            return True
-        return bool(re.search(r"\sfind\s", seg) and re.search(r"-delete\b|-exec\s+rm\b", seg))
-
-    if any(deleting(seg) and any(p in seg for p in PROTECTED_MEDIA) for seg in segments):
-        block("ユーザーの動画素材・確認用出力の削除は禁止されています(" + ", ".join(PROTECTED_MEDIA) +
-              ")。不要なら HQ が BLOCKERS に記録し、人間に確認してください。")
-    # 2) main への強制 push
-    if re.search(r"git\s+push\b.*(--force\b|--force-with-lease\b|\s-f\b)", cmd) and re.search(r"\b(main|master)\b", cmd):
-        block("main/master への強制 push は禁止されています。")
-    # 3) VAE の本番公開(人間の承認が必要)
-    if ("video-auto-edit" in cmd or "vae" in cmd.split()) and re.search(
-            r"(--prod\b|deploy\s+.*prod|production)", cmd):
-        block("本番公開には人間の承認が必要です。RELEASE_STATUS.md に記録して停止してください。")
+    segs = _segments(cmd)
+    cwd_hints = []
+    for seg in segs:
+        toks = _tokens(seg)
+        if not toks:
+            continue
+        prog = os.path.basename(toks[0])
+        if prog == "cd" and len(toks) > 1:
+            cwd_hints.append(toks[1])
+            continue
+        args = toks[1:]
+        # 1) ユーザーの動画素材の削除・移動(実行されるコマンドの引数だけを見る。コメントや文字列の中は見ない)
+        destructive = prog in ("rm", "shred", "truncate", "unlink", "mv") or \
+            (prog == "find" and ("-delete" in args or ("-exec" in args and "rm" in args))) or \
+            (prog == "rsync" and any(a.startswith("--delete") for a in args)) or \
+            (prog.startswith("python") and "-c" in args and re.search(r"rmtree|remove|unlink", " ".join(args)))
+        check_args = args
+        if prog.startswith("python") and "-c" in args:
+            # コードの中の引用符で囲まれた文字列をパスとして調べる
+            check_args = re.findall(r"['\"]([^'\"]+)['\"]", " ".join(args))
+        if destructive and _protected_hit(check_args, cwd_hints):
+            block("ユーザーの動画素材・確認用出力の削除・移動は禁止されています(" + ", ".join(PROTECTED_MEDIA) +
+                  ")。不要なら HQ が BLOCKERS に記録し、人間に確認してください。")
+        if prog == "git" and args[:1] == ["clean"] and any(re.match(r"^-[a-zA-Z]*[xX]", a) for a in args[1:]):
+            block("`git clean -x` / `-X` は .gitignore 対象(動画素材・確認用出力・data/)を消すため禁止されています。")
+        # 2) main/master への強制 push(refspec だけを見る。他事業のブランチ名に main を含んでも止めない)
+        if prog == "git" and args[:1] == ["push"]:
+            opts = [a for a in args[1:] if a.startswith("-")]
+            pos = [a for a in args[1:] if not a.startswith("-")]
+            refs = pos[1:]
+            force = any(o in ("-f", "--force") or o.startswith("--force-with-lease") for o in opts) or \
+                any(r.startswith("+") for r in refs)
+            if force:
+                targets = [r.lstrip("+").split(":")[-1] for r in refs] or [git("branch", "--show-current").strip()]
+                if any(t in ("main", "master", "refs/heads/main", "refs/heads/master") or
+                       (t == "HEAD" and git("branch", "--show-current").strip() in ("main", "master")) for t in targets):
+                    block("main/master への強制 push は禁止されています。")
+        # 3) VAE の本番公開(人間の承認が必要)。deploy 系のコマンドで、VAE を対象にしたものだけ
+        deploy = prog in ("vercel", "netlify", "fly", "flyctl", "firebase", "render", "railway") or \
+            "deploy" in args[:3] or prog.endswith("deploy")
+        vae_ctx = any("video-auto-edit" in x for x in [seg] + cwd_hints)
+        if deploy and vae_ctx and any(a in ("--prod", "--production", "production", "prod") for a in args):
+            block("本番公開には人間の承認が必要です。RELEASE_STATUS.md に記録して停止してください。")
 
 
 def find_python():
@@ -135,11 +218,18 @@ def precommit(data):
         block("コミット前の検査で問題が見つかりました。修正してから再度コミットしてください。\n- " + "\n- ".join(problems))
 
 
+VAE_STOP_PATHS = (PRODUCT + "/", "docs/autonomous-hq/", "docs/projects/video-auto-edit/",
+                  ".github/workflows/video-auto-edit-ci.yml", ".claude/hooks/vae_hooks.py", ".claude/hooks/test_vae_hooks.py")
+
+
 def stop(data):
     if data.get("stop_hook_active"):
         return                                         # 無限ループ防止
+    # VAE の作業ブランチのセッションだけ対象にする(他事業のセッションを止めない)
+    if not re.search(r"video|vae", git("branch", "--show-current").strip()):
+        return
     changed = [l[3:] for l in git("status", "--porcelain").splitlines() if len(l) > 3]
-    vae_changed = [f for f in changed if f.startswith(VAE_PATHS)]
+    vae_changed = [f for f in changed if f.startswith(VAE_STOP_PATHS)]
     if not vae_changed:
         return
     code_changed = [f for f in vae_changed if f.startswith(PRODUCT + "/")]

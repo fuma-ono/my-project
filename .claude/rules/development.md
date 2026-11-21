@@ -1,3 +1,11 @@
+---
+paths:
+  - "personal-side-projects/video-auto-edit/**"
+  - "docs/autonomous-hq/**"
+  - "docs/projects/video-auto-edit/**"
+  - ".github/workflows/video-auto-edit-ci.yml"
+---
+
 # 開発規則(VAE)
 
 対象: `personal-side-projects/video-auto-edit/`(製品)、`docs/autonomous-hq/`(HQ の状態)、`docs/projects/video-auto-edit/`(過去の検証記録)、`.claude/`(HQ 基盤)、`.github/workflows/video-auto-edit-ci.yml`。
