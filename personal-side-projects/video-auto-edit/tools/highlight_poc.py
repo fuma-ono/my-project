@@ -67,6 +67,9 @@ def main(argv=None):
     ap.add_argument("--no-transcribe", action="store_true")
     ap.add_argument("--model", default="small")
     ap.add_argument("--short", type=int, default=1080)
+    ap.add_argument("--llm", choices=["off", "dry", "run"], default="off",
+                    help="Sonnet 5.5 による構成判断との比較。dry は送らずに見積もりだけ、run は1回だけ実際に送る(予算 500 円の上限つき。"
+                         "API キーは環境変数 ANTHROPIC_API_KEY)")
     a = ap.parse_args(argv)
     files = []
     for x in a.inputs:
@@ -102,6 +105,18 @@ def main(argv=None):
         info = hr.render(clips, edl, out, os.path.join(work, "render"), music_track=track, short=a.short)
         t["render"] = time.time() - t2
         contact_sheet(clips, edl["segments"], os.path.join(a.out, "contact_sheet.jpg"), work)
+        llm_edl, llm_info = None, None
+        if a.llm != "off":
+            from vae.highlight import planner_llm
+            cands = planner.candidates(clips)
+            llm_edl, llm_info = planner_llm.plan_with_llm(clips, cands, run=(a.llm == "run"), beat=60.0 / bpm,
+                                                          purpose="compare_free_vs_sonnet")
+            if llm_edl:
+                t3 = time.time()
+                hr.render(clips, dict(llm_edl, mood=mood), os.path.join(a.out, "highlight_sonnet.mp4"),
+                          os.path.join(work, "render_llm"), music_track=track, short=a.short)
+                t["render_sonnet"] = time.time() - t3
+                contact_sheet(clips, llm_edl["segments"], os.path.join(a.out, "contact_sheet_sonnet.jpg"), work + "/s")
     finally:
         shutil.rmtree(work, ignore_errors=True)
     total, cpu_s = time.time() - t0, cpu() - c0
@@ -111,8 +126,45 @@ def main(argv=None):
                python_peak_mb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024)
     dump(edl, os.path.join(a.out, "edl.json"))
     write_report(clips, edl, os.path.join(a.out, "report.md"))
+    if llm_info is not None:
+        dump({"info": llm_info, "edl": llm_edl}, os.path.join(a.out, "edl_sonnet.json"))
+        write_compare(clips, edl, llm_edl, llm_info, os.path.join(a.out, "compare.md"))
+        print(json.dumps({"llm": {k: llm_info.get(k) for k in ("sent", "estimate", "spent_jpy", "cap_jpy", "problems")}}, ensure_ascii=False))
     print(json.dumps({k: edl[k] for k in ("n_clips", "source_total_sec", "total_sec", "cpu_sec", "target_sec", "mood", "bpm")}
                      | {"output_sec": info["duration"], "segments": info["segments"]}, ensure_ascii=False))
+
+
+def write_compare(clips, free, llm, info, path):
+    L = ["# 無料版(規則)と Sonnet 5.5 の比較", ""]
+    u = info.get("usage")
+    L += [f"- API 費用の予算: 累計 {info['spent_jpy']} 円 / 上限 {info['cap_jpy']:.0f} 円",
+          f"- 見積もり(最悪): {info['estimate']['jpy_worst']} 円(入力 約{info['estimate']['input_tokens_est']}トークン、画像 {info['estimate']['images']} 枚、出力の上限 "
+          f"{info['estimate']['output_tokens_max']}トークン)"]
+    if not info.get("sent"):
+        L += ["", "**送信していません(dry-run)。** 実行するには `--llm run`(1回だけ送ります)。"]
+    elif u:
+        L += [f"- 実際の使用量: 入力 {u.get('input_tokens')}・出力 {u.get('output_tokens')} トークン、"
+              f"推定費用 {u.get('usd')} ドル = 約 {u.get('jpy')} 円、所要 {u.get('seconds')} 秒、状態 {u.get('status')}"]
+    if llm:
+        L += ["", f"## Sonnet の構成の考え方", "", llm.get("story", ""), "",
+              "| # | 動画 | 元の時刻 | 長さ | 場面 | 役割 | 理由 |", "|---|---|---|---|---|---|---|"]
+        for i, s in enumerate(llm["segments"]):
+            L.append(f"| {i + 1} | {s['name']} | {s['start']:.1f}〜{s['end']:.1f} | {s['dur']:.1f} | {s['cat_ja']} | {s.get('role', '')} | {s['reason']} |")
+        fk = {(s["clip"], round(s["start"])) for s in free["segments"]}
+        lk = {(s["clip"], round(s["start"])) for s in llm["segments"]}
+        L += ["", "## 違い", "",
+              f"- 無料版: {len(free['segments'])} 区間 / {free['total_sec']} 秒。Sonnet: {len(llm['segments'])} 区間 / {llm['total_sec']} 秒",
+              f"- 両方が選んだ区間: {len(fk & lk)}、無料版だけ: {len(fk - lk)}、Sonnet だけ: {len(lk - fk)}",
+              f"- 使った動画の数: 無料版 {len({s['clip'] for s in free['segments']})} / Sonnet {len({s['clip'] for s in llm['segments']})}"]
+        if llm.get("problems"):
+            L += ["- Sonnet の出力で捨てたもの: " + "; ".join(llm["problems"])]
+    elif info.get("problems"):
+        L += ["", "Sonnet の出力は使えませんでした: " + "; ".join(info["problems"])]
+    L += ["", "## 人による比較(記入欄)", "", "| 項目 | 無料版 | Sonnet 版 | メモ |", "|---|---|---|---|",
+          "| 見どころの選択 | | | |", "| 不要シーンの除外 | | | |", "| ストーリーの自然さ | | | |",
+          "| カットのタイミング | | | |", "| BGM と映像 | | | |", "| 完成動画としての満足 | | | |", ""]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
 
 
 def write_report(clips, edl, path):

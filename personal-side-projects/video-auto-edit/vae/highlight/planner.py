@@ -87,6 +87,28 @@ def candidates(clips, min_len=1.5, max_len=5.0, speech_max=9.0):
     return out
 
 
+def snap_to_beats(chosen, clips, beat):
+    """拍への合わせ込み: 話していない区間は拍の倍数(2拍以上)の長さにして、カットを拍に乗せる。話は切らない。
+    beat が無いときは長さだけを入れる。構成を決めた方法(規則・LLM)によらず同じ処理を使う"""
+    if beat:
+        for c in chosen:
+            d = c["end"] - c["start"]
+            if c["speech"]:
+                n = int(np.ceil(d / beat))                     # 話は切らず、次の拍まで伸ばす
+            else:
+                n = max(2, int(round(d / beat / 2)) * 2)
+            c["beats"] = n
+            c["dur"] = n * beat
+            clipdur = next(cl["duration"] for cl in clips if cl["idx"] == c["clip"])    # 元の動画の範囲に収める
+            if c["start"] + c["dur"] > clipdur:
+                c["start"] = max(0.0, clipdur - c["dur"])
+            c["end"] = round(min(clipdur, c["start"] + c["dur"]), 3)
+            c["dur"] = round(c["end"] - c["start"], 3)
+    else:
+        for c in chosen:
+            c["dur"] = round(c["end"] - c["start"], 3)
+
+
 def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93, mmr_lambda=0.75):
     """EDL を作る。target(秒)を省くと素材から決める。beat(秒)を渡すと区間の長さを拍の倍数にそろえる"""
     frame_scores(clips)
@@ -193,25 +215,7 @@ def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93,
             chapter += 1
         c["chapter"] = chapter
         prev_t = c["created"]
-    # 7) 拍への合わせ込み: 話していない区間は拍の倍数(2拍以上)の長さにして、カットを拍に乗せる
-    if beat:
-        for c in chosen:
-            d = c["end"] - c["start"]
-            if c["speech"]:
-                n = int(np.ceil(d / beat))                     # 話は切らず、次の拍まで伸ばす
-            else:
-                n = max(2, int(round(d / beat / 2)) * 2)
-            c["beats"] = n
-            c["dur"] = n * beat
-            # 元の動画の範囲に収める(足りない分は前に伸ばす)
-            clipdur = next(cl["duration"] for cl in clips if cl["idx"] == c["clip"])
-            if c["start"] + c["dur"] > clipdur:
-                c["start"] = max(0.0, clipdur - c["dur"])
-            c["end"] = round(min(clipdur, c["start"] + c["dur"]), 3)
-            c["dur"] = round(c["end"] - c["start"], 3)
-    else:
-        for c in chosen:
-            c["dur"] = round(c["end"] - c["start"], 3)
+    snap_to_beats(chosen, clips, beat)
     if mood is None:
         cats = [c["cat"] for c in chosen]
         lively = sum(1 for c in chosen if c["faces"] or c["motion"] > 8) / max(1, len(chosen))

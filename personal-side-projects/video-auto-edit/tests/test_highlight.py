@@ -72,3 +72,113 @@ def test_total_length_stays_near_target():
     edl = planner.plan(clips, target=20.0, beat=0.5)
     assert len({s["clip"] for s in edl["segments"]}) == 8
     assert edl["total_sec"] <= 20.0 * 1.3
+
+
+# ------------------------------------------------------------ Sonnet 版の予算と実行の制限(承認の条件)
+import json  # noqa: E402
+
+import pytest  # noqa: E402
+
+from vae.highlight import planner_llm as pl  # noqa: E402
+
+
+class _Usage:
+    input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens = 40000, 3000, 0, 0
+
+
+class _Msg:
+    stop_reason = "end_turn"
+    usage = _Usage()
+    _request_id = "req_test"
+
+    def __init__(self, choice):
+        self.content = [type("B", (), {"type": "text", "text": json.dumps(choice)})()]
+
+
+class _Stream:
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def get_final_message(self):
+        return self.msg
+
+
+class FakeClient:
+    def __init__(self, choice):
+        self.calls = 0
+        self.choice = choice
+        self.messages = self
+
+    def stream(self, **kw):
+        self.calls += 1
+        self.kw = kw
+        return _Stream(_Msg(self.choice))
+
+
+def _clips3():
+    return [_clip(0, 20, 1000, 0, "scenery"), _clip(1, 20, 2000, 1, "food"), _clip(2, 20, 3000, 2, "people", faces=2)]
+
+
+def test_llm_dry_run_sends_nothing(tmp_path):
+    fc = FakeClient({})
+    edl, info = pl.plan_with_llm(_clips3(), client=fc, run=False, ledger_path=str(tmp_path / "l.json"), with_images=False)
+    assert edl is None and fc.calls == 0 and info["sent"] is False and info["estimate"]["jpy_worst"] > 0
+
+
+def test_llm_budget_cap_blocks_and_ledger_records(tmp_path):
+    led = str(tmp_path / "l.json")
+    pl.save_ledger({"cap_jpy": 500.0, "runs": [{"jpy": 490.0}]}, led)                 # ほぼ使い切っている
+    fc = FakeClient({})
+    with pytest.raises(pl.BudgetExceeded):
+        pl.plan_with_llm(_clips3(), client=fc, run=True, ledger_path=led, with_images=False)
+    assert fc.calls == 0                                                              # 上限を超える見込みなら送らない
+
+
+def test_llm_run_once_records_usage_and_builds_edl(tmp_path):
+    led = str(tmp_path / "l.json")
+    clips = _clips3()
+    pl.planner.frame_scores(clips)
+    cands = pl.planner.candidates(clips)
+    pl.build_request(clips, cands, with_images=False)                          # id を振る
+    choice = {"story": "テスト", "mood": "calm", "target_sec": 12, "segments": [
+        {"id": cands[2]["id"], "reason": "掴み"}, {"id": cands[0]["id"], "reason": "景色", "role": "締め"},
+        {"id": "c999", "reason": "存在しない"}, {"id": cands[2]["id"], "reason": "重複"}], "excluded": [{"id": cands[1]["id"], "reason": "同じ場面"}]}
+    fc = FakeClient(choice)
+    edl, info = pl.plan_with_llm(clips, cands=cands, client=fc, run=True, ledger_path=led, beat=0.5, with_images=False)
+    assert fc.calls == 1 and info["sent"] and info["usage"]["status"] == "ok"
+    assert [s["clip"] for s in edl["segments"]] == [cands[2]["clip"], cands[0]["clip"]]      # 順番は Sonnet の指示どおり
+    assert len(edl["problems"]) == 2 and edl["story"] == "テスト"
+    assert any("同じ場面" in r["reason"] for r in edl["rejected"])
+    ledger = pl.load_ledger(led)
+    assert len(ledger["runs"]) == 1 and ledger["runs"][0]["input_tokens"] == 40000 and ledger["runs"][0]["jpy"] > 0
+    # 1回の費用: 入力 4万 × $2 + 出力 3千 × $10 = $0.11 ≒ 17 円
+    assert abs(ledger["runs"][0]["usd"] - 0.11) < 1e-6
+    kw = fc.kw                                                                         # 送り方の確認(承認の条件・API の仕様)
+    assert kw["model"] == "claude-sonnet-5-5" and "temperature" not in kw and "tool_choice" not in kw
+
+
+def test_llm_failure_is_not_retried_and_stays_counted(tmp_path):
+    led = str(tmp_path / "l.json")
+
+    class Boom(FakeClient):
+        def stream(self, **kw):
+            self.calls += 1
+            raise RuntimeError("network")
+    fc = Boom({})
+    with pytest.raises(RuntimeError):
+        pl.plan_with_llm(_clips3(), client=fc, run=True, ledger_path=led, with_images=False)
+    assert fc.calls == 1                                                               # 自動で再実行しない
+    r = pl.load_ledger(led)["runs"][0]
+    assert r["status"] == "error" and r["jpy"] > 0                                     # 失敗でも最悪の見積もり分は計上し続ける
+
+
+def test_llm_no_key_no_call(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(RuntimeError):
+        pl.plan_with_llm(_clips3(), run=True, ledger_path=str(tmp_path / "l.json"), with_images=False)
