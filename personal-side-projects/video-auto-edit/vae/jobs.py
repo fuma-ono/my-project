@@ -136,6 +136,11 @@ class JobStore:
     def account_status(self, client_id, job_ids=()):
         acc = self.account_for(client_id)
         st = self.billing.status(acc["id"], job_ids)
+        for jid, info in st["projects"].items():
+            try:
+                info["rendered_once"] = bool(self.get(jid).get("rendered_once"))
+            except KeyError:
+                info["rendered_once"] = False
         plan = self.config.plan(st["plan"]["name"])
         st["concepts"] = [{"id": c["id"], "label": c["label"]} for c in self.config.concepts_for(plan)]
         st["plans"] = [p.public() for p in self.config.plans.values()]
@@ -401,13 +406,20 @@ class JobStore:
                 self._update(job_id, state="analyzing", message="解析を始めます")
                 self._combine_if_needed(job_id)
                 p = self.paths(job_id)
-                pipeline.analyze(p["input"], p["work"], s, transcriber=self._transcriber(s.model), vad_fn=self.vad_fn,
-                                 progress=self._progress_cb(job_id))
+                new_plan = pipeline.analyze(p["input"], p["work"], s, transcriber=self._transcriber(s.model),
+                                            vad_fn=self.vad_fn, progress=self._progress_cb(job_id))
+                prev = os.path.join(p["work"], "plan.prev.json")
+                if self.get(job_id).get("run_kind") == "reedit" and os.path.exists(prev):
+                    # 手動で直した字幕を、作り直した字幕のうち元の動画の同じ場面のものに引き継ぐ
+                    n = pipeline.carry_subtitle_edits(pipeline.load_plan(prev), new_plan)
+                    if n:
+                        pipeline.save_plan(new_plan, p["plan"])
                 self._update(job_id, state="ready", progress=0.75, message="編集内容ができました。確認して書き出してください")
             except Exception as e:
                 self._fail(job_id, e, phase="analyze")
                 return False
         finally:
+            self._cancel.discard(job_id)               # 処理が終わったらキャンセルの印を残さない
             self._gate.release()
         return True
 
@@ -440,6 +452,7 @@ class JobStore:
                 self._fail(job_id, e, phase="render")
                 return False
         finally:
+            self._cancel.discard(job_id)
             self._gate.release()
         return True
 

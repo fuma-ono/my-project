@@ -249,6 +249,28 @@ def load_plan(path):
         return json.load(f)
 
 
+def carry_subtitle_edits(prev_plan, new_plan, min_overlap=0.6):
+    """AI 再編集の前に手で直した字幕を、作り直した字幕に引き継ぐ。元の動画の時刻(src_s〜src_e)が
+    十分に重なる字幕が1つだけあるときに、その文言を直した文言にする(改行は実寸で計算し直す)。戻り値: 引き継いだ数"""
+    n = 0
+    for old in prev_plan.get("subtitles", []):
+        if not old.get("edited"):
+            continue
+        a0, a1 = old["src_s"], old["src_e"]
+        cands = []
+        for ev in new_plan.get("subtitles", []):
+            ov = min(a1, ev["src_e"]) - max(a0, ev["src_s"])
+            span = max(1e-6, min(a1 - a0, ev["src_e"] - ev["src_s"]))
+            if ov / span >= min_overlap:
+                cands.append(ev)
+        if len(cands) != 1:
+            continue                                    # 対応が一つに決まらないものは引き継がない(取り違えを防ぐ)
+        text = "".join(old.get("lines") or [])
+        edit_subtitle(new_plan, cands[0]["id"], text)
+        n += 1
+    return n
+
+
 def edit_subtitle(plan, sub_id, text):
     """字幕の文言を修正する(AC-S6)。時刻はそのままで、改行だけ実寸で計算し直す"""
     st = plan["subtitle_style"]

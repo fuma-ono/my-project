@@ -442,3 +442,37 @@ def test_cli_costs_and_dev_grant(tmp_path, monkeypatch, capsys):
     capsys.readouterr()
     assert cli.main(["costs", "--data", data]) == 0
     assert "margin" in capsys.readouterr().out
+
+
+def test_ac_p8_reedit_keeps_manual_subtitle_edits(store, tmp_path):
+    j = store.create(_video(tmp_path, "se.mp4", segs=((0.4, False), (1.5, True), (0.6, False), (1.5, True), (0.4, False))),
+                     "se.mp4", client_id="c1")
+    assert store.run_all(j["id"])
+    p = store.paths(j["id"])
+    plan = pipeline.load_plan(p["plan"])
+    sid = plan["subtitles"][0]["id"]
+    pipeline.edit_subtitle(plan, sid, "手で直した字幕")
+    pipeline.save_plan(plan, p["plan"])
+    store.begin_reedit(j["id"], "c1", concept="tempo")
+    _wait(store, j["id"])
+    new = pipeline.load_plan(p["plan"])
+    assert any("".join(e["lines"]) == "手で直した字幕" and e["edited"] for e in new["subtitles"])
+
+
+def test_cancel_flag_does_not_leak(store, tmp_path, monkeypatch):
+    """最後の区切りの後に届いたキャンセルの印が残り、次の処理を止めてしまわないこと"""
+    j = store.create(_video(tmp_path, "cl.mp4"), "cl.mp4", client_id="c1")
+    assert store.run_analyze(j["id"])
+    real = pipeline.render_plan
+
+    def late_cancel(*a, **k):
+        res = real(*a, **k)
+        store._cancel.add(j["id"])                     # 書き出しが終わる直前にキャンセルが届いた
+        return res
+    monkeypatch.setattr(pipeline, "render_plan", late_cancel)
+    assert store.run_render(j["id"])
+    assert j["id"] not in store._cancel
+    monkeypatch.setattr(pipeline, "render_plan", real)
+    store.begin_render(j["id"])                        # 次の書き出しはキャンセル扱いにならない
+    _wait(store, j["id"])
+    assert store.get(j["id"])["state"] == "done" and store.get(j["id"])["error"] is None

@@ -82,7 +82,8 @@ def public_job(job):
     if isinstance(out.get("media"), dict):
         out["media"] = {k: v for k, v in out["media"].items() if k != "path"}
     if isinstance(out.get("error"), dict):
-        out["error"] = {k: out["error"].get(k, "") for k in ("code", "message", "hint")}
+        out["error"] = {k: out["error"][k] for k in ("code", "message", "hint", "upgrade", "kind", "limit", "used", "phase")
+                        if k in out["error"]}
     res = out.get("result")
     if isinstance(res, dict):
         out["result"] = {k: res[k] for k in ("verify", "mix_metrics", "timings_sec", "out_duration", "output_size",
