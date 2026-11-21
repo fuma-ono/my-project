@@ -35,12 +35,13 @@ struct AppRouteDestinationView: View {
                 fxPairSymbol: fxPairSymbol,
                 tabSelection: $tabSelection
             )
-        case .eventStrategyAnalysis(let eventId, let indicatorName, let fxPairId):
+        case .eventStrategyAnalysis(let eventId, let indicatorName, let fxPairId, let releaseDatetime):
             StrategyAnalysisView(
                 apiClient: apiClient,
                 eventId: eventId,
                 indicatorName: indicatorName,
                 fxPairId: fxPairId,
+                releaseDatetime: releaseDatetime,
                 tabSelection: $tabSelection
             )
         case .account:
