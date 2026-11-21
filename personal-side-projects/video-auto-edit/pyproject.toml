@@ -1,0 +1,23 @@
+[project]
+name = "vae"
+version = "0.1.0"
+description = "動画自動編集AI(ローカル実行・無料の技術のみ)"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "soundfile>=0.12",
+  "budoux>=0.6",
+  "pillow>=10",
+  "faster-whisper>=1.0",
+  "av<19",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pyopenjtalk-plus>=0.3"]
+bgm = ["scipy>=1.11"]
+
+[tool.pytest.ini_options]
+markers = [
+  "slow: 実モデル(Whisper)や長い動画を使う遅いテスト",
+]
+testpaths = ["tests"]
