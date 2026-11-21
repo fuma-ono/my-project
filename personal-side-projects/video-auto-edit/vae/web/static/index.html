@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>動画自動編集AI</title>
+<style>
+  :root { --fg:#1d2433; --muted:#5b6577; --bg:#f5f6f8; --card:#fff; --line:#d9dde4; --accent:#1f6feb;
+          --accent-dark:#1554b8; --ok:#1a7f37; --warn:#9a6700; --err:#b42318; --err-bg:#fdecea; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", sans-serif;
+         color:var(--fg); background:var(--bg); line-height:1.6; font-size:16px; }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:12px 16px; }
+  header h1 { margin:0; font-size:1.2rem; }
+  main { max-width:860px; margin:0 auto; padding:16px; }
+  .steps { display:flex; gap:4px; list-style:none; padding:0; margin:0 0 16px; counter-reset:s; flex-wrap:wrap; }
+  .steps li { flex:1 1 0; min-width:0; text-align:center; font-size:.78rem; padding:6px 2px; border-radius:6px;
+              background:#e7eaf0; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .steps li[aria-current="step"] { background:var(--accent); color:#fff; font-weight:bold; }
+  .steps li.done { background:#dcefe2; color:var(--ok); }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  section.card h2 { margin:0 0 8px; font-size:1.1rem; }
+  [hidden] { display:none !important; }
+  .note { color:var(--muted); font-size:.9rem; margin:4px 0 12px; }
+  .free { display:inline-block; background:#fff4d6; color:var(--warn); border-radius:4px; padding:0 6px; font-weight:bold; }
+  button, .button { font:inherit; border:0; border-radius:8px; padding:10px 16px; cursor:pointer; background:var(--accent);
+           color:#fff; text-decoration:none; display:inline-block; min-height:44px; }
+  button:hover, .button:hover { background:var(--accent-dark); }
+  button:disabled { background:#9aa4b5; cursor:not-allowed; }
+  button.secondary, .button.secondary { background:#e7eaf0; color:var(--fg); }
+  button.secondary:hover, .button.secondary:hover { background:#d5dae3; }
+  button.small { padding:6px 12px; min-height:36px; font-size:.9rem; }
+  :focus-visible { outline:3px solid #f0a500; outline-offset:2px; }
+  .drop { display:block; border:2px dashed var(--line); border-radius:10px; padding:24px 12px; text-align:center; cursor:pointer; }
+  .drop.over { border-color:var(--accent); background:#eef4ff; }
+  .drop input { display:block; margin:12px auto 0; max-width:100%; }
+  progress { width:100%; height:20px; }
+  .stage { margin:8px 0 0; }
+  .err { background:var(--err-bg); border:1px solid #f5c2bd; }
+  .err h2 { color:var(--err); }
+  .hint { background:#fff; border-left:4px solid var(--err); padding:8px 12px; margin:8px 0 12px; }
+  video { width:100%; max-height:60vh; background:#000; border-radius:8px; }
+  .summary { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  .summary div { background:#eef4ff; border-radius:8px; padding:8px 12px; }
+  .summary b { font-size:1.1rem; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 4px; text-align:left; vertical-align:top; }
+  th { font-size:.85rem; color:var(--muted); font-weight:normal; }
+  td.time { white-space:nowrap; font-size:.85rem; color:var(--muted); width:1%; }
+  td.time button { background:none; color:var(--accent); padding:0; min-height:0; text-decoration:underline; font-size:.85rem; }
+  td.act { width:1%; white-space:nowrap; }
+  textarea { width:100%; font:inherit; padding:6px; border:1px solid var(--line); border-radius:6px; resize:vertical; min-height:2.6em; }
+  .status { font-size:.8rem; display:block; min-height:1.2em; }
+  .status.ok { color:var(--ok); } .status.bad { color:var(--err); } .status.warn { color:var(--warn); }
+  ul.fillers { padding-left:1.2em; margin:4px 0; }
+  ul.fillers li { margin:2px 0; }
+  .tag { font-size:.75rem; border-radius:4px; padding:0 6px; margin-right:4px; }
+  .tag.cut { background:#fdecea; color:var(--err); } .tag.keep { background:#e7eaf0; color:var(--muted); }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  details summary { cursor:pointer; color:var(--muted); }
+  @media (max-width: 480px) {
+    main { padding:10px; }
+    section.card { padding:12px; }
+    table, tbody, tr, td { display:block; width:100%; }
+    thead { display:none; }
+    tr { border-bottom:1px solid var(--line); padding:6px 0; }
+    td { border:0; padding:2px 0; }
+    td.time, td.act { width:auto; }
+    /* 狭い画面では、いまの段階だけ名前を出す(他は番号のみ。読み上げには名前が残る) */
+    .steps li[aria-current="step"] { flex:3 1 0; }
+    .steps li:not([aria-current]) .lbl { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  }
+</style>
+</head>
+<body>
+<header><h1>動画自動編集AI</h1></header>
+<main>
+  <ol class="steps" aria-label="進み具合">
+    <li data-step="1">①<span class="lbl"> 動画を選ぶ</span></li>
+    <li data-step="2">②<span class="lbl"> 解析中</span></li>
+    <li data-step="3">③<span class="lbl"> 確認と修正</span></li>
+    <li data-step="4">④<span class="lbl"> 書き出し</span></li>
+    <li data-step="5">⑤<span class="lbl"> 完成</span></li>
+  </ol>
+
+  <!-- ① 動画を選ぶ -->
+  <section class="card" id="step1" aria-labelledby="h1">
+    <h2 id="h1">① 動画を選ぶ</h2>
+    <p class="note"><span class="free">30秒まで無料</span> 話し声の入った動画を選ぶと、無音と言い淀みを自動でカットし、字幕と BGM を付けます。
+      対応形式: MP4・MOV・M4V・MKV・WEBM(1GB まで)。</p>
+    <label class="drop" id="drop" for="file">
+      ここに動画をドラッグするか、下のボタンから選んでください
+      <input type="file" id="file" name="file" accept="video/mp4,video/quicktime,video/x-m4v,video/x-matroska,video/webm,.mp4,.mov,.m4v,.mkv,.webm" aria-describedby="h1">
+    </label>
+    <div id="upload" hidden>
+      <p class="stage" id="upload-msg" aria-live="polite">アップロードしています…</p>
+      <progress id="upload-bar" max="100" value="0" aria-label="アップロードの進み具合"></progress>
+    </div>
+  </section>
+
+  <!-- ② 解析中 -->
+  <section class="card" id="step2" aria-labelledby="h2" hidden>
+    <h2 id="h2">② 解析中</h2>
+    <p class="note">音声を聞き取り、カットする場所と字幕を作っています。このページを開いたままお待ちください。</p>
+    <progress id="analyze-bar" max="100" value="0" aria-label="解析の進み具合"></progress>
+    <p class="stage" id="analyze-msg" role="status" aria-live="polite">順番を待っています</p>
+  </section>
+
+  <!-- ③ 確認と修正 -->
+  <section class="card" id="step3" aria-labelledby="h3" hidden>
+    <div class="card err render-fail" id="render-fail-3" role="alert" hidden><b>書き出しに失敗しました。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
+    <h2 id="h3">③ 確認と修正</h2>
+    <div class="summary" aria-label="長さ">
+      <div>元の長さ <b id="dur-src">-</b></div>
+      <div>→ 編集後の長さ <b id="dur-out">-</b></div>
+      <div>カット <b id="dur-cut">-</b></div>
+    </div>
+    <h3>元の動画</h3>
+    <video id="src-video" controls preload="metadata" playsinline aria-label="元の動画のプレビュー"></video>
+    <h3 id="subs-h">字幕(間違いを直して「保存」)</h3>
+    <p class="note">時間を押すと、元の動画のその場面を再生します。文字を全部消すと、その字幕は表示しません。</p>
+    <p id="no-subs" class="note" hidden>字幕はありません。</p>
+    <table id="subs" aria-labelledby="subs-h">
+      <thead><tr><th scope="col">時間(編集後)</th><th scope="col">字幕</th><th scope="col">操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h3 id="fill-h">カットした言い淀み</h3>
+    <ul class="fillers" id="fillers-cut" aria-labelledby="fill-h"></ul>
+    <details id="fillers-kept-box">
+      <summary>候補だったが残したもの(<span id="kept-n">0</span>件)</summary>
+      <ul class="fillers" id="fillers-kept"></ul>
+    </details>
+    <div class="actions">
+      <button id="render-btn" type="button">この内容で書き出す</button>
+      <button class="secondary" type="button" data-action="restart">別の動画を選ぶ</button>
+    </div>
+  </section>
+
+  <!-- ④ 書き出し -->
+  <section class="card" id="step4" aria-labelledby="h4" hidden>
+    <h2 id="h4">④ 書き出し</h2>
+    <p class="note">カット・字幕・BGM を合成しています。初回は BGM の準備に少し時間がかかります。</p>
+    <progress id="render-bar" max="100" value="0" aria-label="書き出しの進み具合"></progress>
+    <p class="stage" id="render-msg" role="status" aria-live="polite">書き出しの順番を待っています</p>
+  </section>
+
+  <!-- ⑤ 完成 -->
+  <section class="card" id="step5" aria-labelledby="h5" hidden>
+    <div class="card err render-fail" id="render-fail-5" role="alert" hidden><b>最新の書き出しに失敗しました。下の動画は前回の書き出し結果です。</b> <span class="rf-msg"></span><br><span class="rf-hint"></span></div>
+    <h2 id="h5">⑤ 完成</h2>
+    <p class="note" id="done-note"></p>
+    <video id="out-video" controls preload="metadata" playsinline aria-label="完成した動画のプレビュー"></video>
+    <div class="actions">
+      <a class="button" id="download" href="#" download>ダウンロード</a>
+      <button class="secondary" type="button" id="reedit-btn">字幕を直して再書き出し</button>
+      <button class="secondary" type="button" data-action="restart">別の動画を選ぶ</button>
+    </div>
+  </section>
+
+  <!-- エラー -->
+  <section class="card err" id="error" role="alert" aria-labelledby="herr" hidden>
+    <h2 id="herr">うまくいきませんでした</h2>
+    <p id="err-msg"></p>
+    <div class="hint"><b>対処:</b> <span id="err-hint"></span></div>
+    <button type="button" data-action="restart">別の動画を選ぶ</button>
+  </section>
+</main>
+
+<script>
+"use strict";
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const MAX_BYTES = 1 << 30;
+  const ALLOWED = [".mp4", ".mov", ".m4v", ".mkv", ".webm"];
+  let jobId = sessionStorage.getItem("vae_job") || null;
+  let pollTimer = null;
+  let maxSeconds = 30;
+
+  function fmtSec(x) {
+    if (x == null || isNaN(x)) return "-";
+    x = Number(x);
+    if (x < 60) return x.toFixed(1) + "秒";
+    const m = Math.floor(x / 60), s = x - m * 60;
+    return m + "分" + s.toFixed(1) + "秒";
+  }
+  function fmtTime(x) {
+    x = Number(x) || 0;
+    const m = Math.floor(x / 60), s = x - m * 60;
+    return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
+  }
+  function show(step) {
+    ["step1", "step2", "step3", "step4", "step5", "error"].forEach((id) => { $(id).hidden = true; });
+    if (step === "error") { $("error").hidden = false; }
+    else { $("step" + step).hidden = false; }
+    document.querySelectorAll(".steps li").forEach((li) => {
+      const n = Number(li.dataset.step);
+      li.classList.toggle("done", typeof step === "number" && n < step);
+      if (n === step) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
+  }
+  function showError(err) {
+    err = err || {};
+    $("err-msg").textContent = err.message || "処理中に予期しないエラーが起きました。";
+    $("err-hint").textContent = err.hint || "もう一度試してください。";
+    show("error");
+    $("error").focus && $("error").setAttribute("tabindex", "-1");
+    $("error").focus();
+  }
+  async function api(method, path, body) {
+    const opt = { method, credentials: "same-origin", headers: {} };
+    if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+    let res;
+    try { res = await fetch(path, opt); }
+    catch (e) { throw { code: "network", message: "サーバーにつながりませんでした。", hint: "VAE を起動したまま、ページを再読み込みしてください。" }; }
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (!res.ok) {
+      throw (data && data.error) || { code: "http_" + res.status, message: "エラーが起きました(" + res.status + ")。", hint: "もう一度試してください。" };
+    }
+    return data;
+  }
+  function setJob(id) {
+    jobId = id;
+    if (id) sessionStorage.setItem("vae_job", id); else sessionStorage.removeItem("vae_job");
+  }
+  function stopPoll() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+
+  function restart() {
+    stopPoll();
+    setJob(null);
+    $("file").value = "";
+    $("upload").hidden = true;
+    $("drop").hidden = false;
+    $("src-video").removeAttribute("src"); $("src-video").load();
+    $("out-video").removeAttribute("src"); $("out-video").load();
+    show(1);
+    $("file").focus();
+  }
+  document.querySelectorAll('[data-action="restart"]').forEach((b) => b.addEventListener("click", restart));
+
+  // ---------------------------------------------------------------- ① 動画を選ぶ
+  function ext(name) { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); }
+
+  function probeDuration(file) {
+    // ブラウザが読める形式なら、送る前に長さを確かめる(読めなければ null。最終判定はサーバー)
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      const url = URL.createObjectURL(file);
+      let done = false;
+      const fin = (d) => { if (done) return; done = true; URL.revokeObjectURL(url); resolve(d); };
+      v.preload = "metadata";
+      v.onloadedmetadata = () => fin(isFinite(v.duration) ? v.duration : null);
+      v.onerror = () => fin(null);
+      setTimeout(() => fin(null), 3000);
+      v.src = url;
+    });
+  }
+
+  async function startUpload(file) {
+    if (!file) return;
+    if (ALLOWED.indexOf(ext(file.name)) < 0) {
+      return showError({ message: "この形式の動画には対応していません(拡張子 " + (ext(file.name) || "なし") + ")。",
+        hint: "MP4・MOV・M4V・MKV・WEBM の動画を選んでください。スマートフォンで撮影した動画はそのまま使えます。" });
+    }
+    if (file.size > MAX_BYTES) {
+      return showError({ message: "ファイルが大きすぎます(" + (file.size / 1e9).toFixed(1) + "GB)。",
+        hint: "1GB 以下の動画を選んでください。30秒以内に切り出すと小さくなります。" });
+    }
+    const d = await probeDuration(file);
+    if (d != null && d > maxSeconds + 0.05) {
+      return showError({ message: "動画の長さ(" + d.toFixed(1) + "秒)が、無料プランの上限(" + maxSeconds + "秒)を超えています。",
+        hint: maxSeconds + "秒以内に切り出した動画を選んでください。長い動画は今後の有料プランで対応予定です。" });
+    }
+    $("drop").hidden = true;
+    $("upload").hidden = false;
+    $("upload-bar").value = 0;
+    $("upload-msg").textContent = "アップロードしています… 0%";
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/jobs");
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.setRequestHeader("X-Plan", "free");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const p = Math.round(e.loaded * 100 / e.total);
+        $("upload-bar").value = p;
+        $("upload-msg").textContent = "アップロードしています… " + p + "%";
+      }
+    };
+    xhr.onerror = () => showError({ message: "アップロードできませんでした。", hint: "通信状態を確認して、もう一度選んでください。" });
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      if (xhr.status !== 200 || !data || !data.id) {
+        return showError((data && data.error) || { message: "アップロードできませんでした(" + xhr.status + ")。", hint: "もう一度試してください。" });
+      }
+      setJob(data.id);
+      handleJob(data);
+    };
+    xhr.send(file);
+  }
+  $("file").addEventListener("change", (e) => startUpload(e.target.files[0]));
+  const drop = $("drop");
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); startUpload(e.dataTransfer.files[0]); });
+
+  // ---------------------------------------------------------------- 状態の監視
+  function schedulePoll() { stopPoll(); pollTimer = setTimeout(poll, 1000); }
+  async function poll() {
+    if (!jobId) return;
+    try { handleJob(await api("GET", "/api/jobs/" + jobId)); }
+    catch (e) {
+      if (e && e.code === "not_found") { setJob(null); return showError({ message: "このジョブは見つかりませんでした(期限切れか削除済み)。", hint: "もう一度動画を選んでください。" }); }
+      if (e && e.code === "network") { schedulePoll(); return; }   // 一時的な切断は待つ
+      showError(e);
+    }
+  }
+  let shownState = null;
+  function handleJob(job) {
+    const pct = Math.round((job.progress || 0) * 100);
+    if (job.state === "queued" || job.state === "analyzing") {
+      if (shownState !== "analyzing") show(2);
+      $("analyze-bar").value = Math.min(100, Math.round(pct / 0.75));
+      $("analyze-msg").textContent = (job.message || "解析しています") + "(" + Math.min(100, Math.round(pct / 0.75)) + "%)";
+      shownState = "analyzing";
+      schedulePoll();
+    } else if (job.state === "ready") {
+      stopPoll();
+      if (shownState !== "ready") { shownState = "ready"; loadReview(job); }
+    } else if (job.state === "rendering") {
+      if (shownState !== "rendering") show(4);
+      const r = Math.max(0, Math.min(100, Math.round((pct - 75) * 4)));
+      $("render-bar").value = r;
+      $("render-msg").textContent = (job.message || "書き出しています") + "(" + r + "%)";
+      shownState = "rendering";
+      schedulePoll();
+    } else if (job.state === "done") {
+      stopPoll();
+      if (shownState !== "done") { shownState = "done"; showDone(job); }
+    } else if (job.state === "error") {
+      stopPoll();
+      shownState = "error";
+      showError(job.error || { message: job.message });
+    }
+  }
+
+  // 書き出しの失敗(ジョブは確認・完成の状態に戻り、error に原因が入る)を表示する
+  function showRenderFailure(job, boxId) {
+    const box = $(boxId);
+    const failed = job && job.error && job.stage === "render_failed";
+    box.hidden = !failed;
+    if (failed) {
+      box.querySelector(".rf-msg").textContent = job.error.message || "";
+      box.querySelector(".rf-hint").textContent = "対処: " + (job.error.hint || "もう一度書き出してください。");
+    }
+  }
+
+  // ---------------------------------------------------------------- ③ 確認と修正
+  async function loadReview(job) {
+    showRenderFailure(job, "render-fail-3");
+    let plan;
+    try { plan = await api("GET", "/api/jobs/" + job.id + "/plan"); }
+    catch (e) { return showError(e); }
+    show(3);
+    const src = (plan.source && plan.source.duration) || (job.media && job.media.duration);
+    $("dur-src").textContent = fmtSec(src);
+    $("dur-out").textContent = fmtSec(plan.out_duration);
+    $("dur-cut").textContent = src != null && plan.out_duration != null ? fmtSec(Math.max(0, src - plan.out_duration)) : "-";
+    const sv = $("src-video");
+    const srcUrl = "/api/jobs/" + job.id + "/input";
+    if (sv.getAttribute("src") !== srcUrl) sv.setAttribute("src", srcUrl);
+    renderSubs(plan.subtitles || []);
+    renderFillers(plan.filler_candidates || []);
+    $("render-btn").disabled = false;
+  }
+  function renderSubs(subs) {
+    const tb = document.querySelector("#subs tbody");
+    tb.textContent = "";
+    $("no-subs").hidden = subs.length > 0;
+    $("subs").hidden = subs.length === 0;
+    subs.forEach((ev, i) => {
+      const tr = document.createElement("tr");
+      tr.dataset.subId = ev.id;
+      const tdT = document.createElement("td"); tdT.className = "time";
+      const seek = document.createElement("button"); seek.type = "button";
+      seek.textContent = fmtTime(ev.s) + "〜" + fmtTime(ev.e);
+      seek.setAttribute("aria-label", "字幕" + (i + 1) + "の場面を元の動画で再生");
+      seek.addEventListener("click", () => {
+        const v = $("src-video");
+        if (ev.src_s != null) { v.currentTime = ev.src_s; v.play().catch(() => {}); }
+      });
+      tdT.appendChild(seek);
+      const tdX = document.createElement("td");
+      const ta = document.createElement("textarea");
+      ta.rows = Math.max(1, (ev.lines || []).length);
+      ta.value = (ev.lines || []).join("");
+      ta.maxLength = 200;
+      ta.id = "sub-text-" + ev.id;
+      ta.setAttribute("aria-label", "字幕" + (i + 1) + "の文言");
+      const st = document.createElement("span"); st.className = "status"; st.setAttribute("aria-live", "polite");
+      setSubStatus(st, ev);
+      ta.addEventListener("input", () => { st.className = "status warn"; st.textContent = "未保存"; });
+      tdX.appendChild(ta); tdX.appendChild(st);
+      const tdA = document.createElement("td"); tdA.className = "act";
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "small"; btn.textContent = "保存";
+      btn.setAttribute("aria-label", "字幕" + (i + 1) + "を保存");
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const upd = await api("POST", "/api/jobs/" + jobId + "/subtitles/" + ev.id, { text: ta.value });
+          ta.value = (upd.lines || []).join("");
+          setSubStatus(st, upd, true);
+        } catch (e) {
+          st.className = "status bad"; st.textContent = (e.message || "保存できませんでした。") + (e.hint ? " " + e.hint : "");
+        } finally { btn.disabled = false; }
+      });
+      tdA.appendChild(btn);
+      tr.appendChild(tdT); tr.appendChild(tdX); tr.appendChild(tdA);
+      tb.appendChild(tr);
+    });
+  }
+  function setSubStatus(st, ev, justSaved) {
+    if (ev.overflow) { st.className = "status warn"; st.textContent = "長すぎて画面からはみ出すかもしれません。短くしてください。"; }
+    else if (justSaved) { st.className = "status ok"; st.textContent = (ev.lines || []).length ? "保存しました" : "保存しました(この字幕は表示しません)"; }
+    else if (ev.edited) { st.className = "status ok"; st.textContent = "修正済み"; }
+    else { st.className = "status"; st.textContent = ""; }
+  }
+  function renderFillers(cands) {
+    const cut = $("fillers-cut"), kept = $("fillers-kept");
+    cut.textContent = ""; kept.textContent = "";
+    let nCut = 0, nKept = 0;
+    cands.forEach((c) => {
+      const li = document.createElement("li");
+      const tag = document.createElement("span");
+      const isCut = c.decision === "削除";
+      tag.className = "tag " + (isCut ? "cut" : "keep");
+      tag.textContent = isCut ? "カット" : "残す";
+      li.appendChild(tag);
+      li.appendChild(document.createTextNode("「" + c.text + "」(元の動画 " + fmtTime(c.s) + ")— 理由: " + (c.reason || "-")));
+      (isCut ? cut : kept).appendChild(li);
+      if (isCut) nCut++; else nKept++;
+    });
+    if (!nCut) { const li = document.createElement("li"); li.textContent = "カットした言い淀みはありません。"; cut.appendChild(li); }
+    $("kept-n").textContent = nKept;
+    $("fillers-kept-box").hidden = nKept === 0;
+  }
+  $("render-btn").addEventListener("click", async () => {
+    $("render-btn").disabled = true;
+    try {
+      const job = await api("POST", "/api/jobs/" + jobId + "/render");
+      shownState = null;
+      handleJob(job);
+    } catch (e) { $("render-btn").disabled = false; showError(e); }
+  });
+
+  // ---------------------------------------------------------------- ⑤ 完成
+  function showDone(job) {
+    show(5);
+    showRenderFailure(job, "render-fail-5");
+    const out = "/api/jobs/" + job.id + "/output?t=" + Math.round((job.updated || Date.now()) * 1000);
+    $("out-video").setAttribute("src", out);
+    $("download").setAttribute("href", "/api/jobs/" + job.id + "/output?download=1");
+    const base = (job.filename || "video").replace(/\.[^.]+$/, "");
+    $("download").setAttribute("download", base + "_edited.mp4");
+    const v = job.result && job.result.verify;
+    $("done-note").textContent = "編集後の長さ " + fmtSec(job.result && (job.result.out_duration || (v && v.video_sec))) +
+      (v && v.ok === false ? "(書き出し後の確認で問題が見つかりました。再書き出しをお試しください)" : "");
+  }
+  $("reedit-btn").addEventListener("click", () => { shownState = "ready"; loadReview({ id: jobId }); });
+
+  // ---------------------------------------------------------------- 起動
+  api("GET", "/api/plans").then((d) => {
+    const free = (d.plans || []).find((p) => p.name === "free");
+    if (free) maxSeconds = free.max_seconds;
+  }).catch(() => {});
+  show(1);
+  if (jobId) poll();   // 再読み込みしても続きから
+})();
+</script>
+</body>
+</html>
