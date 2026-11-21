@@ -224,12 +224,38 @@ def _git_sub(args):
     return (args[0] if args else ""), args[1:], cdir
 
 
+SECRET_VARS = re.compile(r"ANTHROPIC_(?:API_KEY|AUTH_TOKEN)|EXPO_TOKEN|SUPABASE_[A-Z_]*KEY|GITHUB_TOKEN")
+
+
+def _check_secret_print(toks, seg):
+    """API キー・トークンを出力に出す操作を止める(出力はセッションの記録に残るため)。
+    確認だけなら `test -n "${ANTHROPIC_API_KEY:-}" && echo set` のように、値を出さない形を使う。
+    限界: python -c や ヒアドキュメントの中での出力、変数に入れてからの出力は検出できない(安全網)"""
+    if not toks:
+        return
+    prog = os.path.basename(toks[0])
+    args = toks[1:]
+    msg = ("API キー・トークンを出力に出す操作は禁止されています(セッションの記録に残るため)。"
+           "存在の確認は `test -n \"${ANTHROPIC_API_KEY:-}\" && echo set` のように、値を出さない形で行ってください。")
+    if prog in ("echo", "printf", "cat") and any(SECRET_VARS.search(a) for a in args):
+        block(msg)
+    if prog == "printenv" and (not args or any(SECRET_VARS.search(a) or a.startswith("ANTHROPIC") for a in args)):
+        block(msg)
+    if prog == "env" and not args:
+        block(msg)
+    if prog in ("export", "declare", "typeset") and ("-p" in args or ("-x" in args and len(args) == 1)):
+        block(msg)
+    if re.search(r"/proc/[^\s/]+/environ", seg):
+        block(msg)
+
+
 def _check_segment(seg, state, depth=0):
     toks = _tokens(seg)
     if toks:                                               # サブシェル (cd x && rm y) の括弧を外す
         toks[0] = toks[0].lstrip("(")
         toks[-1] = toks[-1].rstrip(")")
         toks = [t for t in toks if t]
+    _check_secret_print(toks, seg)                          # キーを画面・ログに出す操作を止める(ラッパーを外す前の形で見る)
     toks, inner = _unwrap(toks)
     if inner is not None:
         if depth < 3:

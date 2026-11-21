@@ -99,3 +99,32 @@ def validate(path: str, max_seconds: float | None = None, plan_name: str = "無�
     if max_seconds is not None and info.duration > max_seconds + 0.05:
         raise errors.over_plan_limit(info.duration, max_seconds, plan_name)
     return info
+
+
+def combine(paths, out, infos=None, timeout=None):
+    """複数の動画を1本につなぐ(STANDARD / PRO の複数動画。料金仕様 v1)。
+    大きさと fps は1本目に合わせる(はみ出す動画は縮小し、余白は黒で埋める。拡大はしない)。
+    音声は 48kHz ステレオにそろえる。元の動画は読むだけ。戻り値: 結合後の MediaInfo"""
+    infos = infos or [probe(p) for p in paths]
+    first = infos[0]
+    w, h = first.width - first.width % 2, first.height - first.height % 2
+    fr = f"{first.fps_num}/{first.fps_den}"
+    parts, ins = [], []
+    for i, p in enumerate(paths):
+        ins += ["-i", os.path.abspath(p)]
+        parts.append(f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
+                     f"setsar=1,fps={fr},format=yuv420p[v{i}];"
+                     f"[{i}:a]aresample=48000,aformat=channel_layouts=stereo[a{i}]")
+    n = len(paths)
+    graph = ";".join(parts) + ";" + "".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[v][a]"
+    total = sum(x.duration for x in infos)
+    tmp = out + ".part.mp4"
+    try:
+        proc.run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
+                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "192k",
+                  "-movflags", "+faststart", tmp], timeout=timeout or proc.timeout_for(total, factor=6.0), mem_limit_mb=3000)
+        os.replace(tmp, out)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return probe(out)

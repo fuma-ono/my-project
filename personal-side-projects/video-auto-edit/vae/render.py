@@ -49,7 +49,7 @@ def _even_crop(width, height):
 
 
 def render_video(src, frames, fps, audio_wav, out, work, method="select", ass=None,
-                 mem_limit_mb=DEFAULT_MEM_LIMIT_MB, timeout=None, encode=ENCODE, size=None):
+                 mem_limit_mb=DEFAULT_MEM_LIMIT_MB, timeout=None, encode=ENCODE, size=None, scale=None):
     """残すフレーム区間 frames の映像に、用意済みの音声 audio_wav を付けて out に書き出す。
     戻り値: dict(method, seconds, ffmpeg_peak_mb)"""
     os.makedirs(work, exist_ok=True)
@@ -65,7 +65,9 @@ def render_video(src, frames, fps, audio_wav, out, work, method="select", ass=No
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
             raise ValueError(f"字幕ファイル名に使えない文字があります: {name}")
         ass = name
-    sub = (_even_crop(*size) if size else "") + (_ass_filter(ass) if ass else "")
+    # 字幕は元の大きさで焼き込んでから縮小する(字幕の配置は元の解像度で計算しているため)
+    sub = (_even_crop(*size) if size else "") + (_ass_filter(ass) if ass else "") + \
+        (f",scale={scale[0]}:{scale[1]}:flags=lanczos" if scale else "")
     fr = _fr(fps)
     tmp_out = os.path.join(work, "render.part.mp4")                 # 途中のファイルは作業フォルダに置く
     try:

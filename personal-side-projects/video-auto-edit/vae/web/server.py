@@ -3,12 +3,21 @@
 標準ライブラリだけで動く。既定では 127.0.0.1 にだけ待ち受ける。
 
   GET    /                                   画面(static/index.html)
-  GET    /api/plans                          プラン一覧(AC-B1: 無料は30秒まで)
-  POST   /api/jobs                           動画本体をそのまま送る。X-Filename(URL エンコード)、X-Plan(既定 free)
+  GET    /api/plans                          プラン一覧・価格・期間・更新条件・編集コンセプト(料金仕様 v1)
+  GET    /api/account                        現在のプラン・契約・今月の新規編集の残り・プロジェクトごとの再編集の残り
+  POST   /api/jobs                           動画本体をそのまま送る。X-Filename(URL エンコード)、Idempotency-Key、X-Concept。
+                                             プランはサーバー側の購読の状態で決める(クライアントの申告は使わない)
   GET    /api/jobs/<id>                      状態・進捗・エラー
   GET    /api/jobs/<id>/plan                 字幕・言い淀み候補・残す区間・長さ
   POST   /api/jobs/<id>/subtitles/<sub_id>   {"text": "..."} 字幕の修正(AC-S6)
-  POST   /api/jobs/<id>/render               書き出し開始
+  POST   /api/jobs/<id>/render               書き出し開始(字幕の手動変更の反映。利用枠は使わない)
+  POST   /api/jobs/<id>/reedit               {"concept": "..."} AI 再編集(利用枠を使う)。Idempotency-Key
+  POST   /api/jobs/<id>/cancel               処理のキャンセル(利用枠は返却)
+  POST   /api/jobs/<id>/videos               動画を足す(STANDARD / PRO の複数動画。POST /api/jobs に X-Collect: 1 で作ったもの)
+  POST   /api/jobs/<id>/start                集めた動画で新規編集を始める(利用枠をここで予約)。Idempotency-Key
+  GET    /api/jobs/<id>/versions/<name>      AI 再編集の前の完成動画
+  POST   /api/billing/apple/transactions     {"signedTransactions": [...]} iOS の購入・復元の取引(JWS)を検証して反映
+  POST   /api/billing/apple/notifications    App Store Server Notifications V2({"signedPayload": "..."})
   GET    /api/jobs/<id>/output               書き出した動画(Range 対応)
   GET    /api/jobs/<id>/input                元動画のプレビュー(Range 対応)
   DELETE /api/jobs/<id>                      ジョブの削除
@@ -28,7 +37,8 @@ import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .. import errors, pipeline, plans
+from .. import errors, pipeline
+from ..billing import store as bstore
 from ..jobs import JobStore
 
 log = logging.getLogger("vae.web")
@@ -39,10 +49,17 @@ MAX_JSON_BYTES = 64 * 1024
 MAX_SUBTITLE_CHARS = 200
 CHUNK = 1 << 20
 COOKIE_NAME = "vae_client"
-AVAILABLE_PLANS = ("free",)           # 有料プランは準備中。上限を回避されないよう受け付けない
 EDITABLE_STATES = ("ready", "done")
 BUSY_STATES = ("analyzing", "rendering")
-PRIVATE_JOB_KEYS = ("client_id", "hash", "input_name")
+PRIVATE_JOB_KEYS = ("client_id", "hash", "input_name", "account_id", "usage_id", "prev_settings")
+_KEY_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,100}$")
+_VERSION_RE = re.compile(r"^v\d{1,4}\.mp4$")
+# 購入前に示す条件(画面とアップグレードの案内に使う。価格は config/plans.json)
+PURCHASE_TERMS = ("月額の自動更新の定期購読です。購入の確定時に Apple ID に請求されます。",
+                  "期間の終わりの24時間前までに自動更新をオフにしない限り、同じ価格・期間で自動的に更新されます。",
+                  "解約(自動更新のオフ)は iPhone の「設定」→ Apple ID →「サブスクリプション」からいつでもできます。"
+                  "解約しても、契約期間の終わりまでは引き続き使えます。",
+                  "利用回数の上限に達しても、自動で課金されることはありません。")
 CLEANUP_INTERVAL_SEC = 3600
 
 _JOB_RE = re.compile(r"^/api/jobs/([0-9a-f]{1,64})(/.*)?$")
@@ -65,10 +82,17 @@ def public_job(job):
     if isinstance(out.get("media"), dict):
         out["media"] = {k: v for k, v in out["media"].items() if k != "path"}
     if isinstance(out.get("error"), dict):
-        out["error"] = {k: out["error"].get(k, "") for k in ("code", "message", "hint")}
+        out["error"] = {k: out["error"][k] for k in ("code", "message", "hint", "upgrade", "kind", "limit", "used", "phase")
+                        if k in out["error"]}
     res = out.get("result")
     if isinstance(res, dict):
-        out["result"] = {k: res[k] for k in ("verify", "mix_metrics", "timings_sec", "out_duration") if k in res}
+        out["result"] = {k: res[k] for k in ("verify", "mix_metrics", "timings_sec", "out_duration", "output_size",
+                                             "resolution_class") if k in res}
+    if isinstance(out.get("clips"), list):
+        out["clips"] = [{"filename": c.get("filename"), "seconds": c.get("seconds")} for c in out["clips"]]
+    if isinstance(out.get("versions"), list):
+        out["versions"] = [{"name": v.get("name"), "created": v.get("created"),
+                            "concept": (v.get("settings") or {}).get("concept")} for v in out["versions"]]
     return out
 
 
@@ -207,12 +231,23 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html") and method in ("GET", "HEAD"):
             return self._static("index.html")
         if path == "/api/plans" and method in ("GET", "HEAD"):
-            return self._send_json(200, {"plans": [
-                {"name": p.name, "label": p.label, "max_seconds": p.max_seconds, "daily_limit": p.daily_limit,
-                 "available": p.name in AVAILABLE_PLANS} for p in plans.PLANS.values()],
-                "default": plans.DEFAULT_PLAN, "max_upload_bytes": MAX_UPLOAD_BYTES})
+            cfg = self.store.config
+            return self._send_json(200, {"plans": [p.public() for p in cfg.plans.values()],
+                                         "concepts": [{"id": c["id"], "label": c["label"], "tier": c["tier"]} for c in cfg.concepts],
+                                         "purchase_terms": PURCHASE_TERMS, "purchase_on": "ios",
+                                         "default": "free", "max_upload_bytes": MAX_UPLOAD_BYTES})
+        if path == "/api/account" and method in ("GET", "HEAD"):
+            cid = self._client()
+            ids = [j["id"] for j in self.store.list() if j.get("client_id") == cid]
+            st = self.store.account_status(cid, ids)
+            st["purchase_terms"] = PURCHASE_TERMS
+            return self._send_json(200, st)
         if path == "/api/jobs" and method == "POST":
             return self._create_job()
+        if path == "/api/billing/apple/transactions" and method == "POST":
+            return self._apple_transactions()
+        if path == "/api/billing/apple/notifications" and method == "POST":
+            return self._apple_notification()
         m = _JOB_RE.match(path)
         if not m:
             raise _not_found()
@@ -230,6 +265,27 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(200, public_plan(self._load_plan(job)))
         if rest == "/render" and method == "POST":
             return self._render(job)
+        if rest == "/reedit" and method == "POST":
+            return self._reedit(job)
+        if rest == "/cancel" and method == "POST":
+            self._read_json()
+            ok = self.store.cancel(job_id)
+            return self._send_json(202 if ok else 409, {"cancelled": ok, "job": public_job(self.store.get(job_id))})
+        if rest == "/videos" and method == "POST":
+            return self._add_video(job)
+        if rest == "/start" and method == "POST":
+            self._read_json()
+            try:
+                job = self.store.start_collected(job_id, self._client(), idempotency_key=self._idempotency_key())
+            except ValueError:
+                raise HTTPError(409, "not_collecting", "この編集はすでに始まっています。", "")
+            return self._send_json(202, public_job(job))
+        vm = re.match(r"^/versions/([^/]+)$", rest)
+        if vm and method in ("GET", "HEAD"):
+            name = vm.group(1)
+            if not _VERSION_RE.match(name) or name not in [v.get("name") for v in job.get("versions") or []]:
+                raise _not_found()
+            return self._send_file(os.path.join(self.store.paths(job_id)["versions"], name), "video/mp4")
         sm = re.match(r"^/subtitles/(\d{1,6})$", rest)
         if sm and method == "POST":
             return self._edit_subtitle(job, int(sm.group(1)))
@@ -272,9 +328,10 @@ class Handler(BaseHTTPRequestHandler):
             raise HTTPError(400, "broken_file", "ファイルが空です。", "別の動画を選んでください。")
         filename = urllib.parse.unquote(self.headers.get("X-Filename") or "")
         filename = os.path.basename(filename.replace("\\", "/"))[:200]
-        plan_name = (self.headers.get("X-Plan") or plans.DEFAULT_PLAN).strip()
-        if plan_name not in AVAILABLE_PLANS:
-            raise HTTPError(400, "plan_unavailable", "このプランはまだ利用できません。", "無料プラン(30秒まで)を使ってください。")
+        plan_name = None                                # プランはサーバー側で決める(X-Plan は使わない)
+        self._idem = self._idempotency_key()
+        self._concept = (self.headers.get("X-Concept") or "").strip()[:40] or None
+        self._collect = (self.headers.get("X-Collect") or "").strip() == "1"
         free = self.store.free_gb()                     # 受け取る前にディスクの空きを確認する
         if free < self.store.min_free_gb + length / 1e9:
             raise HTTPError(507, "disk_full", f"保存領域の空きが足りません(残り {free:.1f}GB)。",
@@ -288,9 +345,36 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
         dup = bool(job.get("duplicate"))
-        if not dup:
+        if not dup and job["state"] != "collecting":
             self.store.start(job["id"], "analyze")
         return self._send_json(200, dict(public_job(job), duplicate=dup))
+
+    def _add_video(self, job):
+        length = self.headers.get("Content-Length")
+        if self.headers.get("Transfer-Encoding") or length is None:
+            raise HTTPError(411, "length_required", "ファイルの大きさが分かりませんでした。", "もう一度選んでください。")
+        try:
+            length = int(length)
+        except ValueError:
+            raise HTTPError(400, "bad_request", "ファイルの大きさが正しくありません。", "もう一度選んでください。")
+        if length <= 0 or length > MAX_UPLOAD_BYTES:
+            raise HTTPError(413 if length > 0 else 400, "too_large" if length > 0 else "broken_file",
+                            "ファイルの大きさが正しくありません。", "1GB 以下の動画を選んでください。")
+        free = self.store.free_gb()
+        if free < self.store.min_free_gb + length / 1e9:
+            raise HTTPError(507, "disk_full", f"保存領域の空きが足りません(残り {free:.1f}GB)。", "古いジョブを削除してください。")
+        filename = os.path.basename(urllib.parse.unquote(self.headers.get("X-Filename") or "").replace("\\", "/"))[:200]
+        tmp = self._receive_body(length)
+        try:
+            job = self.store.add_clip(job["id"], tmp, filename, self._client(), move=True)
+        except ValueError:
+            raise HTTPError(409, "not_collecting", "この編集にはもう動画を追加できません。", "")
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        return self._send_json(200, public_job(job))
 
     def _receive_body(self, length):
         """本文を少しずつ一時ファイルへ書く(全体をメモリに読まない)"""
@@ -316,13 +400,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def _create_from_tmp(self, tmp, filename, plan_name):
         cid = self._client()
-        job = self.store.create(tmp, filename, plan_name, cid, move=True)   # コピーせず移動(ディスクを2倍使わない)
+        job = self.store.create(tmp, filename, plan_name, cid, move=True,      # コピーせず移動(ディスクを2倍使わない)
+                                idempotency_key=self._idem, concept=self._concept, collect=self._collect)
         if not job.get("duplicate"):
             return job
         if job.get("state") == "error":
             # 以前失敗した同じ動画はやり直せるようにする
             self.store.delete(job["id"])
-            job = self.store.create(tmp, filename, plan_name, cid)
+            job = self.store.create(tmp, filename, plan_name, cid, concept=self._concept)
         return job
 
     # ------------------------------------------------------------ 確認・修正(AC-U3, AC-S6)
@@ -393,6 +478,66 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 raise HTTPError(409, "not_ready", "いまは書き出しを始められません。", "解析が終わってから書き出してください。")
         return self._send_json(202, public_job(job))
+
+    def _idempotency_key(self):
+        key = (self.headers.get("Idempotency-Key") or "").strip()
+        if not key:
+            return None
+        if not _KEY_RE.match(key):
+            raise HTTPError(400, "bad_request", "操作の識別子が正しくありません。", "ページを再読み込みしてください。")
+        return f"{self._client()}:{key}"            # 端末ごとに分ける(他の端末のキーと衝突させない)
+
+    # ------------------------------------------------------------ AI 再編集(料金仕様 v1)
+    def _reedit(self, job):
+        body = self._read_json()
+        if not isinstance(body, dict):
+            raise HTTPError(400, "bad_request", "送信内容が正しくありません。", "")
+        concept = body.get("concept")
+        if concept is not None and not isinstance(concept, str):
+            raise HTTPError(400, "bad_request", "編集コンセプトが正しくありません。", "")
+        with self.server.plan_lock:
+            try:
+                job = self.store.begin_reedit(job["id"], self._client(), concept=concept,
+                                              idempotency_key=self._idempotency_key())
+            except ValueError:
+                raise HTTPError(409, "not_ready", "いまは AI 再編集を始められません。", "書き出しが終わってから試してください。")
+        status = 200 if job.get("no_change") or job.get("duplicate") else 202
+        return self._send_json(status, dict(public_job(job), no_change=bool(job.get("no_change")),
+                                            duplicate=bool(job.get("duplicate"))))
+
+    # ------------------------------------------------------------ App Store(料金仕様 v1 5章)
+    def _apple_transactions(self):
+        from ..billing import appstore
+        body = self._read_json()
+        txs = body.get("signedTransactions") if isinstance(body, dict) else None
+        if not isinstance(txs, list) or not txs or len(txs) > 20 or not all(isinstance(t, str) for t in txs):
+            raise HTTPError(400, "bad_request", "購入情報が正しくありません。", "アプリから「購入を復元」を試してください。")
+        acc = self.store.account_for(self._client())
+        out = []
+        for t in txs:
+            try:
+                out.append(appstore.apply_signed_transaction(self.store.billing, self.store.config, acc["id"], t))
+            except bstore.SubscriptionConflict:
+                raise HTTPError(409, "subscription_in_use", "この購読は別のアカウントで使われています。",
+                                "購入したときのアカウントでログインしてください。二重に登録・請求されることはありません。")
+            except (appstore.AppStoreVerificationError, ValueError):
+                raise HTTPError(400, "invalid_transaction", "購入情報を確認できませんでした。",
+                                "アプリから「購入を復元」を試してください。続く場合はお問い合わせください。")
+        return self._send_json(200, {"applied": out, "account": self.store.account_status(self._client())})
+
+    def _apple_notification(self):
+        from ..billing import appstore
+        body = self._read_json()
+        payload = body.get("signedPayload") if isinstance(body, dict) else None
+        if not isinstance(payload, str):
+            raise HTTPError(400, "bad_request", "通知が正しくありません。", "")
+        try:
+            res = appstore.apply_notification(self.store.billing, self.store.config, payload)
+        except (appstore.AppStoreVerificationError, ValueError):
+            raise HTTPError(400, "invalid_notification", "通知を確認できませんでした。", "")
+        except bstore.SubscriptionConflict:
+            raise HTTPError(409, "subscription_in_use", "購読のアカウントが一致しません。", "")
+        return self._send_json(200, {"status": res.get("status")})
 
     # ------------------------------------------------------------ ファイル配信(Range 対応)
     def _static(self, name):
