@@ -108,6 +108,16 @@ CASES = [
     ("! ( -name ) の削除を止める", "guard", "find . ! \\( -name '*.py' \\) -delete", 2),
     ("-not ( -name -o -name ) の削除を止める", "guard", "find . -not \\( -name '*.py' -o -name '*.md' \\) -delete", 2),
     ("-exec /bin/rm を止める", "guard", "find . -type f -exec /bin/rm {} +", 2),
+    # --- API キー・トークンを出力に出す操作(2026-11-21 のキー安全性の確認) ---
+    ("echo で API キーを出すのを止める", "guard", "echo $ANTHROPIC_API_KEY", 2),
+    ("printf で API キーを出すのを止める", "guard", "printf '%s' \"$ANTHROPIC_API_KEY\"", 2),
+    ("printenv の全表示を止める", "guard", "printenv", 2),
+    ("printenv ANTHROPIC を止める", "guard", "printenv ANTHROPIC_API_KEY", 2),
+    ("env の全表示を止める", "guard", "env", 2),
+    ("/proc の environ を読むのを止める", "guard", "cat /proc/self/environ", 2),
+    ("値を出さない確認は通す", "guard", "test -n \"${ANTHROPIC_API_KEY:-}\" && echo set", 0),
+    ("env で変数を付けてコマンドを動かすのは通す", "guard", "env FOO=1 python3 -c 'print(1)'", 0),
+    ("他の変数の echo は通す", "guard", "echo $HOME", 0),
     ("他事業での括弧付きの後片付けは通す", "guard", "find fx-event-analyzer \\( -name '*.pyc' -o -name '*.pyo' \\) -delete", 0),
 ]
 
