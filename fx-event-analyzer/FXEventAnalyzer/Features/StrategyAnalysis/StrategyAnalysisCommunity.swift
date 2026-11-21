@@ -333,12 +333,17 @@ private struct CommunityPostCard: View {
                 }
             }
 
+            // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
+            // 折り返して」: チャート枠(56pt幅、右上にoverlay)の分だけ右の余白を確保し、
+            // 枠と重ならない幅で折り返させる。
             NotoText.text(post.title, size: 7.3)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.trailing, 60)
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                 .lineLimit(2)
+                .padding(.trailing, 60)
 
             HStack(spacing: 10) {
                 footerItem(icon: "heart.fill", value: "\(post.likeCount)", color: Color(red: 0.95, green: 0.32, blue: 0.52))
