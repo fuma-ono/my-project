@@ -205,3 +205,23 @@ def test_r3_m3_output_on_other_filesystem(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.os, "replace", exdev)
     pipeline._move_into_place(str(src), str(dst))
     assert dst.read_bytes() == b"new" and not src.exists() and not os.path.exists(str(dst) + ".part")
+
+
+# --- T-16: N3(配信中のタイムアウト)の回帰テスト ---
+@pytest.mark.parametrize("exc", [TimeoutError, BrokenPipeError, ConnectionResetError])
+def test_t16_n3_stream_timeout_is_disconnect_not_500(exc, caplog):
+    from vae.web import server
+    h = server.Handler.__new__(server.Handler)
+    h.path, h.command, h.close_connection = "/api/jobs/ab/output", "GET", False
+    sent = []
+    h._host_ok = lambda: True
+    h._send_json = lambda status, body: sent.append(status)
+
+    def route(method, path):
+        raise exc("client stopped reading")
+    h._route = route
+    with caplog.at_level("ERROR"):
+        h._dispatch("GET")
+    assert h.close_connection is True                 # 接続を閉じるだけ
+    assert sent == []                                  # 500 を送らない(送っても相手は読まない)
+    assert not [r for r in caplog.records if "内部エラー" in r.getMessage()]   # 内部エラーとして記録しない

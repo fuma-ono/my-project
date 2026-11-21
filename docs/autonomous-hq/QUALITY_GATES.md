@@ -22,12 +22,13 @@
 | 字幕の修正(AC-S6) | ✅ | `tests/test_pipeline.py::test_ac_s6...`、`tests/test_web.py`、UI 操作テスト(修正が書き出しに反映) |
 | 書き出しの検証(AC-E1, E2) | ✅ | `vae.render.verify`: 実動画3本でフレーム数と音声長の一致・解像度・fps・True Peak すべて合格 |
 | 一時ファイル(AC-E3) | ✅ | `tests/test_pipeline.py::test_ac_e3...`、`tests/test_jobs.py::test_ac_e3...`(期限切れの削除) |
-| UI(AC-U1〜U5) | ✅ | `tests/test_web.py` 8件、`tools/ui_smoke.mjs`(実ブラウザ、HQ が再実行して PASS、スクリーンショット10枚: `video-eval-output/hq_2026-11-21/ui_screenshots/`) |
+| 安全フック | ✅ | `.claude/hooks/test_vae_hooks.py` 85/85(HOME=/root と /home/runner、PR #16)。find の削除は、括弧のまとまりを1語にまとめてから -o で枝に分け、削除する枝ごとに「否定されていない、すべてに一致しない名前の条件」があるかを見る。**限界**(安全網であり、すべては止められない): 変数に入れたパス、`$(...)`、ヒアドキュメントの中のコマンド、FIND_ALL_MATCH 以外の全一致の書き方(例 `-path '*/*'`)。**止める側の誤り**: 保護対象の親(リポジトリのルートなど)で `-name '*.*'` や、名前でなく `-newer`・`-size` だけで絞った削除 |
+| UI(AC-U1〜U5) | ✅ | `tests/test_web.py` 8件、`tools/ui_smoke.mjs`(実ブラウザ、HQ が再実行して PASS、スクリーンショット12枚(書き出し失敗の表示を含む、PR #16)。10枚版: `video-eval-output/hq_2026-11-21/ui_screenshots/`) |
 | 無料枠・プラン(AC-B1〜B4) | ✅ | `tests/test_jobs.py`(30秒超は受付前に拒否、プラン設定、端末ごとの重複検出、1日の回数上限)、UI でも 31秒は over_plan_limit |
 | コスト(AC-B3) | ✅ | 外部 API 0円(ジョブ結果に `external_cost_jpy: 0`)。処理時間: 実動画で 35〜71秒(medium、4 vCPU) |
-| 回帰 | ✅ | `pytest -m "not slow"`: 63 passed(2026-11-21)。`pytest -m slow`: 1 passed |
-| CI | ✅ | `video-auto-edit-ci` run 44861310147(pull_request、dcdbc17)成功: https://github.com/fuma-ono/my-project/actions/runs/44861310147 |
-| 独立レビュー | ⏳ | Phase 3 で実施(AGENT_LOG に記録) |
+| 回帰 | ✅ | `pytest -m "not slow"`: 82 passed(main f497d68、2026-11-21)。`pytest -m slow`: 1 passed(dcdbc17 時点)。実動画3本の再評価(3f3459b)で指標は前回と同一 |
+| CI | ✅ | f50bb54(マージ直前の HEAD)で push・pull_request の2 runs 成功(run 44884775216 / 44884779383)。3f3459b で HOME の違いによる失敗 → 5ef88ba で修正 |
+| 独立レビュー | ✅ | vae-independent-reviewer で4回 + 追加確認。最終: マージ可(blocker 0 / major 0)。残りの minor は T-16・T-17 |
 | 聴感(カットの自然さ・BGM の好み・字幕と声のタイミング) | 👂 | 自動判定しない。オーナーの試聴が必要(BLOCKERS B-1) |
 | 長尺(合成素材、解析→書き出しの全体) | ✅ | 1080x1920 の合成素材(文字起こしは偽物で差し替え): 3分 → 全体106.5秒(音声64.6・書き出し39.2)、書き出し412MB、Python 398MB。5分 → 全体160.1秒(音声96.3・書き出し59.6)、書き出し414MB、Python 715MB。検証は両方合格 |
 | 長尺(実動画、3分以上) | ⏳ | 未実施(BLOCKERS B-6)。Whisper medium の時間は実動画で約0.5〜0.65倍速(30秒前後の動画の実測から推定。長尺は未計測) |

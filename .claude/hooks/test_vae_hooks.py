@@ -86,6 +86,29 @@ CASES = [
     ("ルートでの find . -type f -mtime +7 -delete を止める", "guard", "find . -type f -mtime +7 -delete", 2),
     ("ルートでの find -regex の動画削除を止める", "guard", "find . -regex '.*\\.mp4' -delete", 2),
     ("他事業のフォルダでの名前条件なしの find 削除は通す", "guard", "find fx-event-analyzer/tmp -type f -mtime +7 -delete", 0),
+    # --- 独立レビュー5回目(追加確認)の見逃し r5-1 ---
+    ("-prune -o の find 削除を止める", "guard", "find . -path ./node_modules -prune -o -type f -delete", 2),
+    ("-not -name の find 削除を止める", "guard", "find . -not -name '*.py' -delete", 2),
+    ("-name '*' の find 削除を止める", "guard", "find . -name '*' -delete", 2),
+    ("他事業のフォルダでの -not の find 削除は通す", "guard", "find fx-event-analyzer/build -not -name '.gitkeep' -delete", 0),
+    ("ルートでの名前を絞った __pycache__ の後片付けは引き続き通す", "guard", "find . -type d -name __pycache__ -exec rm -rf {} +", 0),
+    # --- 独立レビュー(PR #16)の m1: 名前で絞った -o・!・-not の後片付けは通す ---
+    ("ルートでの ( -name a -o -name b ) の削除は通す", "guard", "find . \\( -name '*.pyc' -o -name '*.pyo' \\) -delete", 0),
+    ("ルートでの -name と ! -name の削除は通す", "guard", "find . -name '*.log' ! -name keep.log -delete", 0),
+    ("ルートでの -not -path 付きの __pycache__ の後片付けは通す", "guard", "find . -type d -name __pycache__ -not -path './.git/*' -exec rm -rf {} +", 0),
+    ("personal-side-projects での -o の後片付けは通す", "guard", "find personal-side-projects -name __pycache__ -o -name '*.pyc' -delete", 0),
+    # --- 同 m2: すべてに一致する名前の別の書き方と -execdir ---
+    ("-name '**' の削除を止める", "guard", "find . -name '**' -delete", 2),
+    ("-name '?*' の削除を止める", "guard", "find . -name '?*' -delete", 2),
+    ("-name '[!.]*' の削除を止める", "guard", "find . -name '[!.]*' -delete", 2),
+    ("-path './*' の削除を止める", "guard", "find . -path './*' -delete", 2),
+    ("-execdir rm を止める", "guard", "find . -type f -execdir rm {} +", 2),
+    # --- 同 再確認 r6-1・r6-2: 括弧の中の -o・括弧ごとの否定・-exec /bin/rm ---
+    ("( -type f -o -name ) の削除を止める", "guard", "find . \\( -type f -o -name '*.pyc' \\) -delete", 2),
+    ("! ( -name ) の削除を止める", "guard", "find . ! \\( -name '*.py' \\) -delete", 2),
+    ("-not ( -name -o -name ) の削除を止める", "guard", "find . -not \\( -name '*.py' -o -name '*.md' \\) -delete", 2),
+    ("-exec /bin/rm を止める", "guard", "find . -type f -exec /bin/rm {} +", 2),
+    ("他事業での括弧付きの後片付けは通す", "guard", "find fx-event-analyzer \\( -name '*.pyc' -o -name '*.pyo' \\) -delete", 0),
 ]
 
 # フックの入力の cwd(実行場所)を使うケース: (説明, cwd, コマンド, 期待)

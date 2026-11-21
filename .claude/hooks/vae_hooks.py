@@ -147,6 +147,69 @@ def _unwrap(toks):
     return toks, None
 
 
+FIND_NAME_OPTS = ("-name", "-iname", "-path", "-ipath", "-wholename")
+FIND_ALL_MATCH = re.compile(r"[*?]+|\*\.\*|\[!\.\]\*|\./[*?]+|\.\*")
+
+
+def _narrowing(alt):
+    """括弧を含まない1つの選択肢が、否定されていない「すべてに一致しない名前の条件」を持つか"""
+    for i, a in enumerate(alt[:-1]):
+        if a in FIND_NAME_OPTS and not (i > 0 and alt[i - 1] in ("-not", "!")):
+            if not FIND_ALL_MATCH.fullmatch(alt[i + 1]):
+                return True
+    return False
+
+
+def _collapse_groups(args):
+    """括弧のまとまりを1語に置き換える。中の選択肢(-o で分けたもの)がすべて名前で絞っていれば
+    「-name <絞りあり>」、そうでなければ「-true」。否定された括弧(! ( ... ))は絞りにならないので「-true」(r6-1)"""
+    out, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a == "(":
+            depth, j = 1, i + 1
+            while j < len(args) and depth:
+                depth += {"(": 1, ")": -1}.get(args[j], 0)
+                j += 1
+            inner = _collapse_groups(args[i + 1:j - 1])
+            alts, cur = [], []
+            for t in inner:
+                if t in ("-o", "-or"):
+                    alts.append(cur)
+                    cur = []
+                else:
+                    cur.append(t)
+            alts.append(cur)
+            negated = bool(out) and out[-1] in ("!", "-not")
+            if negated:
+                out.pop()
+            out += ["-name", "__narrowed__"] if (not negated and all(_narrowing(x) for x in alts)) else ["-true"]
+            i = j
+        else:
+            out.append(a)
+            i += 1
+    return out
+
+
+def _find_unfiltered(args):
+    """find の削除が、名前で対象を絞っていないか(r5-1・独立レビュー m1/m2・r6-1)。
+    括弧のまとまりを先に1語にまとめ、残りの式を -o / -or で分け、削除する枝(-delete / -exec / -execdir を含む)ごとに、
+    否定されていない名前の条件のうち「すべてに一致する形」(*、?*、**、[!.]*、./*)以外が1つでもあるかを見る"""
+    args = _collapse_groups(list(args))
+    branches, cur = [], []
+    for a in args:
+        if a in ("-o", "-or"):
+            branches.append(cur)
+            cur = []
+        else:
+            cur.append(a)
+    branches.append(cur)
+    for br in branches:
+        if any(a in ("-delete", "-exec", "-execdir") for a in br) and not _narrowing(br):
+            return True
+    return False
+
+
 def _git_sub(args):
     """git の -C <dir> などの前置きを外して (サブコマンド, 残り, -C の場所) を返す"""
     cdir = None
@@ -188,7 +251,8 @@ def _check_segment(seg, state, depth=0):
         check_args = args
     elif prog == "mv":
         check_args = [a for a in args if not a.startswith("-")][:-1]   # 移動元だけ(保護フォルダへの移動は許可)
-    elif prog == "find" and ("-delete" in args or ("-exec" in args and "rm" in args)):
+    elif prog == "find" and ("-delete" in args or (("-exec" in args or "-execdir" in args)
+                                                   and any(os.path.basename(a) in ("rm", "unlink", "shred") for a in args))):
         starts = []
         for a in args:                                     # 起点(最初の式より前の引数)。無ければ現在の場所
             if a.startswith("-") or a in ("(", "!"):
@@ -202,7 +266,7 @@ def _check_segment(seg, state, depth=0):
         # (他事業や scratchpad での __pycache__ の後片付け、他フォルダの動画の削除は止めない)
         joined = " ".join(args)
         media = MEDIA_GLOB.search(joined) or (re.search(r"-i?regex", joined) and re.search(MEDIA_RE, joined, re.I))
-        no_name = not any(a in ("-name", "-iname", "-path", "-ipath", "-wholename") for a in args)
+        no_name = _find_unfiltered(args)
         # 名前の条件が無い削除(find . -delete、-mtime だけ など)は保護対象を巻き込むので止める
         if inside or (above and (media or no_name)):
             block("ユーザーの動画素材・確認用出力を find で削除することは禁止されています(" + ", ".join(PROTECTED_MEDIA) + ")。")
