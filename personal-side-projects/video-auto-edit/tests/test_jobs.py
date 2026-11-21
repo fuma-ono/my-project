@@ -22,8 +22,10 @@ def test_ac_b1_free_plan_rejects_over_30s(store, tmp_path):
 
 
 def test_ac_b2_plans_are_configurable():
-    assert plans.get("free").max_seconds == 30
-    assert plans.get("standard").max_seconds > 30
+    """プランの上限は config/plans.json で決める(料金仕様 v1)"""
+    assert plans.get("free").max_project_seconds == 30
+    assert plans.get("standard").max_project_seconds == 180
+    assert plans.get("pro").max_project_seconds == 600
     assert plans.get("unknown").name == "free"
 
 
@@ -31,14 +33,8 @@ def test_ac_b4_duplicate_content_reuses_job(store, speechy_video):
     j1 = store.create(speechy_video, "a.mp4", "free", client_id="c1")
     j2 = store.create(speechy_video, "b.mp4", "free", client_id="c1")
     assert j2["id"] == j1["id"] and j2.get("duplicate")
-
-
-def test_ac_b4_daily_limit(tmp_path, speechy_video):
-    s = jobs.JobStore(str(tmp_path / "d2"), min_free_gb=0)
-    plan = plans.Plan("t", "テスト", 30, "medium", daily_limit=1)
-    ok, _ = s.ledger.check_and_count("c", plan, "h1")
-    ok2, why = s.ledger.check_and_count("c", plan, "h2")
-    assert ok and not ok2 and "上限" in why
+    # 同じ動画の再送は利用枠を使わない
+    assert store.account_status("c1")["new_edits_used"] == 1
 
 
 def test_filename_is_not_used_as_path(store, speechy_video):

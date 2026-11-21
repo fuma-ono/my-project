@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8", "pyopenjtalk-plus>=0.3"]
 bgm = ["scipy>=1.11"]
+billing = ["cryptography>=42"]
 
 [tool.pytest.ini_options]
 markers = [

@@ -45,7 +45,7 @@ def main(argv=None):
     try:
         if a.plan != "none":
             p = plans.get(a.plan)
-            media.validate(a.input, max_seconds=p.max_seconds, plan_name=p.label)
+            media.validate(a.input, max_seconds=p.max_project_seconds, plan_name=p.label)
         else:
             media.validate(a.input)
         s = pipeline.Settings(model=a.model, cut_mode=a.cut_mode, mix_mode=a.mix, bgm=not a.no_bgm,

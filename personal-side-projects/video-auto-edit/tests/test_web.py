@@ -60,10 +60,10 @@ def upload(srv, path, name=None, client=CLIENT_A, plan=None):
     return req(srv, "POST", "/api/jobs", body=data, headers=h, client=client)
 
 
-def wait_state(srv, job_id, states, timeout=120):
+def wait_state(srv, job_id, states, timeout=120, client=CLIENT_A):
     t0 = time.time()
     while time.time() - t0 < timeout:
-        st, _, data = req(srv, "GET", f"/api/jobs/{job_id}")
+        st, _, data = req(srv, "GET", f"/api/jobs/{job_id}", client=client)
         assert st == 200
         job = jbody(data)
         if job["state"] in states:
@@ -80,8 +80,11 @@ def test_index_and_plans_ac_u1_ac_b1(srv):
     cookie = h.get("Set-Cookie", "")
     assert "vae_client=" in cookie and "HttpOnly" in cookie and "SameSite=Lax" in cookie
     st, _, data = req(srv, "GET", "/api/plans")
-    plans = {p["name"]: p for p in jbody(data)["plans"]}
-    assert st == 200 and plans["free"]["max_seconds"] == 30.0 and plans["free"]["available"]
+    d = jbody(data)
+    plans = {p["name"]: p for p in d["plans"]}
+    assert st == 200 and plans["free"]["max_project_seconds"] == 30.0 and plans["free"]["price_jpy"] == 0
+    assert plans["standard"]["price_jpy"] == 980 and plans["pro"]["price_jpy"] == 1980      # 料金仕様 v1
+    assert d["purchase_terms"] and any("自動" in t for t in d["purchase_terms"])            # 購入前に条件を示す(AC-P15)
 
 
 def test_full_flow_upload_review_edit_render_ac_u1_to_u5_ac_s6(srv):
@@ -173,10 +176,11 @@ def test_over_plan_limit_ac_b1(srv):
     assert err["code"] == "over_plan_limit" and err["message"] and err["hint"]
 
 
-def test_paid_plan_not_accepted_ac_b1(srv):
-    src = testing.make_video(str(srv["vids"] / "short.mp4"), [(1.5, True)], size=(160, 90))
-    st, _, data = upload(srv, src, plan="standard")
-    assert st == 400 and jbody(data)["error"]["code"] == "plan_unavailable"
+def test_client_declared_plan_is_ignored_ac_p6(srv):
+    """プランはサーバー側の購読で決める。クライアントが X-Plan: pro と申告しても上限は広がらない(料金仕様 v1 3章)"""
+    src = testing.make_video(str(srv["vids"] / "long2.mp4"), [(31.0, True)], size=(64, 64))
+    st, _, data = upload(srv, src, plan="pro", client="c" * 32)
+    assert st == 400 and jbody(data)["error"]["code"] == "over_plan_limit" and jbody(data)["error"]["upgrade"]
 
 
 def test_unsupported_extension_ac_u1(srv):
@@ -217,3 +221,68 @@ def test_bad_ids_404(srv):
 def test_foreign_host_rejected(srv):
     st, _, _ = req(srv, "GET", "/api/plans", headers={"Host": "evil.example.com"})
     assert st == 403
+
+
+# ------------------------------------------------------------ 料金仕様 v1(AC-P2〜P5, AC-P15)
+CLIENT_C = "d" * 32
+
+
+def test_account_reedit_cancel_versions_ac_p2_p3_p15(srv):
+    st, _, data = req(srv, "GET", "/api/account", client=CLIENT_C)
+    acc = jbody(data)
+    assert st == 200 and acc["plan"]["name"] == "free" and acc["new_edits_remaining"] == 3 and acc["purchase_terms"]
+    assert "app_account_token" in acc and "client_id" not in json.dumps(acc)
+    src = testing.make_video(str(srv["vids"] / "acc.mp4"), SEGMENTS)
+    with open(src, "rb") as f:
+        body = f.read()
+    h = {"X-Filename": "acc.mp4", "Idempotency-Key": "upload-acc-0001"}
+    st, _, data = req(srv, "POST", "/api/jobs", body=body, headers=h, client=CLIENT_C)
+    job = jbody(data)
+    assert st == 200 and "usage_id" not in job and "account_id" not in job
+    st2, _, data2 = req(srv, "POST", "/api/jobs", body=body, headers=h, client=CLIENT_C)    # リトライ
+    assert st2 == 200 and jbody(data2)["id"] == job["id"] and jbody(data2)["duplicate"]
+    wait_state(srv, job["id"], ("ready",), client=CLIENT_C)
+    req(srv, "POST", f"/api/jobs/{job['id']}/render", body={}, client=CLIENT_C)
+    wait_state(srv, job["id"], ("done",), client=CLIENT_C)
+    acc = jbody(req(srv, "GET", "/api/account", client=CLIENT_C)[2])
+    assert acc["new_edits_used"] == 1 and acc["projects"][job["id"]]["reedits_remaining"] == 1
+    # 同じ設定の再編集は回数を使わない
+    st, _, data = req(srv, "POST", f"/api/jobs/{job['id']}/reedit", body={"concept": "standard"}, client=CLIENT_C)
+    assert st == 200 and jbody(data)["no_change"]
+    # AI 再編集
+    st, _, data = req(srv, "POST", f"/api/jobs/{job['id']}/reedit", body={"concept": "tempo"},
+                      headers={"Idempotency-Key": "reedit-acc-0001"}, client=CLIENT_C)
+    assert st == 202
+    done = wait_state(srv, job["id"], ("done",), client=CLIENT_C)
+    for _ in range(50):
+        done = jbody(req(srv, "GET", f"/api/jobs/{job['id']}", client=CLIENT_C)[2])
+        if done["state"] == "done" and done.get("versions"):
+            break
+        time.sleep(0.2)
+    assert done["versions"] and done["versions"][0]["name"] == "v1.mp4"
+    st, h2, _ = req(srv, "GET", f"/api/jobs/{job['id']}/versions/v1.mp4", client=CLIENT_C, headers={"Range": "bytes=0-1"})
+    assert st == 206 and h2["Content-Type"] == "video/mp4"
+    assert req(srv, "GET", f"/api/jobs/{job['id']}/versions/..%2Fjob.json", client=CLIENT_C)[0] == 404
+    assert req(srv, "GET", f"/api/jobs/{job['id']}/versions/v1.mp4", client=CLIENT_B)[0] == 404   # 他の端末からは見えない
+    # 上限
+    st, _, data = req(srv, "POST", f"/api/jobs/{job['id']}/reedit", body={"concept": "standard"}, client=CLIENT_C)
+    err = jbody(data)["error"]
+    assert st == 400 and err["code"] == "limit_reached" and err["kind"] == "reedit" and err["upgrade"]
+    # 終わったジョブのキャンセルは受け付けない
+    assert req(srv, "POST", f"/api/jobs/{job['id']}/cancel", body={}, client=CLIENT_C)[0] == 409
+
+
+def test_apple_endpoints_reject_unverified_ac_p10(srv):
+    st, _, data = req(srv, "POST", "/api/billing/apple/transactions", body={"signedTransactions": ["a.b.c"]}, client=CLIENT_C)
+    assert st == 400 and jbody(data)["error"]["code"] == "invalid_transaction"
+    assert req(srv, "POST", "/api/billing/apple/transactions", body={"signedTransactions": []}, client=CLIENT_C)[0] == 400
+    st, _, data = req(srv, "POST", "/api/billing/apple/notifications", body={"signedPayload": "x.y.z"}, client=None)
+    assert st == 400
+    acc = jbody(req(srv, "GET", "/api/account", client=CLIENT_C)[2])
+    assert acc["plan"]["name"] == "free"                               # 検証できない購入では変わらない
+
+
+def test_bad_idempotency_key(srv):
+    st, _, data = req(srv, "POST", "/api/jobs", body=b"x", headers={"X-Filename": "a.mp4", "Idempotency-Key": "bad key!"},
+                      client=CLIENT_C)
+    assert st == 400
