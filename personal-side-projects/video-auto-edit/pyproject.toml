@@ -23,3 +23,6 @@ markers = [
   "slow: 実モデル(Whisper)や長い動画を使う遅いテスト",
 ]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["vae*"]          # config/ はデータ(plans.json)なのでパッケージに含めない。読み込みはリポジトリの位置から
