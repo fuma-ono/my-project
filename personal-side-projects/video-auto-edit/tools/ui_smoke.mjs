@@ -143,6 +143,29 @@ async function main() {
     await shot(page, "05_done_375.png");
     await page.setViewportSize({ width: 1280, height: 900 });
 
+    // 書き出しに失敗したときの表示(T-16 / 独立レビュー2回目 N1)。
+    // サーバーの状態の応答だけを書き換えて「失敗」にし、画面が失敗を知らせることを確かめる
+    const failErr = { code: "verify_failed", message: "書き出した動画の確認で問題が見つかりました(テスト)。", hint: "もう一度書き出してください。", phase: "render" };
+    for (const [state, boxId, other] of [["done", "#render-fail-5", "#render-fail-3"], ["ready", "#render-fail-3", "#render-fail-5"]]) {
+      const pattern = new RegExp(`/api/jobs/${jobId}$`);
+      await page.route(pattern, async (route) => {
+        const resp = await route.fetch();
+        const body = await resp.json();
+        await route.fulfill({ response: resp, json: { ...body, state, stage: "render_failed", error: failErr } });
+      });
+      await page.reload();
+      await page.locator(boxId).waitFor({ state: "visible", timeout: 15000 });
+      const t = await page.locator(boxId).textContent();
+      if (!t.includes("テスト") || !t.includes("もう一度書き出してください")) throw new Error(`${boxId} の文言が違います: ${t}`);
+      if (await page.locator(other).isVisible()) throw new Error(`${other} が表示されています`);
+      await shot(page, `07_render_failed_${state}.png`);
+      await page.unroute(pattern);
+    }
+    await page.reload();                                       // 本当の状態(done・失敗なし)に戻ると表示は消える
+    await page.locator("#step5").waitFor({ state: "visible", timeout: 15000 });
+    if (await page.locator("#render-fail-5").isVisible()) throw new Error("失敗がないのに #render-fail-5 が表示されています");
+    log("render failure display OK");
+
     // 再書き出しへ戻れる
     await page.getByRole("button", { name: "字幕を直して再書き出し" }).click();
     await page.locator("#step3").waitFor({ state: "visible", timeout: 10000 });

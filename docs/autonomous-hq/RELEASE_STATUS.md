@@ -2,9 +2,10 @@
 
 | 環境 | 状態 | 備考 |
 |---|---|---|
-| 開発ブランチ | `claude/video-autoedit-tech-verification`(PR #6) | 製品パッケージ・HQ 基盤を追加中 |
+| main | **統合済み**(PR #6 を squash マージ、f497d68、2026-11-21) | CI 成功(f50bb54)・独立レビュー合格(blocker・major 0) |
+| 開発ブランチ | `claude/video-autoedit-tech-verification`(main から作り直し) | 次の作業(T-16 以降) |
 | CI | `video-auto-edit-ci`(VAE のパスが変わったときだけ動く) | 結果は PROJECT_STATE.md に記録 |
-| DEV | **ローカル起動のみ**(`make web` → http://127.0.0.1:8765) | ホスティング先は未契約(BLOCKERS B-2) |
+| DEV | **ローカル起動のみ**(`make web` → http://127.0.0.1:8765)。main で確認済み(2026-11-21: 速いテスト 82 passed、ui_smoke PASS、CLI で実動画 IMG_4217 の検証合格) | ホスティング先は未契約(BLOCKERS B-2) |
 | 本番 | **未公開**。公開には人間の承認が必要 | — |
 
 ## リリース前に人間の承認が必要なこと

@@ -202,7 +202,12 @@ def _check_segment(seg, state, depth=0):
         # (他事業や scratchpad での __pycache__ の後片付け、他フォルダの動画の削除は止めない)
         joined = " ".join(args)
         media = MEDIA_GLOB.search(joined) or (re.search(r"-i?regex", joined) and re.search(MEDIA_RE, joined, re.I))
-        no_name = not any(a in ("-name", "-iname", "-path", "-ipath", "-wholename") for a in args)
+        name_opts = ("-name", "-iname", "-path", "-ipath", "-wholename")
+        no_name = not any(a in name_opts for a in args)
+        # 否定・「または」・すべてに一致する名前(-name '*')は、名前で対象を絞っていないのと同じ(r5-1)
+        loose = any(a in ("-not", "!", "-o", "-or") for a in args) or \
+            any(args[i] in name_opts and args[i + 1] in ("*", "*.*") for i in range(len(args) - 1))
+        no_name = no_name or loose
         # 名前の条件が無い削除(find . -delete、-mtime だけ など)は保護対象を巻き込むので止める
         if inside or (above and (media or no_name)):
             block("ユーザーの動画素材・確認用出力を find で削除することは禁止されています(" + ", ".join(PROTECTED_MEDIA) + ")。")
