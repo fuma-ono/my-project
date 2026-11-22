@@ -12,8 +12,10 @@ class Transcript:
 
 
 class WhisperTranscriber:
-    def __init__(self, model="medium", compute_type="int8", beam_size=5):
+    def __init__(self, model="medium", compute_type="int8", beam_size=5, deterministic=False):
         self.model_name, self.compute_type, self.beam_size = model, compute_type, beam_size
+        self.deterministic = deterministic
+        # deterministic: 毎回同じ結果にする(ランダムな再試行を切り、直前の文に引きずられず、無音を飛ばす)。ハイライト用
 
     def _model(self):
         key = (self.model_name, self.compute_type)
@@ -23,7 +25,9 @@ class WhisperTranscriber:
         return _MODELS[key]
 
     def __call__(self, audio16k) -> Transcript:
-        segs, info = self._model().transcribe(audio16k, language="ja", word_timestamps=True, beam_size=self.beam_size)
+        extra = dict(temperature=0.0, condition_on_previous_text=False, vad_filter=True,
+                     vad_parameters=dict(min_silence_duration_ms=500)) if self.deterministic else {}
+        segs, info = self._model().transcribe(audio16k, language="ja", word_timestamps=True, beam_size=self.beam_size, **extra)
         segs = list(segs)
         words = [dict(s=float(w.start), e=float(w.end), w=w.word, p=round(float(w.probability), 3))
                  for s in segs for w in (s.words or [])]

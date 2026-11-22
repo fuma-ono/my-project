@@ -236,6 +236,41 @@ def test_subtitles_only_for_confident_sentences():
     clip = {"tsegments": [{"s": 0.0, "e": 2.0, "text": "確か"}, {"s": 2.0, "e": 4.0, "text": "怪しい"}, {"s": 4.0, "e": 6.0, "text": "ほぼ確か"}],
             "words": [{"s": 0.1, "e": 0.5, "w": "は", "p": 0.95}, {"s": 0.6, "e": 1.0, "w": "い", "p": 0.9},
                       {"s": 2.1, "e": 2.5, "w": "え", "p": 0.4}, {"s": 2.6, "e": 3.0, "w": "ん", "p": 0.9},
-                      {"s": 4.1, "e": 4.5, "w": "ふ", "p": 0.99}, {"s": 4.6, "e": 5.0, "w": "む", "p": 0.05}]}
-    kept, dropped = hrender.confident_words(clip, 0.0, 6.0)
-    assert [w["w"] for w in kept] == ["は", "い"] and dropped == 2                # 平均が低い文・1語でも極端に低い文は出さない
+                      {"s": 4.1, "e": 4.5, "w": "ふ", "p": 0.99}, {"s": 4.6, "e": 5.0, "w": "む", "p": 0.01}]}
+    groups, dropped = hrender.confident_words(clip, 0.0, 6.0)
+    assert [[w["w"] for w in g] for g in groups] == [["は", "い"]] and dropped == 2   # 平均が低い文・1語でも極端に低い文は出さない
+
+
+def test_boundary_words_are_not_duplicated_across_sentences():
+    """実動画(2026-11-22): 文の境目の語が前後の両方の文に入り、字幕が「じゃあ、じゃあ」「これは、これは、これは」になった"""
+    clip = {"tsegments": [{"s": 0.0, "e": 1.0, "text": "a"}, {"s": 1.0, "e": 2.0, "text": "b"}],
+            "words": [{"s": 0.0, "e": 0.8, "w": "あ", "p": 0.9}, {"s": 0.9, "e": 1.2, "w": "じゃあ、", "p": 0.9},   # 境目(1.0 をまたぐ)
+                      {"s": 1.3, "e": 2.0, "w": "い", "p": 0.9}]}
+    groups, _ = hrender.confident_words(clip, 0.0, 2.0)
+    flat = [w["w"] for g in groups for w in g]
+    assert flat.count("じゃあ、") == 1 and flat == ["あ", "じゃあ、", "い"]
+
+
+def test_natural_edges_start_at_shot_start_and_leave_lead_in():
+    s, e = planner.natural_edges(25.8, 34.0, [25.06], 35.5, speech=True)          # 場面の先頭(25.06 の切り替わり)のすぐ近くから選ばれたなら、先頭から使う
+    assert abs(s - 25.18) < 1e-6 and e <= 35.5
+    s2, e2 = planner.natural_edges(20.0, 23.0, [10.0], 35.5, speech=True)         # 場面の先頭から遠い区間は動かさず、話の前に助走だけ
+    assert abs(s2 - 19.5) < 1e-6 and abs(e2 - 23.4) < 1e-6
+    assert planner.natural_edges(20.0, 23.0, [10.0], 35.5, speech=False) == (20.0, 23.0)   # 話が無ければ助走・余韻は付けない
+
+
+def test_dedupe_repeats_removes_stutter_but_keeps_short_words():
+    W = lambda *t: [{"w": x} for x in t]
+    f = lambda ws: "".join(w["w"] for w in hrender.dedupe_repeats(ws))
+    assert f(W("これ", "は", "、", "これ", "は", "何", "でしょう")) == "これは何でしょう"          # 最初のコピーを外し、後ろに続く言葉を残す
+    assert f(W("パ", "ック、", "パ", "ック")) == "パック"
+    assert f(W("はい", "はい")) == "はいはい"                                  # 2 文字の繰り返し(相づち)は残す
+    assert f(W("じゃあ", "、", "いただき", "ます")) == "じゃあ、いただきます"
+
+
+def test_very_short_fragments_are_not_subtitled():
+    clip = {"tsegments": [{"s": 0.0, "e": 0.4, "text": "断片"}, {"s": 1.0, "e": 2.5, "text": "文"}],
+            "words": [{"s": 0.0, "e": 0.2, "w": "パ", "p": 0.99}, {"s": 0.2, "e": 0.4, "w": "ック", "p": 0.99},
+                      {"s": 1.0, "e": 1.5, "w": "ほ", "p": 0.9}, {"s": 1.5, "e": 2.4, "w": "ん", "p": 0.9}]}
+    groups, dropped = hrender.confident_words(clip, 0.0, 3.0)
+    assert [[w["w"] for w in g] for g in groups] == [["ほ", "ん"]] and dropped == 1

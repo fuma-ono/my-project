@@ -16,6 +16,7 @@ import json
 import os
 import resource
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -67,6 +68,7 @@ def main(argv=None):
     ap.add_argument("--no-transcribe", action="store_true")
     ap.add_argument("--model", default="medium")           # small は雑音のある会話で崩れた(2026-11-22)。既定は medium
     ap.add_argument("--short", type=int, default=1080)
+    ap.add_argument("--subtitle-style", default="clean", help="字幕の見た目: clean(標準)/pop(ポップ)/box(帯)/all(3つとも作って見比べる)")
     ap.add_argument("--manifest", help="stock_dataset.py の台帳(manifest.json)。ストック動画には撮影日時が無いので、台帳の順を"
                                        "擬似の撮影順(15分おき)として使う。擬似であることを Sonnet にも伝え、評価シートにも書く")
     ap.add_argument("--llm", choices=["off", "dry", "run"], default="off",
@@ -87,7 +89,7 @@ def main(argv=None):
         tr = None
         if not a.no_transcribe:
             from vae.transcribe import WhisperTranscriber
-            tr = WhisperTranscriber(a.model)
+            tr = WhisperTranscriber(a.model, deterministic=True)
         analyzer = an.Analyzer(transcriber=tr, vad_fn=lambda x: vad.speech_vad(x, 0.5, 0.4))
         t["model_load"] = time.time() - t0
         clips = []
@@ -110,7 +112,15 @@ def main(argv=None):
         t["plan"] = time.time() - t1
         t2 = time.time()
         out = os.path.join(a.out, "highlight.mp4")
-        info = hr.render(clips, edl, out, os.path.join(work, "render"), music_track=track, short=a.short)
+        main_style = "clean" if a.subtitle_style == "all" else a.subtitle_style
+        info = hr.render(clips, edl, out, os.path.join(work, "render"), music_track=track, short=a.short, subtitle_style=main_style)
+        if a.subtitle_style == "all":                        # 字幕の見た目の比較用(同じ編集で、字幕だけ変える)
+            from vae.highlight.render import subtitles as _subs
+            for name in _subs.STYLES:
+                vp = os.path.join(a.out, f"highlight_style_{name}.mp4")
+                hr.render(clips, edl, vp, os.path.join(work, f"render_{name}"), music_track=track, short=a.short, subtitle_style=name)
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{info['duration'] * 0.8:.2f}", "-i", vp, "-frames:v", "1",
+                                "-vf", "scale=720:-2", os.path.join(a.out, f"style_{name}.png")], check=False)
         t["render"] = time.time() - t2
         contact_sheet(clips, edl["segments"], os.path.join(a.out, "contact_sheet.jpg"), work)
         llm_edl, llm_info = None, None

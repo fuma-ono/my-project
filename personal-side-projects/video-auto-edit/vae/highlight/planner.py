@@ -72,6 +72,24 @@ def shot_bounds(t, cuts, duration, margin=CUT_MARGIN):
     return lo, hi
 
 
+EDGE_SNAP = 1.5                           # 場面の先頭・末尾にこの秒数以内まで近いときは、先頭・末尾まで使う(途中から始まらない)
+LEAD_IN, TAIL = 0.5, 0.4                  # 話の前の助走と、話の後の余韻(場面の内側で)
+
+
+def natural_edges(start, end, cuts, duration, speech=False):
+    """区間の始まりと終わりを、場面の自然な切れ目に寄せる。場面の先頭のすぐ近くから始まるなら先頭から、
+    話を含むなら、話の前に少し助走をつけ、後に余韻を残す(「途中から始まる」「ぶつ切り」を避ける)"""
+    lo, hi = shot_bounds((start + end) / 2, cuts, duration)
+    s, e = start, end
+    if s - lo <= EDGE_SNAP:
+        s = lo
+    if hi - e <= EDGE_SNAP:
+        e = hi
+    if speech:
+        s, e = max(lo, s - LEAD_IN), min(hi, e + TAIL)
+    return round(s, 3), round(e, 3)
+
+
 def candidates(clips, min_len=2.0, max_len=5.0, speech_max=9.0):
     """ショットごとに、最も良い連続区間を候補にする。話している区間は文の切れ目まで含める"""
     out = []
@@ -98,6 +116,7 @@ def candidates(clips, min_len=2.0, max_len=5.0, speech_max=9.0):
                 if sa < e and sb > s and (max(e, sb) - min(s, sa)) <= speech_max:
                     s, e = min(s, sa), max(e, sb)
             s, e = trim_to_shot(s, e, c.get("cuts", []))                 # 元動画の切り替わりをまたがない
+            s, e = natural_edges(s, e, c.get("cuts", []), c["duration"], speech=any(sa < e and sb > s for sa, sb in c["speech"]))
             if e - s < min(min_len, c["duration"]) - 1e-3:
                 continue
             ia, ib = int(s * FPS), max(int(s * FPS) + 1, int(e * FPS))
