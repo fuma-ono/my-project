@@ -46,6 +46,7 @@ def frame_scores(clips):
 
 CUT_MARGIN = 0.12                         # 場面の切り替わりから離す秒数(前後のコマが混ざらないように)
 MIN_SEC_PER_CUT = 3.0                     # 完成動画の中で、区間1つあたりの平均の長さの目安(切れ目が多すぎないように)
+MIN_OUTPUT_SEC = 8.0         # 完成の最低の長さ。これに満たないうちは、評価の下限(FILL_MIN_SCORE)を適用しない
 FILL_MIN_SCORE = 0.0         # 長さを埋めるためだけに足す区間の評価の下限(各動画の代表は、この限りでない)
 SPEECH_MERGE_GAP = 1.0       # 会話どうしの区間は、これ以内の間隔なら1つにつなぐ(会話の途中を切らない)
 
@@ -239,24 +240,26 @@ def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93,
         reasons[id(best)] = f"採用: この動画で最も評価の高い場面({best['cat_ja']})"
     total = sum(c["end"] - c["start"] for c in chosen)
     rest = [c for c in uniq if c not in chosen]
-    for c in rest:
-        if c["score"] < FILL_MIN_SCORE:
-            reasons[id(c)] = "不採用: 評価が低く、長さを埋めるためだけには使わない"
-    rest = [c for c in rest if c["score"] >= FILL_MIN_SCORE]
     while rest and total < target:
+        # 長さを埋めるためだけの追加は、評価の下限(FILL_MIN_SCORE)を満たすものに限る。ただし、完成が最低の長さ(MIN_OUTPUT_SEC)に
+        # 満たないうちは、評価が低くても足す(短すぎる動画より、少し質の落ちる場面を含む動画のほうが良い)
+        pool = [c for c in rest if c["score"] >= FILL_MIN_SCORE or total < MIN_OUTPUT_SEC]
+        if not pool:
+            break
         def mmr(c):
             sim = max(float(c["emb"] @ s["emb"]) for s in chosen) if chosen else 0
             return mmr_lambda * c["score"] - (1 - mmr_lambda) * 3 * sim
-        nxt = max(rest, key=mmr)
+        nxt = max(pool, key=mmr)
         rest.remove(nxt)
         chosen.append(nxt)
         total += nxt["end"] - nxt["start"]
-        reasons[id(nxt)] = f"採用: 評価が高く、他と違う場面({nxt['cat_ja']})"
+        reasons[id(nxt)] = f"採用: 評価が高く、他と違う場面({nxt['cat_ja']})" if nxt["score"] >= FILL_MIN_SCORE else \
+            f"採用: 完成が短すぎるため、評価は低いが足した({nxt['cat_ja']})"
     chosen = merge_adjacent(chosen, reasons)
     total = sum(c["end"] - c["start"] for c in chosen)
     rest = [c for c in rest if c not in chosen]
     for c in rest:
-        reasons.setdefault(id(c), "不採用: 長さの上限に収まらない(評価が下位)")
+        reasons.setdefault(id(c), "不採用: 評価が低く、長さを埋めるためだけには使わない" if c["score"] < FILL_MIN_SCORE else "不採用: 長さの上限に収まらない(評価が下位)")
     # 長すぎるとき: 評価の低いものから落とす(各動画の代表は残す)
     reps = {max(cs, key=lambda c: c["score"])["clip"]: max(cs, key=lambda c: c["score"]) for cs in by_clip.values()}
     # 切れ目が多すぎないように: 区間1つあたり平均 3 秒以上になる数まで(各動画の代表は残す)

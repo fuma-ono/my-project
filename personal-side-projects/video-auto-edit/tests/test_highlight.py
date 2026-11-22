@@ -338,3 +338,23 @@ def test_speech_pieces_close_together_are_merged_to_not_cut_a_conversation():
     p = {"clip": 0, "start": 6.0, "end": 8.0, "dur": 2.0, "score": 0.5, "speech": False, "faces": 4}
     q = {"clip": 0, "start": 8.4, "end": 10.5, "dur": 2.1, "score": 0.3, "speech": True, "faces": 4}
     assert len(planner.merge_adjacent([p, q], {})) == 2
+
+
+def test_single_clip_is_not_cut_down_to_a_tiny_video(monkeypatch):
+    """1 本の素材で、代表の区間だけが採られ、他は『評価が低い』として退けられて、2 秒の動画になっていた(実動画 REAL-1 の後退)。
+    完成が最低の長さに満たないうちは、評価が低くても足す。評価の値は素材全体の相対値なので、下限を上げて『弱い候補』を作る"""
+    n, bounds = 54, [0, 6, 22, 38, 54]
+    c = _clip(0, n, 1000, 0, shots=[(a, b) for a, b in zip(bounds, bounds[1:])])
+    for k, (a, b) in enumerate(zip(bounds, bounds[1:])):
+        e = np.zeros(512, np.float32)
+        e[k] = 1.0
+        c["emb"][a:b] = e                                       # 場面ごとに別の絵(同じ場面として重複除外されない)
+        for i in range(a, b):
+            c["frames"][i]["sharp"] = 300.0 if k == 0 else 100.0   # 最初の場面だけが良く、他は評価が下限を下回る
+    monkeypatch.setattr(planner, "FILL_MIN_SCORE", 0.5)
+    monkeypatch.setattr(planner, "MIN_OUTPUT_SEC", 0.0)
+    tiny = planner.plan([c], target=15.0)["total_sec"]            # 最低の長さの規則が無いとき(以前の動き)
+    monkeypatch.setattr(planner, "MIN_OUTPUT_SEC", 8.0)
+    edl = planner.plan([c], target=15.0)
+    assert tiny < 8.0 and edl["total_sec"] >= 8.0 - 0.5
+    assert any("短すぎる" in s["reason"] or "つないだ" in s["reason"] for s in edl["segments"])   # 足した区間は、そのまま、または隣と 1 つにつながって残る
