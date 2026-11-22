@@ -57,7 +57,7 @@ struct CommunityPostDetailView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                    .background(Capsule().fill(CommunityPalette.solidBlue))
                 HStack(spacing: 2) {
                     if let icon = post.direction.icon {
                         Image(systemName: icon).font(.system(size: 6.5, weight: .bold))
@@ -65,14 +65,20 @@ struct CommunityPostDetailView: View {
                     NotoText.text(post.direction.label, size: 6.5)
                 }
                 .foregroundStyle(post.direction.color)
+                if let eventTag = post.eventTag {
+                    NotoText.text(eventTag, size: 6.5)
+                        .foregroundStyle(CommunityPalette.eventTagText)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(CommunityPalette.eventTagFill))
+                }
             }
             NotoText.text(post.title, size: 8.5)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-            // HQ指示(2026-11-22、section 7)「添付チャート」。投稿カードと同じ理由
-            // (`CommunityChartPlaceholder`のドキュメントコメント参照)で架空のチャートは
-            // 描かず、空の枠だけを大きく表示する。
-            CommunityChartPlaceholder()
+            // HQ指示(2026-11-22、section 7)「添付チャート」。投稿カードと同じ装飾
+            // (`CommunityChartIllustration`のドキュメントコメント参照)を大きく表示する。
+            CommunityChartIllustration(direction: post.direction.kind)
                 .frame(width: 214, height: 120)
                 .accessibilityIdentifier("communityPostDetailChartPlaceholder")
             VStack(alignment: .leading, spacing: 3) {

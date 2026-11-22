@@ -41,6 +41,37 @@ struct CommunityComposeFAB: View {
     }
 }
 
+/// 投稿一覧の下にあるバナー(HQ指示 2026-11-22、添付の参考画像「みんなの分析」を
+/// 完全再現)。「＋」ボタンと同じ選択メニューを開く、もう一つの入り口。
+struct CommunityComposeCTACard: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(V5P.cyan)
+                VStack(alignment: .leading, spacing: 2) {
+                    NotoText.text("分析・予想を投稿する", size: 7.6).foregroundStyle(.white)
+                    NotoText.text("あなたの見通しをみんなにシェアしよう", size: 6.3)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 9)
+            .frame(width: 214, alignment: .leading)
+            .background(GradientCardBackground())
+            .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(V5P.cyan, lineWidth: 0.7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("communityComposeCTACard")
+    }
+}
+
 /// 入力→確認の2ステップ共通。
 enum CommunityComposeStep { case input, confirm }
 

@@ -74,7 +74,14 @@ struct StrategyAnalysisView: View {
             // 独立に配置する(V5Headerの中身は一切変更しない)。`34.9`はV5Header内部の
             // `headerCenterY`と同じ値(privateのため直接参照できず、ここで複製している)。
             ZStack {
-                V5Header(title: "トレード戦略分析", back: true, onBack: { dismiss() })
+                // HQ指示(2026-11-22、添付の参考画像「みんなの分析」を完全再現):
+                // みんなの分析タブを見ている間だけ、ヘッダーのタイトルを画像どおり
+                // 「みんなの分析」にする(他の3タブは従来どおり「トレード戦略分析」のまま、
+                // 参考画像が無い範囲を独断で変えない)。
+                V5Header(
+                    title: selectedTab == .communityAnalysis ? "みんなの分析" : "トレード戦略分析",
+                    back: true, onBack: { dismiss() }
+                )
                 HStack {
                     Spacer(minLength: 0)
                     // ユーザー指摘(2026-11-12)「PROの文字の位置...中心線より上に位置している」:
@@ -245,6 +252,11 @@ struct StrategyAnalysisView: View {
                 } else {
                     CommunityMarketPollCard()
                     CommunityPostListCard(followingOnly: communityFollowingOnly)
+                    // HQ指示(2026-11-22、添付の参考画像「みんなの分析」を完全再現):
+                    // 投稿一覧の下にある「分析・予想を投稿する」バナー。「＋」ボタンと
+                    // 同じ選択メニューを開く(section 6の2つの入力フローへの、もう一つの
+                    // 入り口)。
+                    CommunityComposeCTACard { showsCommunityComposeMenu = true }
                 }
             }
             .accessibilityIdentifier("strategyAnalysisCommunityTab")

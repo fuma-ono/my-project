@@ -224,7 +224,7 @@ final class ScreenshotTests: XCTestCase {
         // コミュニティ機能の代わり)。
         tapIdentifier("strategyAnalysisTab_communityAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "おすすめ", timeout: 5), "Community analysis tab did not render its filter pills")
-        XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 5), "Community analysis tab did not render its market poll card")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 5), "Community analysis tab did not render its market poll card")
         XCTAssertTrue(waitForAnyElement(containing: "FXトレーダーK", timeout: 5), "Community analysis tab did not render its post list")
         capture("07f-StrategyAnalysis-CommunityAnalysis")
 
@@ -238,7 +238,7 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "米CPIの結果を受けて", timeout: 5), "Community post detail did not show the full title")
         capture("07g-StrategyAnalysis-CommunityPostDetail")
         tapIdentifier("v5HeaderBack")
-        XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 10), "Did not return to the community tab from post detail")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 10), "Did not return to the community tab from post detail")
 
         // section 8: ランキング(人気投稿/人気ユーザー/分析精度)。このテスト対象は
         // 本体ターゲットを`@testable import`しない純粋なXCUITestのため、
@@ -262,7 +262,7 @@ final class ScreenshotTests: XCTestCase {
         capture("07h-StrategyAnalysis-CommunityRanking")
         swipeV5(fromX: 30, toX: 200, y: 117, times: 3)
         tapIdentifier("communityFilterPill_0")
-        XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 5), "Did not return to the recommended feed from ranking")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 5), "Did not return to the recommended feed from ranking")
 
         // section 6: 「＋」投稿作成ボタン→選択メニュー→「分析を投稿」。
         tapIdentifier("communityComposeFAB")
@@ -270,7 +270,7 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "分析タイトル", timeout: 5), "Post compose form did not render")
         capture("07i-StrategyAnalysis-CommunityPostCompose")
         tapIdentifier("v5HeaderBack")
-        XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 10), "Did not return to the community tab after closing post compose")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 10), "Did not return to the community tab after closing post compose")
 
         // section 6: 「＋」投稿作成ボタン→選択メニュー→「予想アンケートを作成」。
         tapIdentifier("communityComposeFAB")
@@ -278,7 +278,7 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "回答期限", timeout: 5), "Poll compose form did not render")
         capture("07j-StrategyAnalysis-CommunityPollCompose")
         tapIdentifier("v5HeaderBack")
-        XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 10), "Did not return to the community tab after closing poll compose")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 10), "Did not return to the community tab after closing poll compose")
 
         tapIdentifier("strategyAnalysisTab_eventAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 5), "Did not return to the event analysis tab")

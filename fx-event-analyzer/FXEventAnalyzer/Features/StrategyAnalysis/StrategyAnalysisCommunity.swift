@@ -104,6 +104,25 @@ struct CommunityFollowingOnlyToggle: View {
     }
 }
 
+/// HQ指示(2026-11-22、添付の参考画像「みんなの分析」を再現): 参考画像から実測した
+/// 色値。既存の`V5P`/`SettingsCardStyle`トークンでは表現できない、この画面固有の色のみ
+/// ここにまとめる(実測はピクセルサンプリングによる。アンチエイリアスの影響で多少の
+/// 誤差はあるが、参考画像と視覚的に一致することを優先した)。
+enum CommunityPalette {
+    /// 「USD/JPY」等の通貨ペアバッジ・「投票する」ボタン・「みんなで投票しよう！」
+    /// ボタンの塗り(参考画像実測: およそ RGB(2,75,160))。
+    static let solidBlue = Color(red: 2 / 255, green: 75 / 255, blue: 160 / 255)
+    /// 投票割合バーの未塗り部分(参考画像実測: およそ RGB(27,39,66))。
+    static let barTrack = Color(red: 27 / 255, green: 39 / 255, blue: 66 / 255)
+    /// 「据え置き」バー・凡例の淡いラベンダー色(参考画像実測: およそ RGB(185,207,234))。
+    static let barLavender = Color(red: 185 / 255, green: 207 / 255, blue: 234 / 255)
+    /// 「FOMC」などのイベントタグバッジの塗り(参考画像実測: およそ RGB(62,53,33)、
+    /// 燻んだゴールド)。
+    static let eventTagFill = Color(red: 62 / 255, green: 53 / 255, blue: 33 / 255)
+    /// イベントタグバッジの文字色(参考画像実測: およそ RGB(251,184,48)、明るいゴールド)。
+    static let eventTagText = Color(red: 251 / 255, green: 184 / 255, blue: 48 / 255)
+}
+
 // MARK: - 市場予想アンケートカード
 
 private struct CommunityPollOption {
@@ -112,13 +131,19 @@ private struct CommunityPollOption {
     let color: Color
 }
 
+/// HQ指示(2026-11-22、添付の参考画像どおりピクセル単位・色味を完全再現): 見出しを
+/// 「公式アンケート」に、各選択肢を横棒の進捗バー表示に、総投票数を「○○人が投票」の
+/// 文言に、「投票する」ボタンを新設するなど、参考画像どおりに全面的に作り直した。
+/// 投票の送信・集計はBackend未対応のため(ファイル冒頭の注記参照)、「投票する」
+/// ボタンはタップ操作を持たない静的な表示にとどめる(偽の投票成功を見せない)。
 struct CommunityMarketPollCard: View {
     private let options: [CommunityPollOption] = [
         CommunityPollOption(label: "利下げ", percent: 68, color: V5P.blue),
-        CommunityPollOption(label: "据え置き", percent: 24, color: SettingsCardStyle.subtitleColor),
+        CommunityPollOption(label: "据え置き", percent: 24, color: CommunityPalette.barLavender),
         CommunityPollOption(label: "利上げ", percent: 8, color: Color(red: 0.62, green: 0.42, blue: 0.95))
     ]
-    private let totalVotes: Double = 12345
+    private let voterCount: Double = 12458
+    private let daysRemaining = 2
 
     private var donutSegments: [(id: String, start: CGFloat, end: CGFloat, color: Color)] {
         var start: CGFloat = 0
@@ -131,75 +156,69 @@ struct CommunityMarketPollCard: View {
     }
 
     var body: some View {
-        // ユーザー指摘(2026-11-19、4回目)「円グラフをもう少し右に/次回FOMCはどうなる？を
-        // もう少し上に/68%や24%、8%をもう少し右にして右揃えにして/総投票数、12,345の
-        // 文字を2pt大きくして」。
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
-                // ユーザー指摘(2026-11-19、10回目)「市場予想アンケートの見出しアイコンの
-                // 円グラフのデザインを変えてください」で青〜紫グラデーションの円グラフに
-                // 変更。ユーザー指摘(2026-11-19、12回目)「アイコンの黒背景入らない」:
-                // 背後の暗い角丸タイルは外し、グラデーションの円グラフだけにする。
-                Image(systemName: "chart.pie.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [V5P.blue, Color(red: 0.62, green: 0.42, blue: 0.95)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
-                NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
+                Image(systemName: "megaphone.fill").font(.system(size: 12)).foregroundStyle(.white)
+                NotoText.text("公式アンケート", size: 7.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
-                HStack(spacing: 1) {
-                    NotoText.text("すべて見る", size: 6).foregroundStyle(V5P.blue)
+                HStack(spacing: 2) {
+                    NotoText.text("みんなで投票しよう！", size: 6).foregroundStyle(V5P.blue)
                     Image(systemName: "chevron.right").font(.system(size: 5.5, weight: .bold)).foregroundStyle(V5P.blue)
                 }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(CommunityPalette.solidBlue))
             }
-            .padding(.bottom, 2)
-            NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
-                .padding(.bottom, 4)
-            // ユーザー指摘(2026-11-19、5回目)「市場分析アンケートの枠を少し縦を伸ばして、
-            // それに合わせて円グラフを少し下に」: 下の行に上の余白を足して、縦に伸ばした
-            // 枠の中で下寄りに配置する。
-            HStack(alignment: .center, spacing: 0) {
-                Spacer(minLength: 6)
-                donutChart
-                Spacer(minLength: 10)
-                VStack(alignment: .trailing, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
+                Spacer(minLength: 4)
+                Image(systemName: "clock").font(.system(size: 6.5)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("残り\(daysRemaining)日", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 7) {
                     ForEach(options, id: \.label) { option in
-                        HStack(spacing: 4) {
-                            Circle().fill(option.color).frame(width: 6, height: 6)
-                            NotoText.text(option.label, size: 6.3).foregroundStyle(.white)
-                            Spacer(minLength: 4)
-                            NotoText.text(ValueFormat.percent(option.percent, fractionDigits: 0), size: 6.3).foregroundStyle(.white)
+                        HStack(spacing: 6) {
+                            NotoText.text(option.label, size: 6.5).foregroundStyle(.white)
+                                .frame(width: 34, alignment: .leading)
+                            Capsule().fill(CommunityPalette.barTrack).frame(maxWidth: .infinity).frame(height: 5)
+                                .overlay(alignment: .leading) {
+                                    GeometryReader { geo in
+                                        Capsule().fill(option.color)
+                                            .frame(width: geo.size.width * option.percent / 100)
+                                    }
+                                }
+                            NotoText.text(ValueFormat.percent(option.percent, fractionDigits: 0), size: 6.5)
+                                .foregroundStyle(.white)
+                                .frame(width: 22, alignment: .trailing)
                         }
-                        .frame(width: 70)
                     }
                 }
-                Spacer(minLength: 6)
-                VStack(spacing: 2) {
-                    // ユーザー指摘(2026-11-19、5回目)「総投票数だけ文字サイズを1pt小さく
-                    // して、12345はそのまま」。
-                    NotoText.text("総投票数", size: 6.4).foregroundStyle(SettingsCardStyle.subtitleColor)
-                    NotoText.text(ValueFormat.number(totalVotes, fractionDigits: 0), size: 10).foregroundStyle(.white)
-                }
-                .padding(.horizontal, 5)
-                .padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.05)))
+                donutChart
             }
-            .padding(.top, 6)
+            HStack(spacing: 4) {
+                Image(systemName: "person.2.fill").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("\(ValueFormat.number(voterCount, fractionDigits: 0))人が投票", size: 6.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                Spacer(minLength: 4)
+                HStack(spacing: 3) {
+                    NotoText.text("投票する", size: 6.8).foregroundStyle(.white)
+                    Image(systemName: "lock.fill").font(.system(size: 6)).foregroundStyle(.white)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(CommunityPalette.solidBlue))
+            }
         }
         .padding(.horizontal, 7)
         .padding(.top, 5)
-        .padding(.bottom, 12)
+        .padding(.bottom, 10)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
         .accessibilityIdentifier("communityMarketPollCard")
     }
 
     private var donutChart: some View {
-        // ユーザー指摘(2026-11-19、2回目)「円グラフですがもう少し参考画像のように
-        // 太くしてください」: 輪の太さを7→11に。
         ZStack {
             ForEach(donutSegments, id: \.id) { segment in
                 Circle()
@@ -207,10 +226,9 @@ struct CommunityMarketPollCard: View {
                     .stroke(segment.color, style: StrokeStyle(lineWidth: 11, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
-            // ユーザー指摘(2026-11-19、8回目)「68%の数字を0.5pt大きくして」。
             NotoText.text(ValueFormat.percent(options[0].percent, fractionDigits: 0), size: 9.2).foregroundStyle(.white)
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 60, height: 60)
     }
 }
 
@@ -257,6 +275,9 @@ struct CommunityPost: Identifiable {
     let isFollowing: Bool
     /// 投稿詳細画面の「注目価格帯」(任意、HQ指示 2026-11-22 section 4・7)。
     var highlightedPriceLevel: String? = nil
+    /// 投稿カードの「対象イベント」バッジ(任意、HQ指示 2026-11-22 section 5「対象イベント
+    /// （任意）」、添付の参考画像のゴールドの「FOMC」バッジ)。
+    var eventTag: String? = nil
 }
 
 /// 投稿詳細画面からも`id`で引けるよう`private`を外す。HQ指示(2026-11-22)「ダミー投稿を
@@ -277,7 +298,8 @@ let communityDummyPosts: [CommunityPost] = [
         likeCount: 342,
         commentCount: 48,
         isFollowing: true,
-        highlightedPriceLevel: "155.00円が次の節目"
+        highlightedPriceLevel: "155.00円が次の節目",
+        eventTag: "FOMC"
     ),
     CommunityPost(
         id: "p2",
@@ -323,7 +345,8 @@ let communityDummyPosts: [CommunityPost] = [
         likeCount: 97,
         commentCount: 14,
         isFollowing: true,
-        highlightedPriceLevel: "165.00円を上抜けると170円が視野に"
+        highlightedPriceLevel: "165.00円を上抜けると170円が視野に",
+        eventTag: "ECB"
     ),
     CommunityPost(
         id: "p5",
@@ -369,7 +392,8 @@ let communityDummyPosts: [CommunityPost] = [
         likeCount: 301,
         commentCount: 55,
         isFollowing: true,
-        highlightedPriceLevel: "0.6650が目先のレジスタンス"
+        highlightedPriceLevel: "0.6650が目先のレジスタンス",
+        eventTag: "RBA"
     ),
     CommunityPost(
         id: "p8",
@@ -429,7 +453,8 @@ let communityDummyPosts: [CommunityPost] = [
         body: "日銀の緩やかな正常化ペースに対し、FRBの利下げも緩慢なため金利差は残ると見ています。",
         likeCount: 420,
         commentCount: 63,
-        isFollowing: true
+        isFollowing: true,
+        eventTag: "BOJ"
     ),
     CommunityPost(
         id: "p12",
@@ -587,73 +612,34 @@ private struct CommunityPostCard: View {
     // する。これによりタイトル・本文はアバター(アイコン)と同じ左端の、カード全体に
     // またがる別行として配置できる(通貨ペア行の下に間延びしない)。
     var body: some View {
-        // ユーザー指摘(2026-11-21、2回目)「考えますとインフレの粘着性の縦の余白、
-        // ハートと1回にとどまるの縦の余白ももう少し詰めて」: VStack全体の一律の間隔
-        // (spacing: 5)をやめ、行ごとに個別の余白を指定する(アイコン行↔タイトルは
-        // 5のまま、タイトル↔本文・本文↔フッターだけ詰める)。
+        // HQ指示(2026-11-22、添付の参考画像どおりピクセル単位・色味を完全再現):
+        // フォロー操作と「…」をヘッダー行の右端に移し、通貨ペアバッジを塗りつぶし、
+        // 対象イベントのゴールドバッジを追加、チャート枠を実際の装飾チャート+
+        // 「詳しく見る」ボタンに作り直した。
         VStack(alignment: .leading, spacing: 0) {
-            // HQ指示(2026-11-22、section 7)「投稿をタップすると詳細画面を表示する」。
-            // フッター行(いいね・コメント・保存・フォロー)は個別にタップ操作を持つため、
-            // NavigationLinkの外に置く(内側にネストした`onTapGesture`との競合を避ける)。
-            NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
-                VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 6) {
+                // HQ指示(2026-11-22、section 7)「投稿をタップすると詳細画面を表示する」。
+                // フォロー・「…」は個別にタップ操作を持つため、NavigationLinkの外に置く
+                // (内側にネストした`onTapGesture`との競合を避ける)。
+                NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
                     HStack(alignment: .top, spacing: 6) {
                         ZStack {
                             Circle().fill(post.avatarColor)
                             Image(systemName: post.avatarSymbol).font(.system(size: 9.5)).foregroundStyle(.white.opacity(0.85))
                         }
                         .frame(width: 24, height: 24)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            // ユーザー指摘(2026-11-19、5回目)「2時間前の位置はユーザー名の横に
-                            // して」: 右端に離さず、ユーザー名のすぐ隣に置く。
-                            HStack(spacing: 4) {
-                                NotoText.text(post.username, size: 7).foregroundStyle(.white)
-                                if post.verified {
-                                    Image(systemName: "checkmark.seal.fill").font(.system(size: 6.5)).foregroundStyle(V5P.blue)
-                                }
-                                NotoText.text(post.timeAgo, size: 5.8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                        HStack(spacing: 4) {
+                            NotoText.text(post.username, size: 7).foregroundStyle(.white)
+                            if post.verified {
+                                Image(systemName: "checkmark.seal.fill").font(.system(size: 6.5)).foregroundStyle(V5P.blue)
                             }
-                            HStack(spacing: 5) {
-                                NotoText.text(post.pair, size: 6)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(Color.white.opacity(0.08)))
-                                HStack(spacing: 2) {
-                                    if let icon = post.direction.icon {
-                                        Image(systemName: icon).font(.system(size: 6, weight: .bold))
-                                    }
-                                    NotoText.text(post.direction.label, size: 6)
-                                }
-                                .foregroundStyle(post.direction.color)
-                            }
+                            NotoText.text(post.timeAgo, size: 5.8).foregroundStyle(SettingsCardStyle.subtitleColor)
                         }
                     }
-                    .padding(.bottom, 5)
-
-                    // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
-                    // 折り返して」: チャート枠の幅の分だけ右の余白を確保し、枠と重ならない幅で
-                    // 折り返させる(枠のサイズに合わせて調整。2026-11-21: 枠を50ptに拡大したのに
-                    // 合わせて余白も54ptに拡大)。
-                    NotoText.text(post.title, size: 7.3)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.trailing, 54)
-                        .padding(.bottom, 2)
-                    (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
-                        + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
-                        .lineLimit(2)
-                        .padding(.trailing, 54)
-                        .padding(.bottom, 2)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 10) {
-                CommunityFooterActionsRow(post: post, isLiked: $isLiked, isSaved: $isSaved)
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
+                Spacer(minLength: 4)
                 NotoText.text(isFollowingLocal ? "フォロー中" : "フォローする", size: 6)
                     .foregroundStyle(V5P.blue)
                     .padding(.horizontal, 8)
@@ -661,7 +647,57 @@ private struct CommunityPostCard: View {
                     .overlay(Capsule().stroke(V5P.blue, lineWidth: 0.7))
                     .contentShape(Capsule())
                     .onTapGesture { isFollowingLocal.toggle() }
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
+            .padding(.bottom, 5)
+
+            NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 5) {
+                        NotoText.text(post.pair, size: 6)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Capsule().fill(CommunityPalette.solidBlue))
+                        HStack(spacing: 2) {
+                            if let icon = post.direction.icon {
+                                Image(systemName: icon).font(.system(size: 6, weight: .bold))
+                            }
+                            NotoText.text(post.direction.label, size: 6)
+                        }
+                        .foregroundStyle(post.direction.color)
+                        if let eventTag = post.eventTag {
+                            NotoText.text(eventTag, size: 6)
+                                .foregroundStyle(CommunityPalette.eventTagText)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
+                                .background(Capsule().fill(CommunityPalette.eventTagFill))
+                        }
+                    }
+                    .padding(.bottom, 5)
+
+                    // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
+                    // 折り返して」: チャート枠の幅の分だけ右の余白を確保し、枠と重ならない幅で
+                    // 折り返させる(2026-11-22: 参考画像どおりチャートを実寸大の装飾チャートに
+                    // 拡大したのに合わせて余白も100ptに拡大)。
+                    NotoText.text(post.title, size: 7.3)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.trailing, 100)
+                        .padding(.bottom, 2)
+                    (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
+                        + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
+                        .lineLimit(2)
+                        .padding(.trailing, 100)
+                        .padding(.bottom, 2)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            CommunityFooterActionsRow(post: post, isLiked: $isLiked, isSaved: $isSaved)
         }
         .padding(.horizontal, 7)
         // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」→
@@ -671,15 +707,23 @@ private struct CommunityPostCard: View {
         .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .overlay(alignment: .topTrailing) {
-            // ユーザー指摘(2026-11-19、13回目)「投稿カード内の四角をもう少し下に下げて」。
-            // ユーザー指摘(2026-11-20、2回目)「枠の幅が広い/縦に広いから詰めて」:
-            // 56x56は大きすぎたため、42x38に縮小。
-            // ユーザー指摘(2026-11-21)「右の四角のサイズが小さいからもう少し大きくして」:
-            // 42x38は詰めすぎたため、50x44に戻す(タイトル・本文の右余白も合わせて拡大)。
-            CommunityChartPlaceholder()
-                .frame(width: 50, height: 44)
-                .padding(.top, 17)
-                .padding(.trailing, 7)
+            VStack(spacing: 4) {
+                CommunityChartIllustration(direction: post.direction.kind)
+                    .frame(width: 92, height: 76)
+                NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
+                    HStack(spacing: 2) {
+                        NotoText.text("詳しく見る", size: 6).foregroundStyle(V5P.blue)
+                        Image(systemName: "chevron.right").font(.system(size: 5, weight: .bold)).foregroundStyle(V5P.blue)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .overlay(Capsule().stroke(V5P.blue, lineWidth: 0.7))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 34)
+            .padding(.trailing, 7)
         }
         .accessibilityIdentifier("communityPostCard_\(post.id)")
     }
@@ -727,15 +771,70 @@ struct CommunityFooterActionsRow: View {
     }
 }
 
-/// 投稿カード右上のチャート枠(2026-11-19、5回目「チャートはユーザーがチャート画面を
-/// 載せるので今はデータがなくていい。ただ、もう少し大きくして四角で囲むようにして」:
-/// 架空のローソク足・抵抗帯の描画はやめ、ユーザーが将来チャート画像を貼る場所を示す
-/// 空の角丸の枠だけにする)。
-/// 投稿詳細画面(`StrategyAnalysisCommunityDetail.swift`)でも同じ枠を使うため`private`を外す。
-struct CommunityChartPlaceholder: View {
+/// 投稿カード右上のチャート(HQ指示 2026-11-22、添付の参考画像を完全再現)。
+///
+/// 2026-11-19、5回目の指示「チャートはユーザーがチャート画面を載せるので今はデータが
+/// なくていい」を受けて一度は空の枠だけにしていたが、2026-11-22に添付された参考画像
+/// では実際のローソク足+移動平均線のチャートが描かれており、HQからの明示の指示で
+/// これをピクセル単位・色味も含めて再現することになった。ここで描く値は実際の値動き
+/// データではなく、投稿の予想方向(上昇・下落・中立)に合わせて見た目だけを変えた
+/// 固定パターンの装飾(このタブの投稿自体が既にダミーであることの延長 — ファイル冒頭の
+/// 注記参照。特定の価格水準やテクニカル分析結果を主張するものではない)。
+/// 投稿詳細画面(`StrategyAnalysisCommunityDetail.swift`)でも同じ装飾を使うため`private`を外す。
+struct CommunityChartIllustration: View {
+    let direction: CommunityPostDirection.Kind
+
+    /// 12本のローソク足の高さ(0...1、装飾用の固定値)。上昇・下落はなだらかな
+    /// トレンド、中立はほぼ横ばいになるように並べた。
+    private var candleHeights: [CGFloat] {
+        switch direction {
+        case .up: return [0.30, 0.38, 0.32, 0.46, 0.40, 0.55, 0.50, 0.64, 0.58, 0.74, 0.68, 0.86]
+        case .down: return [0.86, 0.78, 0.70, 0.76, 0.60, 0.66, 0.50, 0.56, 0.40, 0.46, 0.30, 0.36]
+        case .neutral: return [0.48, 0.55, 0.45, 0.52, 0.56, 0.44, 0.50, 0.57, 0.46, 0.51, 0.55, 0.47]
+        }
+    }
+    /// 各ローソク足が陽線(緑)か陰線(赤)か。
+    private var candleIsUp: [Bool] {
+        switch direction {
+        case .up: return [true, false, true, true, false, true, true, false, true, true, false, true]
+        case .down: return [false, true, false, false, true, false, false, true, false, false, true, false]
+        case .neutral: return [true, false, true, false, true, false, true, false, true, false, true, false]
+        }
+    }
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 5)
-            .stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.03)))
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let count = CGFloat(candleHeights.count)
+            let slot = w / count
+            ZStack(alignment: .bottomLeading) {
+                Color.black.opacity(0.22)
+                ForEach(Array(candleHeights.enumerated()), id: \.offset) { index, value in
+                    let candleHeight = max(2, h * value * 0.82)
+                    Rectangle()
+                        .fill(candleIsUp[index] ? V5P.green : V5P.red)
+                        .frame(width: slot * 0.5, height: candleHeight)
+                        .position(x: slot * (CGFloat(index) + 0.5), y: h - candleHeight / 2)
+                }
+                trendLine(w: w, h: h, color: Color(red: 0.62, green: 0.42, blue: 0.95), yOffset: 0)
+                trendLine(w: w, h: h, color: Color(red: 0.85, green: 0.82, blue: 0.30), yOffset: 7)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
+    private func trendLine(w: CGFloat, h: CGFloat, color: Color, yOffset: CGFloat) -> some View {
+        let count = CGFloat(candleHeights.count)
+        let slot = w / count
+        return Path { path in
+            for (index, value) in candleHeights.enumerated() {
+                let x = slot * (CGFloat(index) + 0.5)
+                let y = h - h * value * 0.82 + yOffset
+                if index == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+        }
+        .stroke(color, lineWidth: 1)
     }
 }
