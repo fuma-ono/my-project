@@ -47,7 +47,7 @@ jobs:
       - name: System packages (FFmpeg, IPA font)
         run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-ipafont-gothic
       - name: Install
-        run: python -m pip install -q -e ".[test,bgm]"
+        run: python -m pip install -q -e ".[test,bgm,billing]"
       - name: Hook tests
         working-directory: .
         run: python .claude/hooks/test_vae_hooks.py

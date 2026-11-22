@@ -1,0 +1,40 @@
+{
+  "_comment": "料金・利用制限の設定(仕様 v1、2026-11-21)。価格・上限・商品 ID は初期の仮設定で、ここを変えればコードを変えずに調整できる。商品 ID は App Store Connect で作るまでの仮の値。",
+  "timezone_offset_hours": 9,
+  "server_cost_jpy_per_cpu_hour": 3.0,
+  "store_fee_rate": 0.3,
+  "allow_4k": false,
+  "apple": {
+    "bundle_id": "com.example.videoautoedit",
+    "environments": ["Sandbox", "Production"],
+    "root_cert_paths": []
+  },
+  "plans": {
+    "free": {
+      "label": "FREE", "price_jpy": 0, "period": "month",
+      "max_project_seconds": 30, "monthly_new_edits": 3, "reedits_per_project": 1,
+      "max_short_side": 720, "allow_4k": false, "multi_video": false, "priority": 0,
+      "concepts": "basic", "watermark": false, "model": "medium", "product_ids": []
+    },
+    "standard": {
+      "label": "STANDARD", "price_jpy": 980, "period": "month",
+      "max_project_seconds": 180, "monthly_new_edits": 15, "reedits_per_project": 3,
+      "max_short_side": 1080, "allow_4k": false, "multi_video": true, "priority": 1,
+      "concepts": "all", "watermark": false, "model": "medium",
+      "product_ids": ["com.example.videoautoedit.standard.monthly"]
+    },
+    "pro": {
+      "label": "PRO", "price_jpy": 1980, "period": "month",
+      "max_project_seconds": 600, "monthly_new_edits": 40, "reedits_per_project": 5,
+      "max_short_side": 1080, "allow_4k": true, "multi_video": true, "priority": 2,
+      "concepts": "all", "watermark": false, "model": "medium",
+      "product_ids": ["com.example.videoautoedit.pro.monthly"]
+    }
+  },
+  "concepts": [
+    {"id": "standard", "label": "標準", "tier": "basic", "settings": {}},
+    {"id": "tempo", "label": "テンポ重視", "tier": "basic", "settings": {"min_silence": 0.35, "pad": 0.06}},
+    {"id": "calm", "label": "落ち着いた雰囲気", "tier": "all", "settings": {"min_silence": 0.8, "bgm_offset": 15.0}},
+    {"id": "talk_only", "label": "BGM なし(話し中心)", "tier": "all", "settings": {"bgm": false}}
+  ]
+}

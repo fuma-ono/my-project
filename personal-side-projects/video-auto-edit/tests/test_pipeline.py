@@ -34,8 +34,9 @@ def test_ac_a2_silence_is_cut(run_result):
 def test_ac_e3_work_dir_cleaned(run_result):
     d, _, _, _ = run_result
     left = sorted(os.listdir(d / "work"))
-    assert not [f for f in left if f.endswith((".wav", ".part.mp4"))], left
-    assert "plan.json" in left and "result.json" in left
+    # 再利用のための音声のミックス(mix.wav)だけは、ジョブの期限まで残す(料金仕様 v1「変更部分だけ再処理」。DECISIONS)
+    assert not [f for f in left if f.endswith((".wav", ".part.mp4")) and f != "mix.wav"], left
+    assert "plan.json" in left and "result.json" in left and "transcript.json" in left
 
 
 def test_ac_b3_cost_and_timings_recorded(run_result):

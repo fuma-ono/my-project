@@ -36,6 +36,8 @@ class Settings:
     duck_db: float = -6.0
     render_method: str = "select"
     min_keep: float = 0.25
+    max_short_side: int = 0            # 書き出しの短辺の上限(プランで決める。0 は上限なし。拡大はしない)
+    concept: str = "standard"          # 編集コンセプト(config/plans.json の concepts)
 
     @classmethod
     def from_dict(cls, d):
@@ -85,10 +87,15 @@ def analyze(src, work, settings=None, transcriber=None, vad_fn=None, progress=No
     a16, _ = sf.read(wav16, dtype="float32")
     t["extract_audio"] = time.time() - t0
 
-    _progress(progress, "transcribe", 0.08, "音声を文字に起こしています")
     t1 = time.time()
-    tr = (transcriber or WhisperTranscriber(s.model))(a16)
-    t["transcribe"] = time.time() - t1
+    tr = _cached_transcript(work, s.model)                 # AI 再編集では文字起こしをやり直さない(処理時間の大半)
+    if tr is None:
+        _progress(progress, "transcribe", 0.08, "音声を文字に起こしています")
+        tr = (transcriber or WhisperTranscriber(s.model))(a16)
+        _save_transcript(work, s.model, tr)
+        t["transcribe"] = time.time() - t1
+    else:
+        t["transcribe_cached"] = time.time() - t1
     words = tr.words
 
     _progress(progress, "cut", 0.6, "無音と言い淀みを探しています")
@@ -163,6 +170,73 @@ def analyze(src, work, settings=None, transcriber=None, vad_fn=None, progress=No
     return plan
 
 
+TRANSCRIPT_FILE = "transcript.json"
+
+
+def _save_transcript(work, model, tr):
+    path = os.path.join(work, TRANSCRIPT_FILE)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump({"model": model, "words": tr.words, "segments": tr.segments, "language": tr.language}, f, ensure_ascii=False)
+    os.replace(path + ".tmp", path)
+
+
+def _cached_transcript(work, model):
+    """同じ作業フォルダ(= 同じ元動画)で、同じモデルの文字起こしがあれば使う"""
+    from .transcribe import Transcript
+    try:
+        with open(os.path.join(work, TRANSCRIPT_FILE), encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if d.get("model") != model:
+        return None
+    return Transcript(words=d["words"], segments=d["segments"], language=d.get("language", "ja"))
+
+
+MIX_KEY_FILE = "mix.key.json"
+AUDIO_SETTINGS = ("bgm", "mix_mode", "voice_lufs", "bgm_offset", "duck_db")
+
+
+def _audio_key(plan, s):
+    import hashlib
+    d = {"frames": plan["frames"], "speech_out": plan["speech_out"], "out_duration": plan["out_duration"],
+         "fps": plan["source"]["fps"], **{k: getattr(s, k) for k in AUDIO_SETTINGS}}
+    return hashlib.sha256(json.dumps(d, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _cached_mix(work, key):
+    try:
+        with open(os.path.join(work, MIX_KEY_FILE), encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if d.get("key") != key or not os.path.isfile(os.path.join(work, "mix.wav")):
+        return None
+    return d
+
+
+def _save_mix_key(work, key, info):
+    path = os.path.join(work, MIX_KEY_FILE)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(dict(info, key=key), f, ensure_ascii=False, default=lambda o: o.item() if hasattr(o, "item") else str(o))
+    os.replace(path + ".tmp", path)
+
+
+def output_size(width, height, max_short_side):
+    """書き出しの大きさ。短辺が上限を超えるときだけ縮小する(拡大しない)。幅・高さは偶数"""
+    w, h = width - width % 2, height - height % 2
+    short = min(w, h)
+    if max_short_side and short > max_short_side:
+        r = max_short_side / short
+        w, h = int(round(w * r / 2)) * 2, int(round(h * r / 2)) * 2
+    return w, h
+
+
+def resolution_class(width, height):
+    short = min(width, height)
+    return "720p" if short <= 720 else "1080p" if short <= 1080 else "4k"
+
+
 def save_plan(plan, path):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -173,6 +247,28 @@ def save_plan(plan, path):
 def load_plan(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def carry_subtitle_edits(prev_plan, new_plan, min_overlap=0.6):
+    """AI 再編集の前に手で直した字幕を、作り直した字幕に引き継ぐ。元の動画の時刻(src_s〜src_e)が
+    十分に重なる字幕が1つだけあるときに、その文言を直した文言にする(改行は実寸で計算し直す)。戻り値: 引き継いだ数"""
+    n = 0
+    for old in prev_plan.get("subtitles", []):
+        if not old.get("edited"):
+            continue
+        a0, a1 = old["src_s"], old["src_e"]
+        cands = []
+        for ev in new_plan.get("subtitles", []):
+            ov = min(a1, ev["src_e"]) - max(a0, ev["src_s"])
+            span = max(1e-6, min(a1 - a0, ev["src_e"] - ev["src_s"]))
+            if ov / span >= min_overlap:
+                cands.append(ev)
+        if len(cands) != 1:
+            continue                                    # 対応が一つに決まらないものは引き継がない(取り違えを防ぐ)
+        text = "".join(old.get("lines") or [])
+        edit_subtitle(new_plan, cands[0]["id"], text)
+        n += 1
+    return n
 
 
 def edit_subtitle(plan, sub_id, text):
@@ -204,19 +300,27 @@ def render_plan(plan, src, out, work, settings=None, progress=None, bgm_cache=No
     t = {}
     _progress(progress, "audio", 0.78, "音声を整えています")
     t0 = time.time()
-    a = audio.read_audio(src)
-    voice = audio.cut_audio(a, audio.SR, frames, fps)
-    steps = audio.boundary_steps(voice, audio.SR, frames, fps)
-    del a
-    audio.write_wav(os.path.join(work, "voice_cut.wav"), voice, audio.SR)
-    del voice
-    bgm_path, bgm_src = (None, "none")
-    if s.bgm:
-        bgm_path, bgm_src = bgm.prepare(plan["out_duration"], bgm_cache or os.path.join(work, "bgm_cache"))
-    mix_info = audio.mix(os.path.join(work, "voice_cut.wav"), bgm_path, work, plan["speech_out"], mode=s.mix_mode,
-                         voice_target=s.voice_lufs, bgm_offset=s.bgm_offset, duck_db=s.duck_db)
-    metrics = audio.mix_metrics(work, plan["speech_out"]) if bgm_path else {}
-    t["audio"] = time.time() - t0
+    akey = _audio_key(plan, s)
+    cached = _cached_mix(work, akey)
+    if cached:                                 # 残す区間と音声の設定が前回と同じなら、音声のミックスを使い回す
+        mix_info, metrics, steps, bgm_src = cached["mix"], cached["metrics"], cached["steps"], cached["bgm_source"]
+        t["audio_cached"] = time.time() - t0
+    else:
+        a = audio.read_audio(src)
+        voice = audio.cut_audio(a, audio.SR, frames, fps)
+        steps = audio.boundary_steps(voice, audio.SR, frames, fps)
+        del a
+        audio.write_wav(os.path.join(work, "voice_cut.wav"), voice, audio.SR)
+        del voice
+        bgm_path, bgm_src = (None, "none")
+        if s.bgm:
+            bgm_path, bgm_src = bgm.prepare(plan["out_duration"], bgm_cache or os.path.join(work, "bgm_cache"))
+        mix_info = audio.mix(os.path.join(work, "voice_cut.wav"), bgm_path, work, plan["speech_out"], mode=s.mix_mode,
+                             voice_target=s.voice_lufs, bgm_offset=s.bgm_offset, duck_db=s.duck_db)
+        metrics = audio.mix_metrics(work, plan["speech_out"]) if bgm_path else {}
+        steps = [float(x) for x in steps]
+        _save_mix_key(work, akey, {"mix": mix_info, "metrics": metrics, "steps": steps, "bgm_source": bgm_src})
+        t["audio"] = time.time() - t0
 
     ass = None
     if s.subtitles and plan["subtitles"]:
@@ -228,13 +332,15 @@ def render_plan(plan, src, out, work, settings=None, progress=None, bgm_cache=No
                                      st["outline"], st["margin_lr"], st["margin_v"]))
     _progress(progress, "render", 0.85, "動画を書き出しています")
     w, h = plan["source"]["width"], plan["source"]["height"]
+    ow, oh = output_size(w, h, s.max_short_side)          # プランの解像度の上限(FREE 720p など)
     candidate = os.path.join(work, "candidate.mp4")     # 検証に合格するまで正式な出力を置き換えない(N2)
     rinfo = render.render_video(src, frames, fps, os.path.join(work, "mix.wav"), candidate, work, method=s.render_method, ass=ass,
-                                timeout=proc.timeout_for(plan["source"]["duration"], factor=15.0), size=(w, h))
+                                timeout=proc.timeout_for(plan["source"]["duration"], factor=15.0), size=(w, h),
+                                scale=(ow, oh) if (ow, oh) != (w - w % 2, h - h % 2) else None)
     t["render"] = rinfo["seconds"]
     _progress(progress, "verify", 0.97, "書き出した動画を確認しています")
     expect = sum(k1 - k0 for k0, k1 in frames)
-    ver = render.verify(candidate, expect_frames=expect, expect_size=(w - w % 2, h - h % 2), expect_fps=plan["source"]["fps"])
+    ver = render.verify(candidate, expect_frames=expect, expect_size=(ow, oh), expect_fps=plan["source"]["fps"])
     if not ver["ok"]:                                       # AC-E1 を満たさない出力は完成扱いにしない
         os.remove(candidate)                                # 前回の正常な出力はそのまま残る
         failed = [k for k, v in ver["checks"].items() if not v]
@@ -243,6 +349,7 @@ def render_plan(plan, src, out, work, settings=None, progress=None, bgm_cache=No
     _move_into_place(candidate, out)
     import resource
     result = {"output": out, "out_duration": plan["out_duration"], "render": rinfo, "verify": ver, "mix": mix_info,
+              "output_size": [ow, oh], "resolution_class": resolution_class(ow, oh),
               "mix_metrics": metrics, "bgm_source": bgm_src,
               "peak_memory_mb": {"python": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024,
                                  "render_ffmpeg": rinfo["ffmpeg_peak_mb"]},
@@ -269,7 +376,7 @@ def _move_into_place(src, dst):
                     os.remove(f)
 
 
-def cleanup_work(work, keep=("plan.json", "subs.ass", "result.json")):
+def cleanup_work(work, keep=("plan.json", "subs.ass", "result.json", TRANSCRIPT_FILE, "mix.wav", MIX_KEY_FILE)):
     """大きな一時ファイル(wav・中間動画)を消す。計画と結果は残す"""
     if not os.path.isdir(work):
         return

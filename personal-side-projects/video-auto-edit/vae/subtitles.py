@@ -22,12 +22,29 @@ PROTECT = re.compile(
     r"|[A-Za-zＡ-Ｚａ-ｚ][A-Za-zＡ-Ｚａ-ｚ0-9０-９\-'’]*")
 
 
+# 字幕の見た目(オーナーの指摘 2026-11-22「フォントも字幕のデザインも変」への対応。既定は legacy のまま、
+# ハイライトは style で選ぶ。色は ASS の BGR 表記)。font_path は幅の測定に使い、font_name は描画(libass)に使う
+NOTO_BOLD = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+STYLES = {
+    # 標準: 太めの端正なゴシック、白、細い黒の縁取りと影
+    "clean": dict(font_name="Noto Sans CJK JP", font_path=NOTO_BOLD, bold=1, primary="&H00FFFFFF", outline_c="&H00101010",
+                  back="&H80000000", border_style=1, outline_mult=0.075, shadow=2, margin_mult=1.0),
+    # ポップ: 丸みのある極太、白、ピンクの太い縁取り
+    "pop": dict(font_name="M PLUS 2 ExtraBold", font_path="/usr/share/fonts/opentype/mplus/Mplus2-ExtraBold.otf", bold=0,
+                primary="&H00FFFFFF", outline_c="&H008A5AFF", back="&H80000000", border_style=1, outline_mult=0.14, shadow=3,
+                margin_mult=1.0),
+    # 帯: 半透明の黒い帯に白い文字(どんな背景でも読める)
+    "box": dict(font_name="Noto Sans CJK JP", font_path=NOTO_BOLD, bold=1, primary="&H00FFFFFF", outline_c="&H99000000",
+                back="&H99000000", border_style=3, outline_mult=0.22, shadow=0, margin_mult=1.0),
+}
+
+
 class Measurer:
-    def __init__(self, font_size, outline):
+    def __init__(self, font_size, outline, font_path=None):
         self.font = None
         try:
             from PIL import ImageFont
-            self.font = ImageFont.truetype(FONT_PATH, font_size)
+            self.font = ImageFont.truetype(font_path or FONT_PATH, font_size)
         except Exception:  # Pillow が無い環境では字数で概算
             pass
         self.fs, self.outline = font_size, outline
@@ -94,10 +111,10 @@ def split_units(text, fits2):
     return best[0][3] if 0 in best else [text]   # 収まらない場合はそのまま(overflow として記録される)
 
 
-def build_events(words, remap_snap, vw, font_size, outline, margin_lr, min_dur=0.8, gap=0.02, hold=0.3):
+def build_events(words, remap_snap, vw, font_size, outline, margin_lr, min_dur=0.8, gap=0.02, hold=0.3, font_path=None):
     """words: dict(s,e,w, drop) のリスト(drop=True の語は表示しない)。
     戻り値: dict(s, e, lines, src_s, src_e, overflow) のリスト(出力の時刻)"""
-    meas = Measurer(font_size, outline)
+    meas = Measurer(font_size, outline, font_path)
     maxw = vw - 2 * margin_lr
     fits = lambda t: meas.width(t) <= maxw
     fits2 = lambda t: split_lines(t, fits) is not None
@@ -198,14 +215,24 @@ def ass_text(line):
     return line.translate(_ASS_ESCAPE)
 
 
-def to_ass(events, vw, vh, font_size, outline, margin_lr, margin_v):
+def _style_line(font_size, outline, margin_lr, margin_v, style):
+    if style is None:                                                          # 既定(製品のパイプライン): 従来どおり
+        return (f"Style: Default,IPAGothic,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,"
+                f"{outline},1,2,{margin_lr},{margin_lr},{margin_v},1")
+    st = STYLES[style] if isinstance(style, str) else style
+    ol = max(2, round(font_size * st["outline_mult"]))
+    return (f"Style: Default,{st['font_name']},{font_size},{st['primary']},&H000000FF,{st['outline_c']},{st['back']},{st['bold']},0,0,0,"
+            f"100,100,0,0,{st['border_style']},{ol},{st['shadow']},2,{margin_lr},{margin_lr},{margin_v},1")
+
+
+def to_ass(events, vw, vh, font_size, outline, margin_lr, margin_v, style=None):
     def ts(x):
         x = max(0.0, x)
         return f"{int(x // 3600)}:{int(x % 3600 // 60):02d}:{x % 60:05.2f}"
     head = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {vw}", f"PlayResY: {vh}", "WrapStyle: 2", "",
             "[V4+ Styles]",
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-            f"Style: Default,IPAGothic,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,{outline},1,2,{margin_lr},{margin_lr},{margin_v},1",
+            _style_line(font_size, outline, margin_lr, margin_v, style),
             "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     body = [f"Dialogue: 0,{ts(e['s'])},{ts(e['e'])},Default,,0,0,0,," + "\\N".join(ass_text(l) for l in e["lines"][:2])
             for e in events]
