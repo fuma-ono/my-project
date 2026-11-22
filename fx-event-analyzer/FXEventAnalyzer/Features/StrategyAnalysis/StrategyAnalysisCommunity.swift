@@ -54,7 +54,7 @@ struct CommunityFilterPillRow: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 ForEach(CommunityFilter.allCases) { filter in
                     pill(filter)
                 }
@@ -65,42 +65,19 @@ struct CommunityFilterPillRow: View {
 
     private func pill(_ filter: CommunityFilter) -> some View {
         let isSelected = filter == selection
-        return NotoText.text(filter.title, size: 6.8)
+        // ユーザー指摘(2026-11-22、添付の参考画像との実測比較)「大きさが全然違う」:
+        // 5つのピルが214pt列に1行で収まる参考画像のサイズに合わせ、文字サイズ・余白を縮小した
+        // (6.8pt/横9・縦5 → 5.2pt/横6.5・縦3.2)。
+        return NotoText.text(filter.title, size: 5.2)
             .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 6.5)
+            .padding(.vertical, 3.2)
             .background(Capsule().fill(isSelected ? V5P.blue : SettingsCardStyle.cardFill))
             .overlay(Capsule().stroke(isSelected ? .clear : SettingsCardStyle.cardBorder, lineWidth: 0.6))
             .contentShape(Capsule())
             .onTapGesture { selection = filter }
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("communityFilterPill_\(filter.id)")
-    }
-}
-
-/// HQ指示(2026-11-22、section 3)「フォロー中のユーザーの投稿を確認できる導線も設ける」。
-/// 5つのカテゴリピルとは別の、独立したON/OFFの絞り込み(カテゴリピルの選択とは併用できる)。
-/// ダミーデータの`isFollowing`で実際にローカル絞り込みするため(架空の集計は何もしない、
-/// 既にある値をクライアント側でフィルタするだけ)、見せかけの機能ではない。
-struct CommunityFollowingOnlyToggle: View {
-    @Binding var isOn: Bool
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: isOn ? "person.fill.checkmark" : "person.crop.circle.badge.checkmark")
-                .font(.system(size: 8.5))
-            NotoText.text("フォロー中のみ表示", size: 6.5)
-        }
-        .foregroundStyle(isOn ? .white : SettingsCardStyle.subtitleColor)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(isOn ? V5P.blue : Color.clear))
-        .overlay(Capsule().stroke(isOn ? Color.clear : SettingsCardStyle.cardBorder, lineWidth: 0.6))
-        .contentShape(Capsule())
-        .onTapGesture { isOn.toggle() }
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("communityFollowingOnlyToggle")
-        .frame(width: 214, alignment: .trailing)
     }
 }
 
@@ -155,32 +132,36 @@ struct CommunityMarketPollCard: View {
         }
     }
 
+    // ユーザー指摘(2026-11-22、添付の参考画像との実測比較)「大きさが全然違う/円グラフの
+    // 大きさが違う/枠が全体的に余白が多すぎる」: 参考画像をピクセル実測した結果、円グラフの
+    // 外径が現状の約6割(frame 60→34, 線幅11→8)、カード全体の高さも約75%に縮む必要が
+    // あると判明。行間・余白・見出し回りのフォントサイズも合わせて詰めた。
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: "megaphone.fill").font(.system(size: 12)).foregroundStyle(.white)
-                NotoText.text("公式アンケート", size: 7.6).foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 3) {
+                Image(systemName: "megaphone.fill").font(.system(size: 10)).foregroundStyle(.white)
+                NotoText.text("公式アンケート", size: 6.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
                 HStack(spacing: 2) {
-                    NotoText.text("みんなで投票しよう！", size: 6).foregroundStyle(V5P.blue)
-                    Image(systemName: "chevron.right").font(.system(size: 5.5, weight: .bold)).foregroundStyle(V5P.blue)
+                    NotoText.text("みんなで投票しよう！", size: 5.2).foregroundStyle(V5P.blue)
+                    Image(systemName: "chevron.right").font(.system(size: 4.8, weight: .bold)).foregroundStyle(V5P.blue)
                 }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
                 .background(Capsule().fill(CommunityPalette.solidBlue))
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
+                NotoText.text("次回FOMCはどうなる?", size: 7.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
-                Image(systemName: "clock").font(.system(size: 6.5)).foregroundStyle(SettingsCardStyle.subtitleColor)
-                NotoText.text("残り\(daysRemaining)日", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                Image(systemName: "clock").font(.system(size: 5.8)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("残り\(daysRemaining)日", size: 5.8).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .center, spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
                     ForEach(options, id: \.label) { option in
-                        HStack(spacing: 6) {
-                            NotoText.text(option.label, size: 6.5).foregroundStyle(.white)
-                                .frame(width: 34, alignment: .leading)
+                        HStack(spacing: 5) {
+                            NotoText.text(option.label, size: 6.2).foregroundStyle(.white)
+                                .frame(width: 30, alignment: .leading)
                             Capsule().fill(CommunityPalette.barTrack).frame(maxWidth: .infinity).frame(height: 5)
                                 .overlay(alignment: .leading) {
                                     GeometryReader { geo in
@@ -188,31 +169,31 @@ struct CommunityMarketPollCard: View {
                                             .frame(width: geo.size.width * option.percent / 100)
                                     }
                                 }
-                            NotoText.text(ValueFormat.percent(option.percent, fractionDigits: 0), size: 6.5)
+                            NotoText.text(ValueFormat.percent(option.percent, fractionDigits: 0), size: 6.2)
                                 .foregroundStyle(.white)
-                                .frame(width: 22, alignment: .trailing)
+                                .frame(width: 20, alignment: .trailing)
                         }
                     }
                 }
                 donutChart
             }
             HStack(spacing: 4) {
-                Image(systemName: "person.2.fill").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
-                NotoText.text("\(ValueFormat.number(voterCount, fractionDigits: 0))人が投票", size: 6.5)
+                Image(systemName: "person.2.fill").font(.system(size: 6.3)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("\(ValueFormat.number(voterCount, fractionDigits: 0))人が投票", size: 5.8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 HStack(spacing: 3) {
-                    NotoText.text("投票する", size: 6.8).foregroundStyle(.white)
-                    Image(systemName: "lock.fill").font(.system(size: 6)).foregroundStyle(.white)
+                    NotoText.text("投票する", size: 6).foregroundStyle(.white)
+                    Image(systemName: "lock.fill").font(.system(size: 5.3)).foregroundStyle(.white)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
                 .background(Capsule().fill(CommunityPalette.solidBlue))
             }
         }
-        .padding(.horizontal, 7)
-        .padding(.top, 5)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 5)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
         .accessibilityIdentifier("communityMarketPollCard")
@@ -223,12 +204,12 @@ struct CommunityMarketPollCard: View {
             ForEach(donutSegments, id: \.id) { segment in
                 Circle()
                     .trim(from: segment.start, to: segment.end)
-                    .stroke(segment.color, style: StrokeStyle(lineWidth: 11, lineCap: .butt))
+                    .stroke(segment.color, style: StrokeStyle(lineWidth: 8, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
-            NotoText.text(ValueFormat.percent(options[0].percent, fractionDigits: 0), size: 9.2).foregroundStyle(.white)
+            NotoText.text(ValueFormat.percent(options[0].percent, fractionDigits: 0), size: 5.3).foregroundStyle(.white)
         }
-        .frame(width: 60, height: 60)
+        .frame(width: 34, height: 34)
     }
 }
 
@@ -490,9 +471,6 @@ let communityDummyPosts: [CommunityPost] = [
 
 struct CommunityPostListCard: View {
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
-    /// HQ指示(2026-11-22、section 3)「フォロー中のユーザーの投稿を確認できる導線」。
-    /// ダミーデータの`isFollowing`を実際にローカルでフィルタするだけで、架空の集計は行わない。
-    let followingOnly: Bool
 
     /// HQ指示(2026-11-22、section 5)「初回取得：10件/追加スクロール時：次の10件を取得/
     /// 読み込み中・投稿なし・エラーの状態も考慮する」への対応。ただしBackend側のページネー
@@ -502,9 +480,7 @@ struct CommunityPostListCard: View {
     @State private var visibleCount = 5
     @State private var isLoadingMore = false
 
-    private var filteredPosts: [CommunityPost] {
-        followingOnly ? communityDummyPosts.filter(\.isFollowing) : communityDummyPosts
-    }
+    private var posts: [CommunityPost] { communityDummyPosts }
 
     // ユーザー指摘(2026-11-19、4回目)「投稿カードは各カードで枠を囲むのではなく線で
     // 区切るようにしてください」: 個別のカード枠をやめ、1つの枠の中で投稿どうしを
@@ -514,37 +490,28 @@ struct CommunityPostListCard: View {
     // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」:
     // さらに詰める(0にする)。
     var body: some View {
-        let posts = filteredPosts
         let visible = Array(posts.prefix(visibleCount))
         VStack(spacing: 0) {
-            if posts.isEmpty {
-                emptyState
-            } else {
-                ForEach(Array(visible.enumerated()), id: \.element.id) { index, post in
-                    CommunityPostCard(post: post)
-                    if index < visible.count - 1 {
-                        Rectangle().fill(Self.dividerColor).frame(height: 0.6)
-                            .padding(.horizontal, 7)
-                    }
-                    if index == visible.count - 1 {
-                        // 最後に見えている投稿が現れたタイミングで、次の10件を読み込む
-                        // (スクロール読み込みのUXだけを再現する、高さの無いセンチネル)。
-                        Color.clear.frame(height: 0.5)
-                            .onAppear { loadMoreIfNeeded(total: posts.count) }
-                            .accessibilityHidden(true)
-                    }
+            ForEach(Array(visible.enumerated()), id: \.element.id) { index, post in
+                CommunityPostCard(post: post)
+                if index < visible.count - 1 {
+                    Rectangle().fill(Self.dividerColor).frame(height: 0.6)
+                        .padding(.horizontal, 5)
                 }
-                paginationFooter(total: posts.count, visible: visible.count)
+                if index == visible.count - 1 {
+                    // 最後に見えている投稿が現れたタイミングで、次の10件を読み込む
+                    // (スクロール読み込みのUXだけを再現する、高さの無いセンチネル)。
+                    Color.clear.frame(height: 0.5)
+                        .onAppear { loadMoreIfNeeded(total: posts.count) }
+                        .accessibilityHidden(true)
+                }
             }
+            paginationFooter(total: posts.count, visible: visible.count)
         }
         .padding(.top, 3)
         .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
-        .onChange(of: followingOnly) { _, _ in
-            visibleCount = 5
-            isLoadingMore = false
-        }
         .accessibilityIdentifier("communityPostListCard")
     }
 
@@ -573,17 +540,6 @@ struct CommunityPostListCard: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 4) {
-            NotoText.text("フォロー中のユーザーの投稿はまだありません。", size: 7).foregroundStyle(.white)
-            NotoText.text("投稿カードの「フォローする」から追加できます。", size: 6.3)
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-        }
-        .multilineTextAlignment(.center)
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity)
-        .accessibilityIdentifier("communityPostListEmpty")
-    }
 }
 
 private struct CommunityPostCard: View {
@@ -651,7 +607,7 @@ private struct CommunityPostCard: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
-            .padding(.bottom, 5)
+            .padding(.bottom, 3)
 
             NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -676,22 +632,24 @@ private struct CommunityPostCard: View {
                                 .background(Capsule().fill(CommunityPalette.eventTagFill))
                         }
                     }
-                    .padding(.bottom, 5)
+                    .padding(.bottom, 3)
 
                     // ユーザー指摘(2026-11-20)「米CPIの結果と本文が右側の四角と重なっているので
                     // 折り返して」: チャート枠の幅の分だけ右の余白を確保し、枠と重ならない幅で
-                    // 折り返させる(2026-11-22: 参考画像どおりチャートを実寸大の装飾チャートに
-                    // 拡大したのに合わせて余白も100ptに拡大)。
+                    // 折り返させる。
+                    // ユーザー指摘(2026-11-22、添付の参考画像との実測比較)「大きさが全然違う/
+                    // 枠が全体的に余白が多すぎる」: 参考画像実測でチャート枠は84×58より
+                    // ずっと小さい(約56×40)と判明。余白もそれに合わせて詰めた。
                     NotoText.text(post.title, size: 7.3)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.trailing, 100)
-                        .padding(.bottom, 2)
+                        .padding(.trailing, 64)
+                        .padding(.bottom, 1)
                     (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                         + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                         .lineLimit(2)
-                        .padding(.trailing, 100)
-                        .padding(.bottom, 2)
+                        .padding(.trailing, 64)
+                        .padding(.bottom, 1)
                 }
                 .contentShape(Rectangle())
             }
@@ -699,35 +657,28 @@ private struct CommunityPostCard: View {
 
             CommunityFooterActionsRow(post: post, isLiked: $isLiked, isSaved: $isSaved)
         }
-        .padding(.horizontal, 7)
-        // ユーザー指摘(2026-11-21)「FXトレーダーKの上の余白をなくして、今広いから」→
-        // 「詰まりすぎている、もう少し広くして」: 3では詰めすぎだったため6に戻す
-        // (下は投稿どうしの間隔を保つため変えない)。
-        .padding(.top, 6)
-        .padding(.bottom, 7)
+        .padding(.horizontal, 5)
+        .padding(.top, 5)
+        .padding(.bottom, 5)
         .frame(width: 214, alignment: .leading)
         .overlay(alignment: .topTrailing) {
-            // ユーザー指摘(2026-11-22、CI実機スクショ確認): チャート+「詳しく見る」の
-            // 縦の合計がカード本体(見出し・タイトル・本文・フッター)の実高さを超え、
-            // 次の投稿の先頭(フォロー中ボタン等)と重なっていた。チャートを少し
-            // 小さくし、上の余白も詰めて、カード内に収まるようにした。
-            VStack(spacing: 3) {
+            VStack(spacing: 2) {
                 CommunityChartIllustration(direction: post.direction.kind)
-                    .frame(width: 84, height: 58)
+                    .frame(width: 56, height: 40)
                 NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
                     HStack(spacing: 2) {
-                        NotoText.text("詳しく見る", size: 5.8).foregroundStyle(V5P.blue)
-                        Image(systemName: "chevron.right").font(.system(size: 5, weight: .bold)).foregroundStyle(V5P.blue)
+                        NotoText.text("詳しく見る", size: 5.5).foregroundStyle(V5P.blue)
+                        Image(systemName: "chevron.right").font(.system(size: 4.6, weight: .bold)).foregroundStyle(V5P.blue)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2.5)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
                     .overlay(Capsule().stroke(V5P.blue, lineWidth: 0.7))
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.top, 28)
-            .padding(.trailing, 7)
+            .padding(.top, 20)
+            .padding(.trailing, 5)
         }
         .accessibilityIdentifier("communityPostCard_\(post.id)")
     }
@@ -759,7 +710,7 @@ struct CommunityFooterActionsRow: View {
     @Binding var isSaved: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             CommunityFooterItem(
                 icon: isLiked ? "heart.fill" : "heart",
                 value: "\(post.likeCount + (isLiked ? 1 : 0))",

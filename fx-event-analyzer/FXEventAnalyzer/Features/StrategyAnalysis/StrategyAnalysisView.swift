@@ -20,9 +20,6 @@ struct StrategyAnalysisView: View {
     /// HQ指示(2026-11-19「みんなの分析画面を実装」)で追加した、みんなの分析タブ内の
     /// フィルターピル(おすすめ/通貨ペア別/イベント別/予想・投票/ランキング)の選択状態。
     @State private var communityFilter: CommunityFilter = .recommended
-    /// HQ指示(2026-11-22「みんなの分析画面」section 3)「フォロー中のユーザーの投稿を
-    /// 確認できる導線」。フィルターピルとは別の、独立したON/OFF。
-    @State private var communityFollowingOnly = false
     /// HQ指示(2026-11-22、section 6)「＋」投稿作成ボタン→選択メニュー→2つの入力フロー。
     @State private var showsCommunityComposeMenu = false
     @State private var showsCommunityPostCompose = false
@@ -244,14 +241,13 @@ struct StrategyAnalysisView: View {
         case .communityAnalysis:
             VStack(alignment: .leading, spacing: 8) {
                 CommunityFilterPillRow(selection: $communityFilter)
-                CommunityFollowingOnlyToggle(isOn: $communityFollowingOnly)
                 // HQ指示(2026-11-22、section 8): 「ランキング」ピルを選んだときは、
                 // 市場予想アンケート・投稿一覧の代わりにランキング画面を表示する。
                 if communityFilter == .ranking {
                     CommunityRankingView()
                 } else {
                     CommunityMarketPollCard()
-                    CommunityPostListCard(followingOnly: communityFollowingOnly)
+                    CommunityPostListCard()
                     // HQ指示(2026-11-22、添付の参考画像「みんなの分析」を完全再現):
                     // 投稿一覧の下にある「分析・予想を投稿する」バナー。「＋」ボタンと
                     // 同じ選択メニューを開く(section 6の2つの入力フローへの、もう一つの
