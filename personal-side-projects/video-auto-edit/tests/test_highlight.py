@@ -56,6 +56,7 @@ def test_cuts_snap_to_beats_and_speech_is_not_cut():
         assert abs(n - round(n)) < 0.02 or s["end"] >= 15 - 1e-3       # 拍の整数倍(素材の終わりで詰まる場合を除く)
         if not s["speech"]:
             assert round(n) % 2 == 0
+            assert s["dur"] >= planner.MIN_CUT_SEC - 1e-6 or s["end"] >= 15 - 1e-3   # 2 秒未満の細切れにしない
         else:
             assert s["start"] <= 2.0 + 1e-6 and s["end"] >= 6.3 - 1e-6   # 話の途中で切らない
 

@@ -9,6 +9,7 @@ from .analyze import CATEGORIES, FPS
 
 CAT_WEIGHT = {"scenery": 1.0, "night": 1.0, "food": 0.9, "people": 0.9, "water": 0.9, "animal": 0.9,
               "nature": 0.8, "city": 0.75, "transport": 0.55, "indoor": 0.5}
+MIN_CUT_SEC = 2.0                         # 会話の無い区間の最短(秒)。実動画で 1.0 秒の区間ができたため(2026-11-22)
 ENDING_CATS = ("scenery", "night", "water", "nature")
 
 
@@ -96,7 +97,7 @@ def snap_to_beats(chosen, clips, beat):
             if c["speech"]:
                 n = int(np.ceil(d / beat))                     # 話は切らず、次の拍まで伸ばす
             else:
-                n = max(2, int(round(d / beat / 2)) * 2)
+                n = max(int(np.ceil(MIN_CUT_SEC / beat / 2)) * 2, int(round(d / beat / 2)) * 2)   # 1秒台の細切れにしない
             c["beats"] = n
             c["dur"] = n * beat
             clipdur = next(cl["duration"] for cl in clips if cl["idx"] == c["clip"])    # 元の動画の範囲に収める
