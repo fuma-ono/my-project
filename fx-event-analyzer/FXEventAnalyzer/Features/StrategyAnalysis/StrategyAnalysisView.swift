@@ -20,6 +20,13 @@ struct StrategyAnalysisView: View {
     /// HQ指示(2026-11-19「みんなの分析画面を実装」)で追加した、みんなの分析タブ内の
     /// フィルターピル(おすすめ/通貨ペア別/イベント別/予想・投票/ランキング)の選択状態。
     @State private var communityFilter: CommunityFilter = .recommended
+    /// HQ指示(2026-11-22「みんなの分析画面」section 3)「フォロー中のユーザーの投稿を
+    /// 確認できる導線」。フィルターピルとは別の、独立したON/OFF。
+    @State private var communityFollowingOnly = false
+    /// HQ指示(2026-11-22、section 6)「＋」投稿作成ボタン→選択メニュー→2つの入力フロー。
+    @State private var showsCommunityComposeMenu = false
+    @State private var showsCommunityPostCompose = false
+    @State private var showsCommunityPollCompose = false
     @Environment(\.dismiss) private var dismiss
     private let apiClient: APIClient
     /// HQ指示(2026-11-12「ピクセル単位の再現」): 「次回イベント」カードに表示する、
@@ -83,10 +90,26 @@ struct StrategyAnalysisView: View {
             }
             content
             V5BottomBar(selected: $tabSelection)
+            // HQ指示(2026-11-22、section 6)「画面右下に「＋」のフローティングボタンを
+            // 設置する」: みんなの分析タブを見ている間だけ表示する。
+            if selectedTab == .communityAnalysis {
+                CommunityComposeFAB { showsCommunityComposeMenu = true }
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
+        .confirmationDialog("投稿を作成", isPresented: $showsCommunityComposeMenu, titleVisibility: .visible) {
+            Button("分析を投稿") { showsCommunityPostCompose = true }
+            Button("予想アンケートを作成") { showsCommunityPollCompose = true }
+            Button("キャンセル", role: .cancel) {}
+        }
+        .sheet(isPresented: $showsCommunityPostCompose) {
+            CommunityPostComposeView(tabSelection: $tabSelection)
+        }
+        .sheet(isPresented: $showsCommunityPollCompose) {
+            CommunityPollComposeView(tabSelection: $tabSelection)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -214,8 +237,15 @@ struct StrategyAnalysisView: View {
         case .communityAnalysis:
             VStack(alignment: .leading, spacing: 8) {
                 CommunityFilterPillRow(selection: $communityFilter)
-                CommunityMarketPollCard()
-                CommunityPostListCard()
+                CommunityFollowingOnlyToggle(isOn: $communityFollowingOnly)
+                // HQ指示(2026-11-22、section 8): 「ランキング」ピルを選んだときは、
+                // 市場予想アンケート・投稿一覧の代わりにランキング画面を表示する。
+                if communityFilter == .ranking {
+                    CommunityRankingView()
+                } else {
+                    CommunityMarketPollCard()
+                    CommunityPostListCard(followingOnly: communityFollowingOnly)
+                }
             }
             .accessibilityIdentifier("strategyAnalysisCommunityTab")
         }

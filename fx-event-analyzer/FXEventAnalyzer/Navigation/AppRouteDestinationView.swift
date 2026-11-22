@@ -98,6 +98,8 @@ struct AppRouteDestinationView: View {
             PlaceholderScreenView(scrNumber: "SCR-003", screenName: "パスワード再設定")
                 .navigationTitle("パスワード再設定")
                 .navigationBarTitleDisplayMode(.inline)
+        case .communityPostDetail(let id):
+            CommunityPostDetailView(postId: id, tabSelection: $tabSelection)
         }
     }
 }

@@ -96,4 +96,9 @@ enum AppRoute: Hashable {
     /// 番号を持つ製品画面ではなくエンジニアリング用の診断画面のため、
     /// 固定SCR番号を持つ`SettingsSubRoute`ではなくこちらに置いている。
     case launchDiagnostics
+    /// 投稿詳細(HQ指示 2026-11-22「Claude Codeへの実装指示：みんなの分析画面」section 7)。
+    /// コミュニティ機能のBackend/APIが無いため、投稿一覧と同じダミーデータ
+    /// (`communityDummyPosts`、`StrategyAnalysis/StrategyAnalysisCommunity.swift`)を
+    /// `id`で引いて表示するのみ。
+    case communityPostDetail(id: String)
 }
