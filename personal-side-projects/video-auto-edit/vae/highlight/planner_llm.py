@@ -23,7 +23,10 @@ MODEL = "claude-sonnet-5-5"
 PRICE_USD_PER_MTOK = {"input": 2.0, "output": 10.0, "cache_read": 0.10, "cache_write": 2.5}
 JPY_PER_USD = 155.0                       # 見積もり用の為替(実費の円換算は請求のレートによる)
 BUDGET_JPY = 500.0
-LEDGER = os.path.expanduser(os.environ.get("VAE_LLM_LEDGER", "~/.cache/vae/llm_ledger.json"))
+MAX_RUNS = 1                              # オーナーの条件: 実際に送るのは1回だけ(失敗・拒否も1回に数える)
+_REPO_LEDGER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "docs", "autonomous-hq", "llm_ledger.json")
+# 台帳はコンテナを作り直しても消えないよう、リポジトリの docs に置く(キー・動画・本文は書かない。日時・トークン数・円だけ)
+LEDGER = os.path.normpath(os.path.expanduser(os.environ.get("VAE_LLM_LEDGER", _REPO_LEDGER)))
 MAX_OUTPUT_TOKENS = 12000
 IMAGE_SHORT = 384                         # 送る画像の短辺(画素)
 MAX_IMAGES = 160
@@ -70,6 +73,10 @@ def estimate(content, max_output=MAX_OUTPUT_TOKENS, n_images=0, image_tokens=0):
 
 
 def check_budget(est, ledger):
+    sent = [r for r in ledger["runs"] if r.get("status") in ("started", "ok", "error", "refusal")]
+    if len(sent) >= ledger.get("max_runs", MAX_RUNS):
+        raise BudgetExceeded(f"実際に送る回数の上限({ledger.get('max_runs', MAX_RUNS)} 回)に達しています。"
+                             "もう一度送るには、オーナーの事前承認が必要です(自動の再試行はしません)。")
     total = spent_jpy(ledger) + est["jpy_worst"]
     if total > ledger.get("cap_jpy", BUDGET_JPY) + 1e-9:
         raise BudgetExceeded(f"累計の見込み {total:.0f} 円が上限 {ledger.get('cap_jpy', BUDGET_JPY):.0f} 円を超えます"

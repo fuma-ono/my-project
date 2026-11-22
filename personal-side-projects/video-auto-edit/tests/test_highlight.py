@@ -1,4 +1,6 @@
 """ハイライト PoC の構成判断(planner)の規則。モデルを使わず、特徴量を直接与えて確かめる"""
+import os
+
 import numpy as np
 
 from vae.highlight import music, planner
@@ -274,3 +276,19 @@ def test_very_short_fragments_are_not_subtitled():
                       {"s": 1.0, "e": 1.5, "w": "ほ", "p": 0.9}, {"s": 1.5, "e": 2.4, "w": "ん", "p": 0.9}]}
     groups, dropped = hrender.confident_words(clip, 0.0, 3.0)
     assert [[w["w"] for w in g] for g in groups] == [["ほ", "ん"]] and dropped == 1
+
+
+def test_llm_runs_only_once(tmp_path):
+    """オーナーの条件: 実際に送るのは1回だけ。失敗した後の再実行も止める"""
+    from vae.highlight import planner_llm as pl
+    led = pl.load_ledger(str(tmp_path / "none.json"))
+    est = {"jpy_worst": 10.0}
+    pl.check_budget(est, led)                                   # 最初は通る
+    led["runs"].append({"status": "error", "jpy": 10.0})
+    with pytest.raises(pl.BudgetExceeded):
+        pl.check_budget(est, led)
+
+
+def test_llm_default_ledger_is_in_repo_docs():
+    from vae.highlight import planner_llm as pl
+    assert pl.LEDGER.endswith(os.path.join("docs", "autonomous-hq", "llm_ledger.json")) or os.environ.get("VAE_LLM_LEDGER")
