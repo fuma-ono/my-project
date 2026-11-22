@@ -707,22 +707,26 @@ private struct CommunityPostCard: View {
         .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .overlay(alignment: .topTrailing) {
-            VStack(spacing: 4) {
+            // ユーザー指摘(2026-11-22、CI実機スクショ確認): チャート+「詳しく見る」の
+            // 縦の合計がカード本体(見出し・タイトル・本文・フッター)の実高さを超え、
+            // 次の投稿の先頭(フォロー中ボタン等)と重なっていた。チャートを少し
+            // 小さくし、上の余白も詰めて、カード内に収まるようにした。
+            VStack(spacing: 3) {
                 CommunityChartIllustration(direction: post.direction.kind)
-                    .frame(width: 92, height: 76)
+                    .frame(width: 84, height: 58)
                 NavigationLink(value: AppRoute.communityPostDetail(id: post.id)) {
                     HStack(spacing: 2) {
-                        NotoText.text("詳しく見る", size: 6).foregroundStyle(V5P.blue)
+                        NotoText.text("詳しく見る", size: 5.8).foregroundStyle(V5P.blue)
                         Image(systemName: "chevron.right").font(.system(size: 5, weight: .bold)).foregroundStyle(V5P.blue)
                     }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2.5)
                     .overlay(Capsule().stroke(V5P.blue, lineWidth: 0.7))
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.top, 34)
+            .padding(.top, 28)
             .padding(.trailing, 7)
         }
         .accessibilityIdentifier("communityPostCard_\(post.id)")
