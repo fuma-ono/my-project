@@ -106,7 +106,7 @@ def test_subtitle_stats_and_axes_smoke():
     m = {"selection": q.selection_stats(clips, edl), "story": q.story_stats(clips, edl, q.clip_usability(clips)), "repeat": {"repeat_sec": 0.0},
          "same_clip_overlap": 0.0, "cuts": q.cut_stats(edl, 0.5), "straddle": 0, "speech_cuts": 0,
          "audio": {"true_peak_dbtp": -2.0, "integrated_lufs": -16.0, "lra": 5.0, "speech_prominence": 8.0},
-         "subtitles": sb, "cer": None, "clip_usability": q.clip_usability(clips),
+         "subtitles": sb, "cer": None, "clip_usability": q.clip_usability(clips), "clips_used": ["a.mp4"],
          "finish": {"black_sec": 0.0, "freeze_sec": 0.0, "dark_share": 0.0, "luma_jump_share": 0.0, "short_side": 1080}}
     ax = q.score_axes(m, labels={"clips": {"a.mp4": {"expected_video": "usable"}}})
     assert set(ax) == set(q.AXES)
@@ -122,3 +122,24 @@ def test_cer_events_matches_against_a_part_of_the_script():
     assert q.cer_events(ref, ["公園に出掛けました"]) == pytest.approx(1 / 9, abs=1e-3)           # 1 文字違い
     assert q.cer_events(ref, ["まったく違う内容です"]) > 0.5
     assert q.cer_events(ref, []) is None
+
+
+def test_understanding_scores_the_engines_decision_not_the_meter():
+    """映像・内容の理解は、エンジンが使えない動画を使ったか(ラベルとの比較)で採点する。測定器の判定の一致は参考値(採点しない)"""
+    clips = [{"idx": 0, "name": "good.mp4", "frames": _frames(20, faces=1)}, {"idx": 1, "name": "black.mp4", "frames": _frames(20, bright=2, sharp=0)}]
+    labels = {"clips": {"good.mp4": {"expected_video": "usable"}, "black.mp4": {"expected_video": "unusable"}}}
+    base = {"selection": {"unusable_selected_share": 0, "lift_percentile": 60}, "story": {"unusable_clips_used": 0, "coverage_usable": 1.0, "length_ratio_to_target": 1.0,
+            "chronology_adjacent_ok": None}, "repeat": {"repeat_sec": 0}, "same_clip_overlap": 0, "cuts": q.cut_stats({"segments": [_seg(0, 0, 4, dur=4.0)]}, 0.5),
+            "straddle": 0, "speech_cuts": 0, "audio": {"true_peak_dbtp": -2, "integrated_lufs": -16, "lra": 5, "speech_prominence": 1.0}, "subtitles": None, "cer": None,
+            "clip_usability": q.clip_usability(clips), "finish": {"black_sec": 0, "freeze_sec": 0, "dark_share": 0, "luma_jump_share": 0, "short_side": 1080}}
+    good = q.score_axes(dict(base, clips_used=["good.mp4"]), labels)["understanding"]
+    bad = q.score_axes(dict(base, clips_used=["good.mp4", "black.mp4"]), labels)["understanding"]
+    assert good["score"] == 5.0 and bad["score"] == 0.0 and "black.mp4" in bad["indicators"][0]["rule"]
+    assert good["indicators"][1]["score"] is None                                # 測定器の校正は、採点しない
+    assert q.score_axes(dict(base, clips_used=["good.mp4"]), labels)["audio"]["indicators"][-1]["score"] is None   # 会話の音量差は参考値
+
+
+def test_repeated_footage_ignores_dark_frames():
+    rng = np.random.default_rng(1)
+    dark = rng.random((9, 16)) * 12                                              # ほぼ黒の雑音(平均 6)。同じ画が続いても『繰り返し』にしない
+    assert q.repeated_footage(np.array([dark] * 12, np.float32), min_gap_sec=1.0)["repeat_sec"] == 0

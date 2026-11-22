@@ -233,7 +233,7 @@ def run(a):
          "same_clip_overlap": q.same_clip_overlap(edl), "cuts": cs, "straddle": q.straddled_source_cuts(clips, edl), "speech_cuts": q.speech_cuts(clips, edl),
          "audio": {k: L[k] for k in ("integrated_lufs", "lra", "true_peak_dbtp")} | {"speech_prominence": q.speech_prominence(L["m_series"], tl)},
          "subtitles": sub, "subtitle_sentences_dropped_low_confidence": info.get("subtitle_sentences_dropped_low_confidence"), "cer": cer,
-         "clip_usability": usability,
+         "clip_usability": usability, "clips_used": sorted({clips[sg["clip"]]["name"] for sg in edl["segments"]}),
          "finish": {**bf, "dark_share": round(float((g10.mean(axis=(1, 2)) < 35).mean()), 3), "luma_jump_share": lj["share_over_thr"] or 0.0,
                     "luma_jumps": lj["jumps"], "short_side": min(info["size"])}}
     axes = q.score_axes(m, labels)

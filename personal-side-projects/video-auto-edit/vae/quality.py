@@ -83,13 +83,13 @@ def black_freeze(path):
     return {"black_sec": round(black, 2), "freeze_sec": round(freeze, 2)}
 
 
-def repeated_footage(gray2fps, min_gap_sec=3.0, corr=0.985, min_std=8.0):
-    """出力の中で、離れた時刻に、ほぼ同じ画が出ている秒数(同じ映像の繰り返し)。平らな画(黒など)は数えない"""
+def repeated_footage(gray2fps, min_gap_sec=3.0, corr=0.985, min_std=8.0, min_mean=20.0):
+    """出力の中で、離れた時刻に、ほぼ同じ画が出ている秒数(同じ映像の繰り返し)。平らな画・真っ暗な画は数えない(黒フレームの指標で測る)"""
     n = len(gray2fps)
     if n < 2:
         return {"repeat_sec": 0.0, "pairs": []}
     f = gray2fps.reshape(n, -1)
-    keep = f.std(axis=1) >= min_std
+    keep = (f.std(axis=1) >= min_std) & (f.mean(axis=1) >= min_mean)
     z = (f - f.mean(axis=1, keepdims=True)) / (f.std(axis=1, keepdims=True) + 1e-6)
     c = (z @ z.T) / f.shape[1]
     gap = int(round(min_gap_sec * 2))
@@ -315,20 +315,30 @@ def cer_events(ref, texts):
 def score_axes(m, labels=None):
     """m: 測定値の dict。戻り値: 軸ごとの {score(自動指標の平均), n, indicators}。人の評価が必要な軸は human_needed を付ける"""
     ax = {}
-    # 1) 映像・内容の理解: 正解ラベルがあるときだけ測る(使える/使えない動画の見分け)
+    # 1) 映像・内容の理解: エンジンの判断(その動画を使ったか)を、正解ラベル(使える/使えない)と比べる。ラベルがあるときだけ測る
     inds = []
-    if labels and m.get("clip_usability") is not None:
+    if labels and m.get("clip_usability") is not None and m.get("clips_used") is not None:
         exp = labels.get("clips", {})
         hit = tot = 0
+        calib_hit = calib_tot = 0
+        wrong = []
         for k, v in m["clip_usability"].items():
             e = exp.get(v["name"])
             if e is None:
                 continue
+            want_use = e["expected_video"] == "usable"
+            used = v["name"] in m["clips_used"]
             tot += 1
-            hit += (v["usable"] == (e["expected_video"] == "usable"))
+            hit += (used == want_use)
+            if used != want_use:
+                wrong.append(v["name"])
+            calib_tot += 1
+            calib_hit += (v["usable"] == want_use)
         if tot:
-            inds.append(ind("使える動画・使えない動画の見分けの一致率(ラベルとの比較)", round(hit / tot, 3), lin(hit / tot, 0.5, 1.0),
-                            "ラベルと一致 100% で 5 点、50% 以下で 0 点", "割合"))
+            inds.append(ind("エンジンの採否とラベルの一致率(使える動画は使い、使えない動画は使わない)", round(hit / tot, 3), lin(hit / tot, 0.5, 1.0),
+                            "ラベルと一致 100% で 5 点、50% 以下で 0 点" + (f"。不一致: {', '.join(wrong)}" if wrong else ""), "割合"))
+            inds.append(ind("(参考)測定器の『使える・使えない』判定とラベルの一致率", round(calib_hit / calib_tot, 3), None,
+                            "測定器の校正の確認。採点しない。低ければ、閾値かラベルを見直す", "割合"))
     ax["understanding"] = axis_score(inds)
     # 2) ベストシーンの選択
     s = m["selection"]
@@ -371,7 +381,8 @@ def score_axes(m, labels=None):
                 lin(None if a["integrated_lufs"] is None else abs(a["integrated_lufs"] + 16), 6, 2), "差 2 LU 以内で 5 点、6 LU 以上で 0 点", "LU"),
             ind("ラウドネスレンジ", a["lra"], lin(a["lra"], 14, 7), "7 LU 以下で 5 点、14 LU 以上で 0 点", "LU")]
     if a.get("speech_prominence") is not None:
-        inds.append(ind("会話の区間とそれ以外の音量差", a["speech_prominence"], lin(a["speech_prominence"], 0, 6), "6 LU 以上で 5 点、0 以下で 0 点", "LU"))
+        inds.append(ind("(参考)会話の区間とそれ以外の音量差", a["speech_prominence"], None,
+                        "採点しない。BGM だけの区間も、設計上、会話と同程度の音量のため、声の聞き取りやすさを表さない。声と BGM を分けた測定が必要(改善計画)", "LU"))
     ax["audio"] = axis_score(inds)
     # 7) 字幕
     sb = m.get("subtitles")
