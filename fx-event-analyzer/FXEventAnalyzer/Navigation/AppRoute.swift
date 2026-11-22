@@ -34,7 +34,9 @@ enum AppRoute: Hashable {
     /// SCR-009 過去イベント比較。
     case historicalComparison(indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String)
     /// Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48)。イベント詳細から開く。
-    case eventStrategyAnalysis(eventId: String, indicatorName: String, fxPairId: String?)
+    /// HQ指示(2026-11-12「ピクセル単位の再現」)で`releaseDatetime`を追加: 「次回イベント」カードに
+    /// この発表自体の日時(過去の発表ではなく、今見ているイベントそのものの日時)を表示するため。
+    case eventStrategyAnalysis(eventId: String, indicatorName: String, fxPairId: String?, releaseDatetime: Date)
 
     // MARK: - ui-screens.md v2.0 (2026-09-29 HQ承認, 2-b) 向けの新規ケース
     //
@@ -94,4 +96,9 @@ enum AppRoute: Hashable {
     /// 番号を持つ製品画面ではなくエンジニアリング用の診断画面のため、
     /// 固定SCR番号を持つ`SettingsSubRoute`ではなくこちらに置いている。
     case launchDiagnostics
+    /// 投稿詳細(HQ指示 2026-11-22「Claude Codeへの実装指示：みんなの分析画面」section 7)。
+    /// コミュニティ機能のBackend/APIが無いため、投稿一覧と同じダミーデータ
+    /// (`communityDummyPosts`、`StrategyAnalysis/StrategyAnalysisCommunity.swift`)を
+    /// `id`で引いて表示するのみ。
+    case communityPostDetail(id: String)
 }

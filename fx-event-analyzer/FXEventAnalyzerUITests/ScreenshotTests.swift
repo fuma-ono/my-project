@@ -188,13 +188,101 @@ final class ScreenshotTests: XCTestCase {
         // HQ指示(2026-11-07「画面デザインの変更」): カード単位の色分け表示に変更されたため、確認する文言も
         // 新しいデザインで実際に見える文言(カードの見出し・内訳の件数・補足事項)に合わせている。
         tapIdentifier("eventDetailStrategyAnalysisLink")
-        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 15), "Strategy analysis did not load")
-        XCTAssertTrue(
-            waitForAnyElement(containing: "両方 1回", timeout: 5),
-            "The high/low break overlap breakdown is not shown"
-        )
-        XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
+        XCTAssertTrue(waitForAnyElement(containing: "イベント発表後の値動きと過去事例を分析", timeout: 15), "Strategy analysis did not load")
         capture("07b-EventStrategyAnalysis")
+        // HQ指示(2026-11-12「ピクセル単位の再現」)で初動分析・継続反転分析・過去事例比較・
+        // リスク分析の4カードを既存カードより前に置いたため、内訳(LazyVGrid)を含む
+        // 「過去5回の分析結果」カードは画面下方にスクロールしないと現れない
+        // (`scrollUntilHittable`を使う既存の「Sell the Fact 分析」等と同じ理由)。
+        XCTAssertTrue(scrollUntilHittable(containing: "両方 1回"), "The high/low break overlap breakdown is not shown")
+        XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
+        capture("07b-EventStrategyAnalysis-Detail")
+
+        // タブバー(StrategyAnalysisTabBar)はカードと同じScrollViewの中にあり、直前の
+        // scrollUntilHittableで画面上部から外れている。tapFirstHittableの自動スクロール
+        // 復帰は12回のスワイプ・10秒の期限内に収まらないことがあり、「タップ可能な要素が
+        // 見つからない」で失敗する(CI 43135123567で確認)。既存の「過去との比較」カード後の
+        // 復帰(line 289付近のfor _ in 0..<4)と同じ考え方で、タブをタップする前に明示的に
+        // 画面上部まで戻す。
+        for _ in 0..<10 { app.swipeDown(velocity: .slow) }
+
+        // HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): 市場分析・価格帯分析の2タブは、
+        // タブバー自体の見た目(アイコン+ラベル+下線)を先に作り直した段階であり、中身はまだ
+        // 「準備中」のプレースホルダー(架空の値は出さない)。
+        tapIdentifier("strategyAnalysisTab_marketAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "市場分析", timeout: 5), "Market analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Market analysis tab did not mark its content as still in preparation")
+        capture("07d-StrategyAnalysis-MarketAnalysis")
+
+        tapIdentifier("strategyAnalysisTab_priceRangeAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "価格帯分析", timeout: 5), "Price range analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Price range analysis tab did not mark its content as still in preparation")
+        capture("07e-StrategyAnalysis-PriceRangeAnalysis")
+
+        // HQ指示(2026-11-19「みんなの分析画面を実装」、参考画像つき): フィルターピル・市場予想
+        // アンケート・投稿一覧を実装(ユーザー判断によりダミーデータ、api-design.md未対応のBackend
+        // コミュニティ機能の代わり)。
+        tapIdentifier("strategyAnalysisTab_communityAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "おすすめ", timeout: 5), "Community analysis tab did not render its filter pills")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 5), "Community analysis tab did not render its market poll card")
+        XCTAssertTrue(waitForAnyElement(containing: "FXトレーダーK", timeout: 5), "Community analysis tab did not render its post list")
+        capture("07f-StrategyAnalysis-CommunityAnalysis")
+
+        // HQ指示(2026-11-22「Claude Codeへの実装指示：みんなの分析画面」)で追加した
+        // 投稿詳細・ランキング・投稿作成/アンケート作成の各導線を確認する。いずれも
+        // Backend/API未対応のため架空のデータ・送信は行わない(非機能プレースホルダー)。
+
+        // section 7: 投稿詳細画面。
+        tap(containing: "FXトレーダーK")
+        XCTAssertTrue(waitForAnyElement(containing: "分析根拠", timeout: 5), "Community post detail did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "米CPIの結果を受けて", timeout: 5), "Community post detail did not show the full title")
+        capture("07g-StrategyAnalysis-CommunityPostDetail")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 10), "Did not return to the community tab from post detail")
+
+        // section 8: ランキング(人気投稿/人気ユーザー/分析精度)。このテスト対象は
+        // 本体ターゲットを`@testable import`しない純粋なXCUITestのため、
+        // `CommunityFilter`のcase名ではなく、実装側と同じ連番(0=おすすめ…4=ランキング)を
+        // そのまま識別子の一部として使う。
+        // CIで判明: フィルターピル行(`CommunityFilterPillRow`)は横方向の
+        // `ScrollView`で、5つのピル全体の幅が214ptの表示幅を超えるため、
+        // 「ランキング」(5番目)は初期状態では画面外にある。`tapIdentifier`の
+        // 既存の自動スクロール復帰(`tapFirstHittable`)は縦方向のスワイプしか
+        // 行わないため、横スクロールが必要なこの行には効かない
+        // (実機CIで`Could not find a tappable element with identifier
+        // 'communityFilterPill_4'`として再現・特定した)。
+        // 要素(`XCUIElement`)への`swipeLeft()`/`swipeRight()`も試したが、
+        // 「visible frame is empty」で失敗することがあり(ネストした
+        // ScrollViewの中の要素は可視矩形の解決が不安定)、`tapV5`と同じ
+        // 座標ベースのジェスチャ(`swipeV5`)に切り替えた。
+        swipeV5(fromX: 200, toX: 30, y: 117, times: 3)
+        tapIdentifier("communityFilterPill_4")
+        XCTAssertTrue(waitForAnyElement(containing: "人気投稿", timeout: 5), "Community ranking view did not render its segments")
+        XCTAssertTrue(waitForAnyElement(containing: "分析精度", timeout: 5), "Community ranking view is missing the analysis-accuracy segment")
+        capture("07h-StrategyAnalysis-CommunityRanking")
+        swipeV5(fromX: 30, toX: 200, y: 117, times: 3)
+        tapIdentifier("communityFilterPill_0")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 5), "Did not return to the recommended feed from ranking")
+
+        // section 6: 「＋」投稿作成ボタン→選択メニュー→「分析を投稿」。
+        tapIdentifier("communityComposeFAB")
+        tap(containing: "分析を投稿")
+        XCTAssertTrue(waitForAnyElement(containing: "分析タイトル", timeout: 5), "Post compose form did not render")
+        capture("07i-StrategyAnalysis-CommunityPostCompose")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 10), "Did not return to the community tab after closing post compose")
+
+        // section 6: 「＋」投稿作成ボタン→選択メニュー→「予想アンケートを作成」。
+        tapIdentifier("communityComposeFAB")
+        tap(containing: "予想アンケートを作成")
+        XCTAssertTrue(waitForAnyElement(containing: "回答期限", timeout: 5), "Poll compose form did not render")
+        capture("07j-StrategyAnalysis-CommunityPollCompose")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "公式アンケート", timeout: 10), "Did not return to the community tab after closing poll compose")
+
+        tapIdentifier("strategyAnalysisTab_eventAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 5), "Did not return to the event analysis tab")
+
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
         // HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): 遷移してよいかは
@@ -589,17 +677,18 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
 
         tapIdentifier("eventDetailStrategyAnalysisLink")
-        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 15), "Strategy analysis did not load")
-        XCTAssertTrue(
-            waitForAnyElement(containing: "両方 1回", timeout: 5),
-            "The high/low break overlap breakdown is not shown"
-        )
+        // HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): ヘッダーカード・次回イベント・
+        // 初動分析・継続反転分析・過去事例比較・リスク分析の順で、スクロールなしで上から見える。
+        XCTAssertTrue(waitForAnyElement(containing: "イベント発表後の値動きと過去事例を分析", timeout: 15), "Strategy analysis did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "上昇確率", timeout: 5), "初動分析 did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "継続確率", timeout: 5), "継続・反転分析 did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "類似イベント数", timeout: 5), "過去事例比較 did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "リスクレベル", timeout: 5), "リスク分析 did not render")
         capture("07b-EventStrategyAnalysis-Standalone-Top")
 
-        XCTAssertTrue(
-            scrollUntilHittable(containing: "Sell the Fact 分析"),
-            "Did not scroll to the Sell the Fact card"
-        )
+        // 既存の詳しい内訳(高値・安値ブレイク等)は、新しい4カードの後ろにスクロールして
+        // 残したまま撮る(`scrollUntilHittable`を使う理由は上のtestCaptureAllScreens参照)。
+        XCTAssertTrue(scrollUntilHittable(containing: "両方 1回"), "The high/low break overlap breakdown is not shown")
         capture("07b-EventStrategyAnalysis-Standalone-Middle")
 
         XCTAssertTrue(scrollUntilHittable(containing: "補足事項"), "Did not scroll to the notes card")
@@ -1178,6 +1267,25 @@ final class ScreenshotTests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: dx, dy: dy)).tap()
     }
 
+    /// `tapV5`と同じV5キャンバス座標系(234×491)で、(fromX, y)から(toX, y)への
+    /// 横方向のドラッグ(スワイプ)を`times`回繰り返す。`CommunityFilterPillRow`のような
+    /// 横スクロールの`ScrollView`は、個々の要素への`XCUIElement.swipeLeft()`/
+    /// `swipeRight()`が「visible frame is empty」で不安定に失敗することがあるため、
+    /// 要素を介さずアプリ全体の座標に対して直接ジェスチャを合成する。
+    private func swipeV5(fromX: CGFloat, toX: CGFloat, y: CGFloat, times: Int = 1) {
+        let frame = app.frame
+        let scale = min(frame.width / 234, frame.height / 491)
+        let originX = (frame.width - 234 * scale) / 2
+        let originY = (frame.height - 491 * scale) / 2
+        let start = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: originX + fromX * scale, dy: originY + y * scale))
+        let end = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: originX + toX * scale, dy: originY + y * scale))
+        for _ in 0..<times {
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+    }
+
     // MARK: - Helpers
 
     /// Taps a text field and types into it only once the keyboard is up.
@@ -1265,6 +1373,7 @@ final class ScreenshotTests: XCTestCase {
             XCTFail("Could not find a tappable element with identifier '\(identifier)' within \(timeout)s")
         }
     }
+
 
     private func waitForAnyElement(containing text: String, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)

@@ -35,12 +35,13 @@ struct AppRouteDestinationView: View {
                 fxPairSymbol: fxPairSymbol,
                 tabSelection: $tabSelection
             )
-        case .eventStrategyAnalysis(let eventId, let indicatorName, let fxPairId):
+        case .eventStrategyAnalysis(let eventId, let indicatorName, let fxPairId, let releaseDatetime):
             StrategyAnalysisView(
                 apiClient: apiClient,
                 eventId: eventId,
                 indicatorName: indicatorName,
                 fxPairId: fxPairId,
+                releaseDatetime: releaseDatetime,
                 tabSelection: $tabSelection
             )
         case .account:
@@ -97,6 +98,8 @@ struct AppRouteDestinationView: View {
             PlaceholderScreenView(scrNumber: "SCR-003", screenName: "パスワード再設定")
                 .navigationTitle("パスワード再設定")
                 .navigationBarTitleDisplayMode(.inline)
+        case .communityPostDetail(let id):
+            CommunityPostDetailView(postId: id, tabSelection: $tabSelection)
         }
     }
 }
