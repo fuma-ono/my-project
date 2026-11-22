@@ -39,6 +39,7 @@ def cpu():
 
 def contact_sheet(clips, segs, out, work):
     by = {c["idx"]: c for c in clips}
+    os.makedirs(work, exist_ok=True)
     thumbs = []
     for i, s in enumerate(segs):
         p = os.path.join(work, f"thumb{i:03d}.jpg")
