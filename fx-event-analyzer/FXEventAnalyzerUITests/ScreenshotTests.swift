@@ -250,17 +250,17 @@ final class ScreenshotTests: XCTestCase {
         // 既存の自動スクロール復帰(`tapFirstHittable`)は縦方向のスワイプしか
         // 行わないため、横スクロールが必要なこの行には効かない
         // (実機CIで`Could not find a tappable element with identifier
-        // 'communityFilterPill_4'`として再現・特定した)。ピル行の中の要素を
-        // 明示的に横スワイプしてから探す。
-        let recommendedPill = firstElement(identifier: "communityFilterPill_0")
-        XCTAssertTrue(recommendedPill.waitForExistence(timeout: 5), "Community filter pill row did not render")
-        for _ in 0..<4 { recommendedPill.swipeLeft() }
+        // 'communityFilterPill_4'`として再現・特定した)。
+        // 要素(`XCUIElement`)への`swipeLeft()`/`swipeRight()`も試したが、
+        // 「visible frame is empty」で失敗することがあり(ネストした
+        // ScrollViewの中の要素は可視矩形の解決が不安定)、`tapV5`と同じ
+        // 座標ベースのジェスチャ(`swipeV5`)に切り替えた。
+        swipeV5(fromX: 200, toX: 30, y: 117, times: 3)
         tapIdentifier("communityFilterPill_4")
         XCTAssertTrue(waitForAnyElement(containing: "人気投稿", timeout: 5), "Community ranking view did not render its segments")
         XCTAssertTrue(waitForAnyElement(containing: "分析精度", timeout: 5), "Community ranking view is missing the analysis-accuracy segment")
         capture("07h-StrategyAnalysis-CommunityRanking")
-        let rankingPill = firstElement(identifier: "communityFilterPill_4")
-        for _ in 0..<4 { rankingPill.swipeRight() }
+        swipeV5(fromX: 30, toX: 200, y: 117, times: 3)
         tapIdentifier("communityFilterPill_0")
         XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 5), "Did not return to the recommended feed from ranking")
 
@@ -1187,6 +1187,25 @@ final class ScreenshotTests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: dx, dy: dy)).tap()
     }
 
+    /// `tapV5`と同じV5キャンバス座標系(234×491)で、(fromX, y)から(toX, y)への
+    /// 横方向のドラッグ(スワイプ)を`times`回繰り返す。`CommunityFilterPillRow`のような
+    /// 横スクロールの`ScrollView`は、個々の要素への`XCUIElement.swipeLeft()`/
+    /// `swipeRight()`が「visible frame is empty」で不安定に失敗することがあるため、
+    /// 要素を介さずアプリ全体の座標に対して直接ジェスチャを合成する。
+    private func swipeV5(fromX: CGFloat, toX: CGFloat, y: CGFloat, times: Int = 1) {
+        let frame = app.frame
+        let scale = min(frame.width / 234, frame.height / 491)
+        let originX = (frame.width - 234 * scale) / 2
+        let originY = (frame.height - 491 * scale) / 2
+        let start = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: originX + fromX * scale, dy: originY + y * scale))
+        let end = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: originX + toX * scale, dy: originY + y * scale))
+        for _ in 0..<times {
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+    }
+
     // MARK: - Helpers
 
     /// Taps a text field and types into it only once the keyboard is up.
@@ -1275,17 +1294,6 @@ final class ScreenshotTests: XCTestCase {
         }
     }
 
-    /// `accessibilityIdentifier`に合う要素を1つ返す(存在しなくても例外にしない)。
-    /// `communityFilterPill_*`のように横スクロールの`ScrollView`内にあり、`tapIdentifier`の
-    /// 縦方向の自動スクロール復帰では届かない要素を、呼び出し側で明示的に
-    /// `swipeLeft()`/`swipeRight()`するために使う。
-    private func firstElement(identifier: String) -> XCUIElement {
-        for query in [app.buttons, app.cells, app.otherElements] {
-            let match = query.matching(identifier: identifier).firstMatch
-            if match.exists { return match }
-        }
-        return app.buttons[identifier]
-    }
 
     private func waitForAnyElement(containing text: String, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)
