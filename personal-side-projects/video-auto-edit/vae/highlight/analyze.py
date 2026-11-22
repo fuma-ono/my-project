@@ -59,6 +59,17 @@ def read_frames(path, info):
     return np.frombuffer(raw[:n * w * h * 3], np.uint8).reshape(n, h, w, 3)
 
 
+CUT_THRESHOLD = 0.1          # ffmpeg の場面変化の値(0〜1)。元動画の切り替わり(編集済み・複数の撮影)を見つける
+
+
+def detect_cuts(path, duration):
+    """元動画の中のハードカット(場面の切り替わり)の時刻(秒)。区間がまたがないようにするために使う"""
+    err = proc.run_stderr(["ffmpeg", "-nostats", "-i", path, "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo",
+                           "-f", "null", "-"], timeout=proc.timeout_for(duration, factor=6.0))
+    import re
+    return sorted({round(float(t), 3) for t in re.findall(r"pts_time:([0-9.]+)", err) if 0.2 < float(t) < duration - 0.2})
+
+
 def read_audio16(path, duration):
     raw = proc.run_bytes(["ffmpeg", "-v", "error", "-i", path, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
                          timeout=proc.timeout_for(duration, factor=2.0))
@@ -140,7 +151,7 @@ class Analyzer:
         emb = self.clip.images(list(frames))
         probs = self.categorize(emb)
         appeal = (emb @ self.app_emb.T).max(axis=1) - (emb @ self.neg_emb.T).max(axis=1)
-        speech, words = [], []
+        speech, words, tsegs = [], [], []
         loud = [0.0] * len(frames)
         if info.acodec:
             a16 = read_audio16(path, info.duration)
@@ -149,12 +160,13 @@ class Analyzer:
                 speech = self.vad_fn(a16)
             if self.transcriber and speech:
                 tr = self.transcriber(a16)
-                words = tr.words
+                words, tsegs = tr.words, tr.segments
         shots = shots_from_embeddings(emb, stats)
+        cuts = detect_cuts(path, info.duration)
         return {"idx": idx, "path": path, "name": os.path.basename(path), "duration": info.duration,
                 "width": info.width, "height": info.height, "fps": f"{info.fps_num}/{info.fps_den}",
                 "has_audio": bool(info.acodec), "created": when, "created_source": when_src,
                 "frames": [dict(s, t=i / FPS, appeal=float(appeal[i]), loud=loud[i],
                                 cat={k: float(probs[i, j]) for j, k in enumerate(self.cat_keys)}) for i, s in enumerate(stats)],
-                "emb": emb, "shots": shots, "speech": speech, "words": words,
+                "emb": emb, "shots": shots, "speech": speech, "words": words, "tsegments": tsegs, "cuts": cuts,
                 "analyze_sec": round(time.time() - t0, 2)}

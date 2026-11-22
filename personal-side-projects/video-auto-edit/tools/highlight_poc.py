@@ -65,7 +65,7 @@ def main(argv=None):
     ap.add_argument("--target", type=float)
     ap.add_argument("--mood", choices=list(music.MOODS))
     ap.add_argument("--no-transcribe", action="store_true")
-    ap.add_argument("--model", default="small")
+    ap.add_argument("--model", default="medium")           # small は雑音のある会話で崩れた(2026-11-22)。既定は medium
     ap.add_argument("--short", type=int, default=1080)
     ap.add_argument("--manifest", help="stock_dataset.py の台帳(manifest.json)。ストック動画には撮影日時が無いので、台帳の順を"
                                        "擬似の撮影順(15分おき)として使う。擬似であることを Sonnet にも伝え、評価シートにも書く")

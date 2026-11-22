@@ -44,7 +44,35 @@ def frame_scores(clips):
             k += 1
 
 
-def candidates(clips, min_len=1.5, max_len=5.0, speech_max=9.0):
+CUT_MARGIN = 0.12                         # 場面の切り替わりから離す秒数(前後のコマが混ざらないように)
+MIN_SEC_PER_CUT = 3.0                     # 完成動画の中で、区間1つあたりの平均の長さの目安(切れ目が多すぎないように)
+
+
+def trim_to_shot(start, end, cuts, margin=CUT_MARGIN):
+    """区間 [start, end] が元動画の切り替わりをまたぐとき、いちばん長い側だけにする。またがなければそのまま"""
+    inside = [t for t in cuts if start + 0.2 < t < end - 0.2]
+    s, e = start, end
+    if inside:
+        pts = [start] + inside + [end]
+        best = max(range(len(pts) - 1), key=lambda i: pts[i + 1] - pts[i])
+        s = pts[best] + (margin if best > 0 else 0.0)
+        e = pts[best + 1] - (margin if best + 1 < len(pts) - 1 else 0.0)
+    for t in cuts:                                              # 端のすぐそばの切り替わりも、またがない(外へ寄せる)
+        if s - 1e-9 <= t <= s + 0.2 + 1e-9:
+            s = t + margin
+        if e - 0.2 - 1e-9 <= t <= e + 1e-9:
+            e = t - margin
+    return round(s, 3), round(e, 3)
+
+
+def shot_bounds(t, cuts, duration, margin=CUT_MARGIN):
+    """時刻 t を含む、切り替わりに挟まれた範囲 (下限, 上限)"""
+    lo = max([0.0] + [c + margin for c in cuts if c + margin <= t])
+    hi = min([duration] + [c - margin for c in cuts if c - margin > t])
+    return lo, hi
+
+
+def candidates(clips, min_len=2.0, max_len=5.0, speech_max=9.0):
     """ショットごとに、最も良い連続区間を候補にする。話している区間は文の切れ目まで含める"""
     out = []
     for c in clips:
@@ -69,6 +97,7 @@ def candidates(clips, min_len=1.5, max_len=5.0, speech_max=9.0):
             for sa, sb in c["speech"]:
                 if sa < e and sb > s and (max(e, sb) - min(s, sa)) <= speech_max:
                     s, e = min(s, sa), max(e, sb)
+            s, e = trim_to_shot(s, e, c.get("cuts", []))                 # 元動画の切り替わりをまたがない
             if e - s < min(min_len, c["duration"]) - 1e-3:
                 continue
             ia, ib = int(s * FPS), max(int(s * FPS) + 1, int(e * FPS))
@@ -100,10 +129,14 @@ def snap_to_beats(chosen, clips, beat):
                 n = max(int(np.ceil(MIN_CUT_SEC / beat / 2)) * 2, int(round(d / beat / 2)) * 2)   # 1秒台の細切れにしない
             c["beats"] = n
             c["dur"] = n * beat
-            clipdur = next(cl["duration"] for cl in clips if cl["idx"] == c["clip"])    # 元の動画の範囲に収める
-            if c["start"] + c["dur"] > clipdur:
-                c["start"] = max(0.0, clipdur - c["dur"])
-            c["end"] = round(min(clipdur, c["start"] + c["dur"]), 3)
+            cl = next(cl for cl in clips if cl["idx"] == c["clip"])
+            clipdur = cl["duration"]
+            lo, hi = shot_bounds((c["start"] + c["end"]) / 2, cl.get("cuts", []), clipdur)     # 元の切り替わりの内側に収める
+            if c["dur"] > hi - lo:
+                c["dur"] = max(beat * 2, int((hi - lo) / beat / 2) * 2 * beat) if not c["speech"] else hi - lo
+            c["start"] = min(max(c["start"], lo), max(lo, hi - c["dur"]))
+            c["end"] = round(min(hi, c["start"] + c["dur"]), 3)
+            c["start"] = round(c["start"], 3)
             c["dur"] = round(c["end"] - c["start"], 3)
     else:
         for c in chosen:
@@ -172,6 +205,15 @@ def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93,
         reasons.setdefault(id(c), "不採用: 長さの上限に収まらない(評価が下位)")
     # 長すぎるとき: 評価の低いものから落とす(各動画の代表は残す)
     reps = {max(cs, key=lambda c: c["score"])["clip"]: max(cs, key=lambda c: c["score"]) for cs in by_clip.values()}
+    # 切れ目が多すぎないように: 区間1つあたり平均 3 秒以上になる数まで(各動画の代表は残す)
+    max_seg = max(len(reps), int(target / MIN_SEC_PER_CUT))
+    while len(chosen) > max_seg:
+        worst = min((c for c in chosen if reps.get(c["clip"]) is not c), key=lambda c: c["score"], default=None)
+        if worst is None:
+            break
+        chosen.remove(worst)
+        total -= worst["end"] - worst["start"]
+        reasons[id(worst)] = "不採用: 切れ目が多くなりすぎるため(評価が下位)"
     while total > target * 1.25 and len(chosen) > len(reps):
         worst = min((c for c in chosen if reps.get(c["clip"]) is not c), key=lambda c: c["score"])
         chosen.remove(worst)

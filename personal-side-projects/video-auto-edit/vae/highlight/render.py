@@ -9,6 +9,26 @@ from . import music
 
 FPS = 30
 LUFS_MUSIC = -16.0
+SUB_MIN_CONF = 0.75          # 字幕にする文(Whisper の区切り)の、語の確信度の平均の下限。間違った字幕より、字幕なしを選ぶ
+SUB_MIN_WORD = 0.15          # 1語でもこれを下回る文は出さない
+
+
+def confident_words(clip, start, end, min_conf=SUB_MIN_CONF, min_word=SUB_MIN_WORD):
+    """区間 [start, end] の中で、字幕にしてよい語(確信度が高い文だけ)。戻り値: (語のリスト, 出さなかった文の数)"""
+    words = clip.get("words") or []
+    keep, dropped = [], 0
+    for sg in clip.get("tsegments") or []:
+        if sg["e"] <= start or sg["s"] >= end:
+            continue
+        ws = [w for w in words if sg["s"] - 0.05 <= w["s"] <= sg["e"] + 0.05 and start <= w["s"] and w["e"] <= end]
+        if not ws:
+            continue
+        ps = [w["p"] for w in ws]
+        if sum(ps) / len(ps) >= min_conf and min(ps) >= min_word:
+            keep += ws
+        else:
+            dropped += 1
+    return keep, dropped
 
 
 def canvas_for(clips, segments, short=1080):
@@ -109,20 +129,24 @@ def render(clips, edl, out, work, music_track=None, subtitles_on=True, short=108
     mix.astype(np.float32).tofile(wav)
     # 字幕: 採用した区間の会話だけ(元の動画の時刻 → 完成動画の時刻)
     ass = None
+    sub_dropped = 0
     if subtitles_on:
-        words = []
-        for (a, b), s in zip(timeline, segs):
-            for wd in by[s["clip"]].get("words") or []:
-                if s["start"] <= wd["s"] and wd["e"] <= s["end"]:
-                    words.append(dict(wd, s=wd["s"] - s["start"] + a, e=wd["e"] - s["start"] + a))
-        if words:
-            st_fs = max(36, int(min(w, h) * 0.05))
-            evs = subtitles.build_events(words, lambda x: x, w, st_fs, 4, int(w * 0.06))
-            if evs:
-                ass = os.path.join(work, "subs.ass")
-                with open(ass, "w", encoding="utf-8") as f:
-                    f.write(subtitles.to_ass([dict(s=e["s"], e=e["e"], lines=e["lines"]) for e in evs], w, h, st_fs, 4,
-                                             int(w * 0.06), int(h * 0.08)))
+        evs = []
+        st_fs = max(36, int(min(w, h) * 0.05))
+        for (a, b), s in zip(timeline, segs):                  # 出力の区間ごとに作り、区間をまたいで字幕を出さない
+            kept, dr = confident_words(by[s["clip"]], s["start"], s["end"])
+            sub_dropped += dr
+            words = [dict(wd, s=wd["s"] - s["start"] + a, e=min(wd["e"] - s["start"] + a, b)) for wd in kept]
+            if words:
+                for e in subtitles.build_events(words, lambda x: x, w, st_fs, 4, int(w * 0.06)):
+                    e["e"] = min(e["e"], b)
+                    if e["e"] - e["s"] > 0.2:
+                        evs.append(e)
+        if evs:
+            ass = os.path.join(work, "subs.ass")
+            with open(ass, "w", encoding="utf-8") as f:
+                f.write(subtitles.to_ass([dict(s=e["s"], e=e["e"], lines=e["lines"]) for e in evs], w, h, st_fs, 4,
+                                         int(w * 0.06), int(h * 0.08)))
     vf = ["-vf", "ass=subs.ass"] if ass else []
     tmp = os.path.abspath(out) + ".part.mp4"
     proc.run(["ffmpeg", "-y", "-v", "error", "-i", os.path.abspath(video), "-f", "f32le", "-ar", str(sr), "-ac", "2",
@@ -130,4 +154,5 @@ def render(clips, edl, out, work, music_track=None, subtitles_on=True, short=108
               "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
               "-movflags", "+faststart", "-shortest", tmp], timeout=1200, mem_limit_mb=3000, cwd=work if ass else None)
     os.replace(tmp, out)
-    return {"size": [w, h], "duration": round(total, 3), "segments": len(segs), "subtitles": bool(ass)}
+    return {"size": [w, h], "duration": round(total, 3), "segments": len(segs), "subtitles": bool(ass),
+            "subtitle_sentences_dropped_low_confidence": sub_dropped}

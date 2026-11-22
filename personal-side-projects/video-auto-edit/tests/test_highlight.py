@@ -195,3 +195,47 @@ def test_metrics_flags_duplicates_defects_and_speech_cuts():
     m = planner.metrics(clips, edl, beat=0.5)
     assert m["near_duplicate_pairs"] == 1 and m["defect_segments"] == 1 and m["speech_cut_segments"] == 1
     assert m["clips_used"] == 3 and m["beat_error"] == 0.0 and m["ends_with_scenery"]
+
+
+# ------------------------------------------------------------ 実動画で見つかった問題(2026-11-22): 切れ目が多すぎる・字幕が崩れる
+from vae.highlight import render as hrender  # noqa: E402
+
+
+def test_trim_to_shot_never_straddles_a_cut():
+    assert planner.trim_to_shot(11.5, 13.5, [12.35]) == (12.47, 13.5)            # 長い側(12.35〜13.5)だけを使い、切り替わりから離す
+    assert planner.trim_to_shot(11.5, 13.5, []) == (11.5, 13.5)
+    s, e = planner.trim_to_shot(10.0, 16.0, [12.0, 15.8])
+    assert not any(s < c < e for c in (12.0, 15.8))
+
+
+def test_candidates_do_not_cross_source_cuts_and_short_pieces_are_dropped():
+    c = _clip(0, 30, 1000, 0)
+    c["cuts"] = [7.0]                                                           # 15 秒の素材の 7 秒に切り替わり
+    planner.frame_scores([c])
+    for cand in planner.candidates([c]):
+        assert not (cand["start"] + 0.2 < 7.0 < cand["end"] - 0.2)
+        assert cand["end"] - cand["start"] >= 2.0 - 1e-3                        # 2 秒未満の細切れは候補にしない
+
+
+def test_beat_snap_stays_inside_the_shot():
+    c = _clip(0, 40, 1000, 0)
+    c["cuts"] = [10.0]
+    seg = {"clip": 0, "start": 7.6, "end": 9.8, "speech": False, "dur": 2.2}
+    planner.snap_to_beats([seg], [c], 0.5)
+    assert seg["end"] <= 10.0 - planner.CUT_MARGIN + 1e-6                       # 次の切り替わりの手前まで
+
+
+def test_segment_count_is_limited():
+    clips = [_clip(0, 60, 1000, 0)]
+    clips[0]["shots"] = [(i * 8, i * 8 + 8) for i in range(7)]
+    edl = planner.plan(clips, target=12.0, beat=0.5)
+    assert len(edl["segments"]) <= max(1, int(12.0 / planner.MIN_SEC_PER_CUT))
+
+
+def test_subtitles_only_for_confident_sentences():
+    clip = {"tsegments": [{"s": 0.0, "e": 2.0, "text": "確か"}, {"s": 2.0, "e": 4.0, "text": "怪しい"}, {"s": 4.0, "e": 6.0, "text": "ほぼ確か"}],
+            "words": [{"s": 0.1, "e": 0.5, "w": "は", "p": 0.95}, {"s": 0.6, "e": 1.0, "w": "い", "p": 0.9},
+                      {"s": 2.1, "e": 2.5, "w": "え", "p": 0.4}, {"s": 2.6, "e": 3.0, "w": "ん", "p": 0.9},
+                      {"s": 4.1, "e": 4.5, "w": "ふ", "p": 0.99}, {"s": 4.6, "e": 5.0, "w": "む", "p": 0.05}]}
+    kept, dropped = hrender.confident_words(clip, 0.0, 6.0)
+    assert [w["w"] for w in kept] == ["は", "い"] and dropped == 2                # 平均が低い文・1語でも極端に低い文は出さない
