@@ -68,7 +68,7 @@ def main(argv=None):
     ap.add_argument("--no-transcribe", action="store_true")
     ap.add_argument("--model", default="medium")           # small は雑音のある会話で崩れた(2026-11-22)。既定は medium
     ap.add_argument("--short", type=int, default=1080)
-    ap.add_argument("--subtitle-style", default="clean", help="字幕の見た目: clean(標準)/pop(ポップ)/box(帯)/all(3つとも作って見比べる)")
+    ap.add_argument("--subtitle-style", default="clean", help="字幕の見た目: none(字幕なし)/clean(標準)/pop(ポップ)/box(帯)/all(3つとも作って見比べる)")
     ap.add_argument("--manifest", help="stock_dataset.py の台帳(manifest.json)。ストック動画には撮影日時が無いので、台帳の順を"
                                        "擬似の撮影順(15分おき)として使う。擬似であることを Sonnet にも伝え、評価シートにも書く")
     ap.add_argument("--llm", choices=["off", "dry", "run"], default="off",
@@ -113,7 +113,8 @@ def main(argv=None):
         t2 = time.time()
         out = os.path.join(a.out, "highlight.mp4")
         main_style = "clean" if a.subtitle_style == "all" else a.subtitle_style
-        info = hr.render(clips, edl, out, os.path.join(work, "render"), music_track=track, short=a.short, subtitle_style=main_style)
+        info = hr.render(clips, edl, out, os.path.join(work, "render"), music_track=track, short=a.short,
+                         subtitle_style=None if main_style == "none" else main_style, subtitles_on=main_style != "none")
         if a.subtitle_style == "all":                        # 字幕の見た目の比較用(同じ編集で、字幕だけ変える)
             from vae.highlight.render import subtitles as _subs
             for name in _subs.STYLES:
@@ -132,7 +133,8 @@ def main(argv=None):
             if llm_edl:
                 t3 = time.time()
                 hr.render(clips, dict(llm_edl, mood=mood), os.path.join(a.out, "highlight_sonnet.mp4"),
-                          os.path.join(work, "render_llm"), music_track=track, short=a.short)
+                          os.path.join(work, "render_llm"), music_track=track, short=a.short,
+                          subtitle_style=None if main_style == "none" else main_style, subtitles_on=main_style != "none")
                 t["render_sonnet"] = time.time() - t3
                 contact_sheet(clips, llm_edl["segments"], os.path.join(a.out, "contact_sheet_sonnet.jpg"), work + "/s")
     finally:
