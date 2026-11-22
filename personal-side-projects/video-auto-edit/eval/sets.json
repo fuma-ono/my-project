@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "note": "評価用素材の台帳。動画ファイルは含まない(Git に入れない)。パスは環境変数 VAE_TESTDATA(既定 /root/vae-testdata)と VAE_UPLOADS(既定 /root/.claude/uploads/*)で解決する。",
+  "sets": {
+    "SYN-1": {
+      "kind": "synthetic",
+      "purpose": "動作確認(回帰)。編集の品質評価ではない。ツールで生成し、期待される振る舞いをアサーションで確かめる",
+      "generator": "tools/quality_eval.py make-synthetic",
+      "rights": "自作(生成)。制約なし",
+      "external_send": true,
+      "expectations": {
+        "must_exclude": ["syn_black.mp4"],
+        "must_use": ["syn_talk.mp4", "syn_cut.mp4", "syn_portrait.mp4"],
+        "not_both": [["syn_scene.mp4", "syn_dup.mp4"]],
+        "max_cer": 0.25
+      }
+    },
+    "REAL-1": {
+      "kind": "real",
+      "purpose": "品質評価: 1 本の中での場面選択・カット・字幕(複数素材の評価にはならない)",
+      "rights": "Owner の撮影素材(結婚式の受付)。第三者(列席者)の顔・声が写る。ローカル評価のみ。外部サービス・API への送信禁止、Git・公開・再配布禁止",
+      "external_send": false,
+      "clips": [{"name": "clip01.mp4", "path": "${VAE_TESTDATA}/owner_v1/clip01.mp4"}]
+    },
+    "REAL-2": {
+      "kind": "real-proxy",
+      "purpose": "REAL-1 を元の切り替わり(12.3 秒・25.1 秒)で 3 場面に分けた代用。同じ撮影から分けたもので、本物の複数素材の評価の代わりにはならない。撮影順は分けた順の擬似(更新日時)",
+      "rights": "REAL-1 と同じ",
+      "external_send": false,
+      "clips": [
+        {"name": "scene1.mp4", "path": "${VAE_TESTDATA}/owner_v1_split/scene1.mp4"},
+        {"name": "scene2.mp4", "path": "${VAE_TESTDATA}/owner_v1_split/scene2.mp4"},
+        {"name": "scene3.mp4", "path": "${VAE_TESTDATA}/owner_v1_split/scene3.mp4"}
+      ]
+    },
+    "REAL-3": {
+      "kind": "real",
+      "purpose": "品質評価: 質の混ざった複数素材(良好 1 本 + 映像として使えない 3 本)。不要素材の除外・縦横の混在・複数動画の扱いを見る。良好な素材が 1 本しかないため、ベストシーン・ストーリーの評価には素材が足りない",
+      "rights": "Owner の撮影素材(アップロード)。clip01 は第三者の顔・声が写る。ローカル評価のみ。外部サービス・API への送信禁止、Git・公開・再配布禁止",
+      "external_send": false,
+      "labels": "eval/labels/REAL-3.json",
+      "clips": [
+        {"name": "IMG_4215.MOV", "glob": "${VAE_UPLOADS}/*-IMG_4215.MOV"},
+        {"name": "IMG_4216_chidimeru.mp4", "glob": "${VAE_UPLOADS}/*-IMG_4216_chidimeru.mp4"},
+        {"name": "IMG_4217.MOV", "glob": "${VAE_UPLOADS}/*-IMG_4217.MOV"},
+        {"name": "clip01.mp4", "path": "${VAE_TESTDATA}/owner_v1/clip01.mp4"}
+      ]
+    }
+  }
+}

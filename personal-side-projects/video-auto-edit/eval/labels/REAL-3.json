@@ -1,0 +1,10 @@
+{
+  "labeled_by": "HQ(AI)が、各動画の静止画 6 枚(等間隔)を目視して付けた。Owner の確認待ち(誤りがあれば直す)",
+  "labeled_on": "2026-11-22",
+  "clips": {
+    "IMG_4215.MOV": {"expected_video": "unusable", "note": "静止画 6 枚すべてがほぼ真っ黒(縦 720x1280、31.9 秒、600KB)。映像としては使えない"},
+    "IMG_4216_chidimeru.mp4": {"expected_video": "unusable", "note": "静止画 6 枚がほぼ真っ黒(下端にかすかな影のみ。縦 1080x1920、39.4 秒)。映像としては使えない"},
+    "IMG_4217.MOV": {"expected_video": "unusable", "note": "暗く、床・キッチンの下部を傾いたまま映し、ブレが大きい(横 1280x720、31.1 秒)。人の編集者なら捨てる素材"},
+    "clip01.mp4": {"expected_video": "usable", "note": "結婚式の受付(屋内、複数人、会話あり、4K 横)。暗めだが被写体は見える"}
+  }
+}
