@@ -46,6 +46,8 @@ def frame_scores(clips):
 
 CUT_MARGIN = 0.12                         # 場面の切り替わりから離す秒数(前後のコマが混ざらないように)
 MIN_SEC_PER_CUT = 3.0                     # 完成動画の中で、区間1つあたりの平均の長さの目安(切れ目が多すぎないように)
+FILL_MIN_SCORE = 0.0         # 長さを埋めるためだけに足す区間の評価の下限(各動画の代表は、この限りでない)
+SPEECH_MERGE_GAP = 1.0       # 会話どうしの区間は、これ以内の間隔なら1つにつなぐ(会話の途中を切らない)
 
 
 def trim_to_shot(start, end, cuts, margin=CUT_MARGIN):
@@ -117,6 +119,11 @@ def candidates(clips, min_len=2.0, max_len=5.0, speech_max=9.0):
                     s, e = min(s, sa), max(e, sb)
             s, e = trim_to_shot(s, e, c.get("cuts", []))                 # 元動画の切り替わりをまたがない
             s, e = natural_edges(s, e, c.get("cuts", []), c["duration"], speech=any(sa < e and sb > s for sa, sb in c["speech"]))
+            if e - s < min_len - 1e-3:                                   # 動画の終端に掛かって短くなった: 場面の内側で手前に伸ばす(素材ごと消さない)
+                lo, hi = shot_bounds((s + e) / 2, c.get("cuts", []), c["duration"])
+                if hi - lo >= min_len - 1e-3:
+                    e = min(hi, max(e, s + min_len))
+                    s = max(lo, e - min_len)
             if e - s < min(min_len, c["duration"]) - 1e-3:
                 continue
             ia, ib = int(s * FPS), max(int(s * FPS) + 1, int(e * FPS))
@@ -133,6 +140,27 @@ def candidates(clips, min_len=2.0, max_len=5.0, speech_max=9.0):
                         "speech": speech, "created": c["created"], "emb": emb,
                         "sharp": float(np.mean([f["sharp"] for f in fr[ia:ib]])),
                         "motion": float(np.mean([f["motion"] for f in fr[ia:ib]]))})
+    return out
+
+
+def merge_adjacent(chosen, reasons, gap=0.35):
+    """同じ動画で、時間が重なる・ほぼ隣り合う区間は1つにつなぐ。同じ映像の繰り返しや、連続した動き・話の途中のカットを避ける。
+    評価の高い方の区間を残し、時間の範囲を広げる"""
+    out = []
+    for c in sorted(chosen, key=lambda c: (c["clip"], c["start"])):
+        p = out[-1] if out else None
+        if p is not None and p["clip"] == c["clip"] and c["start"] - p["end"] <= (SPEECH_MERGE_GAP if p["speech"] and c["speech"] else gap):
+            s, o = (c, p) if c["score"] > p["score"] else (p, c)
+            lo, hi = min(p["start"], c["start"]), max(p["end"], c["end"])
+            s["start"], s["end"] = lo, hi
+            s["dur"] = round(hi - lo, 3)
+            s["speech"] = bool(p["speech"] or c["speech"])
+            s["faces"] = max(p["faces"], c["faces"])
+            reasons[id(s)] = reasons.get(id(s), "") + f"。隣り合う区間({o['start']:.1f}〜{o['end']:.1f}秒)を1つにつないだ"
+            reasons[id(o)] = f"統合: 同じ動画の隣り合う区間と1つにつないだ(→ {lo:.1f}〜{hi:.1f}秒)"
+            out[-1] = s
+        else:
+            out.append(c)
     return out
 
 
@@ -211,6 +239,10 @@ def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93,
         reasons[id(best)] = f"採用: この動画で最も評価の高い場面({best['cat_ja']})"
     total = sum(c["end"] - c["start"] for c in chosen)
     rest = [c for c in uniq if c not in chosen]
+    for c in rest:
+        if c["score"] < FILL_MIN_SCORE:
+            reasons[id(c)] = "不採用: 評価が低く、長さを埋めるためだけには使わない"
+    rest = [c for c in rest if c["score"] >= FILL_MIN_SCORE]
     while rest and total < target:
         def mmr(c):
             sim = max(float(c["emb"] @ s["emb"]) for s in chosen) if chosen else 0
@@ -220,6 +252,9 @@ def plan(clips, target=None, mood=None, beat=None, min_score=-0.8, dup_sim=0.93,
         chosen.append(nxt)
         total += nxt["end"] - nxt["start"]
         reasons[id(nxt)] = f"採用: 評価が高く、他と違う場面({nxt['cat_ja']})"
+    chosen = merge_adjacent(chosen, reasons)
+    total = sum(c["end"] - c["start"] for c in chosen)
+    rest = [c for c in rest if c not in chosen]
     for c in rest:
         reasons.setdefault(id(c), "不採用: 長さの上限に収まらない(評価が下位)")
     # 長すぎるとき: 評価の低いものから落とす(各動画の代表は残す)

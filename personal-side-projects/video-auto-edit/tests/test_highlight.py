@@ -45,7 +45,7 @@ def test_overlapping_ranges_are_not_used_twice():
     edl = planner.plan([c])
     segs = sorted(edl["segments"], key=lambda s: s["start"])
     for a, b in zip(segs, segs[1:]):
-        assert b["start"] >= a["end"] - 0.3 * min(a["end"] - a["start"], b["end"] - b["start"])
+        assert b["start"] >= a["end"] - 1e-6                      # 同じ映像を2回出さない(重なりゼロ)
 
 
 def test_cuts_snap_to_beats_and_speech_is_not_cut():
@@ -292,3 +292,49 @@ def test_llm_runs_only_once(tmp_path):
 def test_llm_default_ledger_is_in_repo_docs():
     from vae.highlight import planner_llm as pl
     assert pl.LEDGER.endswith(os.path.join("docs", "autonomous-hq", "llm_ledger.json")) or os.environ.get("VAE_LLM_LEDGER")
+
+
+def test_best_window_at_the_end_of_a_clip_is_not_lost():
+    """動画の終端に掛かって2秒未満になった窓で、素材ごと候補が消えていた(実動画 scene1)。手前に伸ばして残す"""
+    c = _clip(0, 25, 1000, 0)                                    # 25 フレーム = 12.5 秒
+    c["duration"] = 12.379                                       # 実際の長さは、最後のフレームより少し短い
+    for i, f in enumerate(c["frames"]):
+        f["sharp"] = 400.0 if i >= 21 else 20.0                  # 一番良い窓は、ちょうど終端の 4 フレーム(10.5 秒から)
+    planner.frame_scores([c])
+    cands = planner.candidates([c])
+    assert cands and all(x["end"] - x["start"] >= 2.0 - 1e-3 for x in cands)
+    assert max(x["end"] for x in cands) <= 12.379 + 1e-6
+
+
+def test_adjacent_or_overlapping_pieces_of_one_clip_are_merged():
+    """同じ動画の 0.0〜2.5 秒 と 2.0〜9.1 秒 を別々に採ると、0.5 秒の同じ映像が2回出る。1つにつなぐ"""
+    a = {"clip": 0, "start": 0.0, "end": 2.5, "dur": 2.5, "score": 1.4, "speech": True, "faces": 8}
+    b = {"clip": 0, "start": 2.0, "end": 9.1, "dur": 7.1, "score": 0.45, "speech": True, "faces": 6}
+    c = {"clip": 1, "start": 0.0, "end": 2.5, "dur": 2.5, "score": 0.4, "speech": False, "faces": 0}
+    reasons = {id(a): "採用", id(b): "採用", id(c): "採用"}
+    out = planner.merge_adjacent([b, c, a], reasons)
+    assert len(out) == 2
+    m = next(s for s in out if s["clip"] == 0)
+    assert (m["start"], m["end"]) == (0.0, 9.1) and m["score"] == 1.4 and "つないだ" in reasons[id(m)]
+    assert reasons[id(b)].startswith("統合")                      # つないで消えた側は「採用」のままにしない
+
+
+def test_weak_pieces_are_not_used_just_to_fill_the_target_length():
+    """長さの目標を満たすために、評価の低い区間を足さない(短くても、良い素材だけの動画にする)"""
+    good = _clip(0, 16, 1000, 0, sharp=300.0, faces=2)
+    weak = _clip(1, 16, 2000, 1, sharp=30.0, bright=50.0, motion=30.0)
+    planner.frame_scores([good, weak])
+    edl = planner.plan([good, weak], target=40.0)
+    extra = [s for s in edl["segments"] if s["clip"] == 1 and s["score"] < planner.FILL_MIN_SCORE]
+    assert len(extra) <= 1                                         # 弱い動画は、代表の1区間まで(それ以上は足さない)
+
+
+def test_speech_pieces_close_together_are_merged_to_not_cut_a_conversation():
+    a = {"clip": 0, "start": 6.0, "end": 8.0, "dur": 2.0, "score": 0.5, "speech": True, "faces": 4}
+    b = {"clip": 0, "start": 8.4, "end": 10.5, "dur": 2.1, "score": 0.3, "speech": True, "faces": 4}
+    out = planner.merge_adjacent([a, b], {id(a): "", id(b): ""})
+    assert len(out) == 1 and (out[0]["start"], out[0]["end"]) == (6.0, 10.5)
+    # 片方が会話でないなら、間隔 0.4 秒では結合しない(結合は元の辞書を更新するので、新しく作る)
+    p = {"clip": 0, "start": 6.0, "end": 8.0, "dur": 2.0, "score": 0.5, "speech": False, "faces": 4}
+    q = {"clip": 0, "start": 8.4, "end": 10.5, "dur": 2.1, "score": 0.3, "speech": True, "faces": 4}
+    assert len(planner.merge_adjacent([p, q], {})) == 2
