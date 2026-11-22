@@ -244,10 +244,23 @@ final class ScreenshotTests: XCTestCase {
         // 本体ターゲットを`@testable import`しない純粋なXCUITestのため、
         // `CommunityFilter`のcase名ではなく、実装側と同じ連番(0=おすすめ…4=ランキング)を
         // そのまま識別子の一部として使う。
+        // CIで判明: フィルターピル行(`CommunityFilterPillRow`)は横方向の
+        // `ScrollView`で、5つのピル全体の幅が214ptの表示幅を超えるため、
+        // 「ランキング」(5番目)は初期状態では画面外にある。`tapIdentifier`の
+        // 既存の自動スクロール復帰(`tapFirstHittable`)は縦方向のスワイプしか
+        // 行わないため、横スクロールが必要なこの行には効かない
+        // (実機CIで`Could not find a tappable element with identifier
+        // 'communityFilterPill_4'`として再現・特定した)。ピル行の中の要素を
+        // 明示的に横スワイプしてから探す。
+        let recommendedPill = firstElement(identifier: "communityFilterPill_0")
+        XCTAssertTrue(recommendedPill.waitForExistence(timeout: 5), "Community filter pill row did not render")
+        for _ in 0..<4 { recommendedPill.swipeLeft() }
         tapIdentifier("communityFilterPill_4")
         XCTAssertTrue(waitForAnyElement(containing: "人気投稿", timeout: 5), "Community ranking view did not render its segments")
         XCTAssertTrue(waitForAnyElement(containing: "分析精度", timeout: 5), "Community ranking view is missing the analysis-accuracy segment")
         capture("07h-StrategyAnalysis-CommunityRanking")
+        let rankingPill = firstElement(identifier: "communityFilterPill_4")
+        for _ in 0..<4 { rankingPill.swipeRight() }
         tapIdentifier("communityFilterPill_0")
         XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 5), "Did not return to the recommended feed from ranking")
 
@@ -1260,6 +1273,18 @@ final class ScreenshotTests: XCTestCase {
         if !tapFirstHittable(in: queries, timeout: timeout) {
             XCTFail("Could not find a tappable element with identifier '\(identifier)' within \(timeout)s")
         }
+    }
+
+    /// `accessibilityIdentifier`に合う要素を1つ返す(存在しなくても例外にしない)。
+    /// `communityFilterPill_*`のように横スクロールの`ScrollView`内にあり、`tapIdentifier`の
+    /// 縦方向の自動スクロール復帰では届かない要素を、呼び出し側で明示的に
+    /// `swipeLeft()`/`swipeRight()`するために使う。
+    private func firstElement(identifier: String) -> XCUIElement {
+        for query in [app.buttons, app.cells, app.otherElements] {
+            let match = query.matching(identifier: identifier).firstMatch
+            if match.exists { return match }
+        }
+        return app.buttons[identifier]
     }
 
     private func waitForAnyElement(containing text: String, timeout: TimeInterval) -> Bool {
