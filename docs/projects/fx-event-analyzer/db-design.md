@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.19
+# FX Event Analyzer: DB詳細設計 v4.20
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -49,6 +49,7 @@
 - **v4.17**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」、api-design.md v1.32)。`EconomicEvent`に`is_provisional`(boolean, NN, DEF `false`)を追加(3.5節)。Migration `20261022000002_economic_events_provisional.sql`(`add column if not exists`、既存の行はすべて`false`)。設定するのはFOMCの日程表のジョブ(`npm run ingest:fomc-schedule`、data-sources.md 15章)だけ。`EventScheduleChange`のトリガー(3.19節)は`AFTER UPDATE OF release_datetime, status`のままで、`is_provisional`だけを変える更新では起動しない(暫定→確定は日時の変更として記録しない)。RLSは変わらない
 - **v4.18**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、api-design.md v1.33 28.2節)。Migration `20261022000001_past_release_access.sql`。市場の値を持つ`EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction`の「全認証ユーザーSELECT可」のポリシーを削除し、`anon` / `authenticated`のテーブルの権限もすべて取り消した(`revoke all`。RLSは有効のまま。6章)。値を見られる発表と、前回を隠す発表を計算する関数`visible_released_event_ids`(service_role専用)を追加(6.1節)。Migration `20261022000004_ingestion_tables_access.sql`で`IngestionLog` / `IngestionStagedValue` / `OfficialObservation`の`anon` / `authenticated`の権限もすべて取り消した(RLS・ポリシーは変えない。6.1節)。Migration `20261022000003_fx_prices_access.sql`(HQ指示 2026-10-22、単独で適用・取り消しできる別ファイル)で、`FxPrice`の「全認証ユーザーSELECT可」のポリシーも削除し、`anon` / `authenticated`の権限をすべて取り消した(ロックされた発表の前後の足から値動きを計算し直せないため。6章)。テーブル・列は変えない
 - **v4.19**(2026-10-26): `EventSnapshot`の副指標(前月比など)の4列を追記(Migration `20261025000001_event_snapshot_secondary_metric.sql`、api-design.md v1.35。HQ指示 2026-10-25。この Migration の追加時に本書を更新していなかったため、HQ指示 2026-10-26 の統合で反映した)。`secondary_value_kind`・`secondary_forecast`・`secondary_actual`・`secondary_previous`(3.6節)。どれも nullable で、副指標が無い指標(現在は米国CPI以外すべて)は null。RELEASE スナップショットは不変なので、発表時の INSERT で一緒に書く。無料プランの「過去の発表」制限では、ロックした発表の`secondary_forecast`・`secondary_actual`・`secondary_previous`を、前回を隠す発表の`secondary_previous`を、API で null にする(api-design.md v1.36)。権限は v4.18 のとおり(`anon` / `authenticated` は`event_snapshots`の権限なし)で、列の追加による変更はない
+- **v4.20**(2026-11-24、HQ承認の版番号): 実装の実態に合わせた同期(事実の同期だけ。仕様・方針は変えていない。基準は `claude/fx-settings-screens` の 7fa2df26d)。(1) 新節 3.22 `FomcPolicyDecision`(FOMC の政策決定の専用表 `fomc_policy_decisions`、Migration `20261105000001`、api-design.md v1.47、data-sources.md 18章)。(2) 3.16 `SpeechEvent` に、Migration で追加済みの列を追記(`time_precision`(`20261028000001`)、`source_url`・`speech_body`・`body_fetched_at`・`body_status`・`body_error`(`20261110000001`)、`summary_method`・`summary_generated_at`・`summary_error`(`20261111000001`)、`body_attempts`・`body_last_attempt_at`(`20261112000001`)。data-sources.md 21章)。(3) 3.21 `OfficialObservation` に、コードの型 `OfficialSource` と DB の CHECK の違いの注記を追加(表は変えていない)
 
 ---
 
@@ -76,6 +77,7 @@
 | `SupportRequest` | お問い合わせ・フィードバックと自動返信(v4.7で追加) |
 | `RateAlert` | ユーザーのレートアラート(通貨ペアの価格の上抜け・下抜け。v4.14で追加) |
 | `EventScheduleChange` | 予定の指標・要人発言の日時の変更・中止の記録(v4.14で追加) |
+| `FomcPolicyDecision` | FOMC の政策決定(誘導目標レンジ)の専用表(v4.20で追記。Migration `20261105000001`) |
 
 将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加。`alert_settings`のうちレートアラートはv4.14で`RateAlert`として追加)
 
@@ -521,6 +523,17 @@ IDX(currency_code)
 | statement_datetime | timestamptz | NN | 発言(予定)日時 |
 | importance | text | NN, CHK: `IN ('LOW','MEDIUM','HIGH')` | |
 | status | text | NN, DEF `SCHEDULED`, CHK: `IN ('SCHEDULED','DELIVERED','CANCELLED')` | |
+| time_precision | text | NN, DEF `'EXACT'`, CHK: `IN ('EXACT','PUBLICATION_TIME')` | v4.20で追記(Migration `20261028000001`)。`EXACT` = 発言(予定)の時刻、`PUBLICATION_TIME` = 公開時刻しか分からない(値動き・発言前の通知の対象にしない) |
+| source_url | text | nullable, CHK: null または `https://www.federalreserve.gov/%`・`https://www.ecb.europa.eu/%` で始まる | v4.20で追記(Migration `20261110000001`)。公式の発言ページの URL |
+| speech_body | text | nullable | v4.20で追記(`20261110000001`)。発言ページから取り出した本文(段落を空行で区切る)。API ではまだ返さない(Migration の列コメント) |
+| body_fetched_at | timestamptz | nullable | v4.20で追記(`20261110000001`)。本文を取得した日時 |
+| body_status | text | NN, DEF `'PENDING'`, CHK: `IN ('PENDING','FETCHED','FAILED','NOT_APPLICABLE')` | v4.20で追記(`20261110000001`)。`FETCHED` のときは `speech_body`・`body_fetched_at`・`source_url` が必須(CHK) |
+| body_error | text | nullable | v4.20で追記(`20261110000001`)。`FAILED` などの理由 |
+| summary_method | text | nullable, CHK: null または `'EXTRACTIVE_EN'` | v4.20で追記(Migration `20261111000001`)。要約の作り方(抜粋式) |
+| summary_generated_at | timestamptz | nullable | v4.20で追記(`20261111000001`)。`summary_method` があるときは `summary` と共に必須(CHK) |
+| summary_error | text | nullable | v4.20で追記(`20261111000001`)。要約を作れなかった理由。あるときは `summary` が null(CHK) |
+| body_attempts | integer | NN, DEF 0, CHK: `>= 0` | v4.20で追記(Migration `20261112000001`)。本文の取得を試みた回数(発言の行ごと。3回で自動の対象から外す) |
+| body_last_attempt_at | timestamptz | nullable | v4.20で追記(`20261112000001`)。本文の取得を最後に試みた日時 |
 | created_at / updated_at | timestamptz | NN, DEF now() | |
 
 UQ(provider, provider_event_id)、IDX(statement_datetime)、IDX(speaker_id)
@@ -528,6 +541,8 @@ UQ(provider, provider_event_id)、IDX(statement_datetime)、IDX(speaker_id)
 関連通貨ペアは保存せず、`Speaker.currency_code`をbaseまたはquoteに含む`FxPair`をBackendが導出する(api-design.md §24.6)。
 
 **RLS**: `EconomicIndicator` / `EconomicEvent`と同じ共有データ扱い(全認証ユーザーSELECT可、書き込みはservice_roleのみ)。
+
+**露出の注記(v4.20、事実のみ)**: 上の RLS は Migration `20261005000003` のポリシー `speech_events_select_authenticated`(`auth.role() = 'authenticated'` なら SELECT 可)のままで、列単位の制限は無い。v4.20で追記した列(`speech_body`・`summary_method` ほか)にも同じポリシーが及ぶ。`EconomicEvent` などの値の表は v4.18 で直接の読み取りを禁じたが(6章)、`speech_events` は `20261022000001` の「変えないもの」に含まれ、この表には同じ対策をしていない。本文を保存するのは FRB の発言だけ(data-sources.md 21章)。この扱いを変えるかは HQ の判断事項(本版では変えていない)。
 
 ### 3.17 SupportRequest(v4.7で追加)
 
@@ -642,7 +657,7 @@ IDX(verification_status, created_at)
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
 | id | bigint (IDENTITY) | PK | |
-| source | text | NN, CHK: `IN ('FRED','BLS')` | |
+| source | text | NN, CHK: `IN ('FRED','BLS')` | ※下の注記(v4.20) |
 | series_id | text | NN | 例: `CPIAUCNS`、`CUUR0000SA0` |
 | period_start | date | NN | 観測期間の初日(月次は1日) |
 | as_of_date | date | NN | いつ時点の値か(FREDはrealtimeの日付、BLSは取得日) |
@@ -653,7 +668,32 @@ IDX(verification_status, created_at)
 
 UQ(source, series_id, period_start, as_of_date)、IDX(source, series_id, period_start)
 
+**注記(v4.20、表は変えていない)**: コードの型 `OfficialSource`(`'FRED' | 'BLS' | 'EUROSTAT'`、`ingestion/types.ts`)に `EUROSTAT` があるが、DB の CHECK(`source IN ('FRED','BLS')`)には無い。`EUROSTAT` の値はこの表に保存しない(`pipelines/officialStats.ts` の `upsertOfficialObservations` の前で `EUROSTAT` の観測を除いている。コードのコメントでは、Eurostat は専用の予定の経路(`pipelines/eurostatCalendar.ts`)でだけ読み、`ingest:official` を通らない)。FRED は data-sources.md v1.1 以降、取り込みに使わない(型・CHECK には FRED が残っている)。
+
 **RLS**: 運用データ。ポリシーなし(service_roleのみ)。
+
+### 3.22 FomcPolicyDecision(v4.20で追加)
+
+FOMC の政策決定(フェデラルファンド金利の**誘導目標レンジ**)。テーブル名は`fomc_policy_decisions`。Migration `20261105000001_fomc_policy_decisions.sql`(HQ承認 2026-11-05「FOMC政策金利の実データ取り込み」案A)。1行 = 1回の FOMC 会合(`EconomicEvent` の `US_FOMC` の行、provider `fomc_schedule`)の決定。NY連銀 Markets Data API の `targetRateFrom`・`targetRateTo` をそのまま別々の列に入れる(1つの金利に変換しない。EFFR の実績は入れない)。取り込みは `npm run ingest:fomc-policy-rate`(data-sources.md 18章)。`EconomicEvent`・`EventSnapshot` には何も書かない。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| event_id | uuid | NN, UQ, FK→EconomicEvent.id ON DELETE RESTRICT | 対象の会合。同じ会合は1行だけ |
+| target_range_lower | numeric(6,4) | NN | 誘導目標レンジの下限(%)。NY連銀の `targetRateFrom` |
+| target_range_upper | numeric(6,4) | NN | 上限(%)。NY連銀の `targetRateTo` |
+| announced_at | timestamptz | NN | 政策の発表日時(会合の予定の `release_datetime` と同じ) |
+| effective_date | date | NN | 新しいレンジが有効になった日(NY連銀の `effectiveDate`、ニューヨークの日付) |
+| source | text | NN | 取得元の名前 |
+| source_url | text | NN | 取得した API の URL |
+| fetched_at | timestamptz | NN | 取得日時 |
+| created_at | timestamptz | NN, DEF now() | |
+
+CHK `fomc_policy_decisions_range_check`: `target_range_lower >= 0 AND target_range_upper > target_range_lower AND target_range_upper <= 25`(下限は 0 以上、下限 < 上限 ≦ 25)。CHK `fomc_policy_decisions_effective_after_announcement`: `effective_date > (announced_at AT TIME ZONE 'America/New_York')::date`(適用日はニューヨークの発表日より後)。
+
+**不変性**: トリガー `trg_prevent_fomc_policy_decision_mutation`(BEFORE UPDATE OR DELETE、行ごと)が書換・削除を例外で拒否する(関数 `prevent_fomc_policy_decision_mutation`)。訂正は自動では行わず、人が確認して直す(dev-environment.md 15.4節)。
+
+**RLS**: 有効。ポリシーなし。`anon`・`authenticated`・`PUBLIC` の権限はすべて取り消し済み。`service_role` には `SELECT`・`INSERT` だけを与える(Backend が読み書きする)。前の版(2026-11-05)が作った「認証済みなら SELECT 可」のポリシーは Migration が消す。
 
 ---
 

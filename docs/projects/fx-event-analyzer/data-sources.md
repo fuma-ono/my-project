@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.8
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.9
 
 ## 変更履歴
 
+- **v1.9**(2026-11-24、HQ承認の版番号): 実装の実態に合わせた同期(事実の同期だけ。仕様・判定条件・実装方針は変えていない。基準は `claude/fx-settings-screens` の 7fa2df26d)。(1) 新章: 18章 NY連銀(FOMC 政策金利の値)、19章 e-Stat(JP_CPI)、20章 ONS・ABS・Statistics Canada(英国・豪州・カナダ)、21章 要人発言の本文・要約。(2) 3.1・13.1・15.7・10・5 の古くなった記述を直した: `US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_AVG_HOURLY_EARNINGS`(migration `20261026000001`)・`US_RETAIL_SALES`(migration `20261105000002`)は指標マスタに行がある。FOMC の政策金利の値と JP_CPI の初回値は取り込み済み(「照合元」ではなく、FOMC は専用表、JP_CPI は RELEASE スナップショット)。要人は、ウォラー(`20261016000001`)・ECB 役員(`20261027000005`)が登録済みで、ミラン理事(FRB)だけ未登録
 - **v1.8**(2026-11-05): 米国小売売上高(速報、`US_RETAIL_SALES`)の発表予定(HQ承認 2026-11-05「US_RETAIL_SALES 公式発表日程の自動取り込み実装」案A)。Census Bureauの公式ページ(`https://www.census.gov/retail/release_schedule.html`)を人が確認して書いた表から、`npm run ingest:retail-sales-schedule`が`economic_events`に入れる(17章)。FOMCの会合日程(15章)と同じ、ライブ取得を行わない表方式。指標マスタは migration `20261105000002_us_retail_sales_indicator.sql`。値(小売売上高の結果)は入れない — 照合元(Census APIの利用条件・鍵)は未確認のまま(13章)
 - **v1.7**(2026-11-02): US_CPI の前月比(副指標 `secondary_*`)を、季節調整なしの`CUUR0000SA0`から**季節調整済みの`CUSR0000SA0`**(CPI-U 全品目・米国都市平均・季節調整済み、1982-84=100)で計算するように直した(HQ指示 2026-11-02)。BLS の発表の前月比は季節調整済みの指数で計算されている。BLS v1 の今の値で 2025-12〜2026-09 の10か月を計算し、発表の前月比と10件とも一致した(季節調整なしでは1件)。前年比(本体)は`CUUR0000SA0`のまま。BLS の取得は1系列増えて12系列(1回の HTTP に収まる)。発表済みの RELEASE の行は変えない(今の US_CPI の行に前月比は入っていない)
 - **v1.6**(2026-10-26): 米国コアCPI・失業率・平均時給を BLS の独立経路(14章)に追加(HQ指示 2026-10-26)。指標ごとの系列・季節調整・単位・前月比/前年比の計算・発表日は16章。指標マスタは migration `20261026000001_us_bls_indicators.sql`。US_CPI・US_NFP の系列・予定・値は変えていない
@@ -64,16 +65,17 @@
 | code | 値 | 季節調整 | 単位・桁 | 照合1(FRED) | 照合2(BLS) | 計算 | FRED release |
 |---|---|---|---|---|---|---|---|
 | `US_CPI` | CPI 前年比 | **なし**(BLS の見出しの前年比は季節調整なしの指数で計算される) | %・小数1桁 | `CPIAUCNS` | `CUUR0000SA0` | 当月 ÷ 12か月前 − 1 | 10 |
-| `US_CORE_CPI`(DB に行なし) | コアCPI 前年比 | なし | %・1桁 | `CPILFENS` | `CUUR0000SA0L1E` | 同上 | 10 |
+| `US_CORE_CPI`(あり: migration `20261026000001`) | コアCPI 前年比 | なし | %・1桁 | `CPILFENS` | `CUUR0000SA0L1E` | 同上 | 10 |
 | `US_NFP` | 非農業部門雇用者数 前月差 | あり | 千人・整数 | `PAYEMS` | `CES0000000001` | 当月 − 前月(前月は同じ発表で改定された値) | 50 |
-| `US_UNEMPLOYMENT_RATE`(DB に行なし) | 失業率 | あり | %・1桁 | `UNRATE` | `LNS14000000` | 水準 | 50 |
-| `US_RETAIL_SALES`(DB に行なし) | 小売売上高 前月比 | あり | %・1桁 | `RSAFS` | (BLS になし) | 当月 ÷ 前月 − 1 | 9 |
+| `US_UNEMPLOYMENT_RATE`(あり: migration `20261026000001`) | 失業率 | あり | %・1桁 | `UNRATE` | `LNS14000000` | 水準 | 50 |
+| `US_RETAIL_SALES`(あり: migration `20261105000002`) | 小売売上高 前月比 | あり | %・1桁 | `RSAFS` | (BLS になし) | 当月 ÷ 前月 − 1 | 9 |
+| `US_AVG_HOURLY_EARNINGS`(あり: migration `20261026000001` で追加) | 平均時給 前月比(副指標は前年比) | あり | %・1桁 | (なし) | `CES0500000003` | 当月 ÷ 前月 − 1(前年比は 当月 ÷ 12か月前 − 1) | — |
 
 確認の根拠: BLS の4系列は 2026-10-15 に API から実データを取得(テストの記録データ `tests/fixtures/ingestion/bls-v1-2025-2026.json`)。2026年9月の CPI 前年比 336.940 ÷ 324.800 − 1 = 3.74% → 3.7、雇用者数 159,044 − 159,015 = +29千人、失業率 4.2%。2025年10月は政府閉鎖で公表されておらず、BLS は値を `-` で返す(**補わない**)。FRED の系列ID・release id は FRED のページがプロキシから開けなかったため、`npm run eval:providers` が FRED_API_KEY ありのとき `fred/series/release` で自動確認する(**要確認**)。
 
-`US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_RETAIL_SALES` は `economic_indicators` に行がないため、取り込み時に「DB に無い指標」としてスキップされ、ログに残る。追加するときは表示名のルール(indicator-display-names.md)に沿って HQ が行を追加する。
+`US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_AVG_HOURLY_EARNINGS` は migration `20261026000001`、`US_RETAIL_SALES` は migration `20261105000002` で `economic_indicators` に行がある(v1.9 で同期。以前は行がなく、取り込み時に「DB に無い指標」としてスキップされていた)。
 
-日本の指標(`JP_CPI` など)は対応表に未登録 = 取り込まない。e-Stat(総務省 統計局)の API を照合元にするのが次の手順(10章)。
+日本の指標 `JP_CPI` は、この対応表(照合元の仕組み)には載せていない。e-Stat(総務省 統計局)の API から初回の公表値を直接取り込む(19章。照合元としてではなく、値そのものの取得元)。他の日本の指標(`BOJ_RATE` など)は未登録 = 取り込まない。
 
 ---
 
@@ -97,7 +99,7 @@
 | 日銀 | 新着RSS(`/rss/whatsnew.xml`、「【挨拶】」等) | 公開時刻のみ | 未実装。商用利用は事前相談が必要(2章) |
 | BOE | `/rss/speeches` | 公開時刻のみ | 未実装。商用利用は許可が必要(2章) |
 
-- **要人の照合**: 取得元の英語名から役職(Chairman / Vice Chair for Supervision / Governor など)を除き、`speakers.ts` の別名表で `speakers` の行(機関+日本語名)に結び付ける。**表に無い人・DB に行が無い人はスキップしてログに残し、自動で作らない**(別人に発言と値動きを結び付ける危険があるため)。2026-10-15 時点では、ウォラー理事(別名はあるが DB に行が無い)とミラン理事(別名なし)がスキップされる。追加するときは migration で `speakers` に行を入れてから別名を足す
+- **要人の照合**: 取得元の英語名から役職(Chairman / Vice Chair for Supervision / Governor など)を除き、`speakers.ts` の別名表で `speakers` の行(機関+日本語名)に結び付ける。**表に無い人・DB に行が無い人はスキップしてログに残し、自動で作らない**(別人に発言と値動きを結び付ける危険があるため)。ウォラー理事は `speakers` に登録済み(migration `20261016000001`、別名は `speakers.ts`)、ECB 役員も登録済み(migration `20261027000005`)。ミラン理事(FRB)だけが未登録で(`speakers.ts` に別名も無い)、スキップされる(役職・在任の確認が先)。追加するときは migration で `speakers` に行を入れてから別名を足す
 - **ID**: FRB のカレンダーには ID が無いため「日付・時刻・要人・種類」から作る。時刻が変わると別の発言として入り、元の予定は「取得元から消えた予定」としてログに残す(中止か変更かは取得元から分からないので、自動で中止にはしない)
 - **期間**: カレンダーには数年分の履歴があるため、既定では14日より前の発言は取り込まない
 - **タイトル**: 「講演: 〈取得元の題〉」のように種類だけ日本語にし、題は訳さない(機械翻訳で意味を変えないため)
@@ -273,8 +275,7 @@ npm run eval:providers -- --from 2026-09-01 --to 2026-10-14 --fx-pairs USDJPY,EU
 - **ECB**: 有料プランで ECB の情報を見せる場合の「無料で入手できる」案内の表示方法(HQ判断)。週間予定ページからの正確な時刻の取り込み(時刻帯の表記の確認が先)
 - **日銀・BOE**: 商用利用の相談・許可(日銀は post.prd8@boj.or.jp)。許可が出るまで実装しない
 - **日本の指標**: e-Stat API(https://www.e-stat.go.jp/api/、アプリケーションID が必要。利用規約・出典の書き方は要確認)を照合元として対応表に追加
-- **要人**: ウォラー理事・ミラン理事・ECB 役員会などの `speakers` の行の追加(役職の確認と migration)
-- **指標**: `US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_RETAIL_SALES` の `economic_indicators` の行(表示名ルールに沿って)
+- **要人**: ウォラー(migration `20261016000001`)・ECB 役員(migration `20261027000005`)は登録済み。ミラン理事(FRB)のみ未登録(役職・在任の確認が先)
 - **管理機能**: `ingestion_staged_values` の要確認の値を人が承認・却下する画面/API(design.md 13章。いまは DB を直接確認する)
 - **値動きの計算ジョブ**: `event_price_reactions` を `fx_prices` から計算するジョブ(`UNVERIFIED` の足を使わない)
 - 発表前の予想(forecast)の変化は、RELEASE スナップショットができるまで保存していない(発表前のスナップショットの種類を足すかは HQ 判断)
@@ -509,12 +510,12 @@ FRED は公式統計の取り込みから外した(`ingest:official` は FRED �
 | code | 指標 | DB に行 | 照合元 | 状態 |
 |---|---|---|---|---|
 | `US_CPI` | CPI 前年比(季節調整なし) | あり | BLS `CUUR0000SA0` | **BLS で照合できる** |
-| `US_CORE_CPI` | コアCPI 前年比 | なし | BLS `CUUR0000SA0L1E` | BLS で照合できる(DB に行を足せば使える) |
+| `US_CORE_CPI` | コアCPI 前年比 | あり(migration `20261026000001`) | BLS `CUUR0000SA0L1E` | BLS で照合できる |
 | `US_NFP` | 非農業部門雇用者数 前月差 | あり | BLS `CES0000000001` | **BLS で照合できる** |
-| `US_UNEMPLOYMENT_RATE` | 失業率 | なし | BLS `LNS14000000` | BLS で照合できる(DB に行を足せば使える) |
-| `US_RETAIL_SALES` | 小売売上高 前月比 | なし | (なし) | **代わりが必要**。作成元は Census(米国勢調査局)。Census の API の利用条件は未確認。それまでは公開しない(`requireOfficialMatch: true` のため公式待ちのまま) |
-| `US_FOMC` | FOMC 政策金利 | あり | (なし) | **代わりが必要**。FRB の声明(パブリックドメイン、11章)から誘導目標の範囲を取る仕組みが未実装。数値の照合ではなく、声明の文面との照合になる |
-| `JP_CPI` | 全国CPI | あり | (なし) | **代わりが必要**。e-Stat(総務省 統計局)の API(商用利用可・出典と加工の明示が必要、11章)を照合元にする。未実装 |
+| `US_UNEMPLOYMENT_RATE` | 失業率 | あり(migration `20261026000001`) | BLS `LNS14000000` | BLS で照合できる |
+| `US_RETAIL_SALES` | 小売売上高 前月比 | あり(migration `20261105000002`) | (なし) | **代わりが必要**。作成元は Census(米国勢調査局)。Census の API の利用条件は未確認。それまでは公開しない(`requireOfficialMatch: true` のため公式待ちのまま) |
+| `US_FOMC` | FOMC 政策金利 | あり | (照合元ではなく専用表) | **値は取り込み済み**(NY連銀 Markets Data API → 専用表 `fomc_policy_decisions`。`ingest:fomc-policy-rate`。状態更新(RELEASED 化)・FREE/PRO の扱いは別。18章) |
+| `JP_CPI` | 全国CPI | あり | (なし) | **e-Stat API で取り込み済み**(初回値のみ。`ingest:official:jp-cpi-values`。手動 target。19章) |
 | `BOJ_RATE` | 日銀の政策金利 | あり | (なし) | **代わりが必要**。日本銀行の公表文が元。商用利用は事前相談が必要(問い合わせ中、vendor-inquiries.md) |
 
 ### 13.2 米国以外の地域の候補(未確認)
@@ -649,12 +650,12 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 
 ### 15.7 既知の制約(2026-10-22)
 
-- **発表後も予定のまま**: FOMCの行は発表時刻を過ぎても`status = SCHEDULED`・`data_status = PENDING`のまま変わらない。このジョブは値を入れず、他のジョブもFOMCの結果(政策金利)を取りに行かない
+- **発表後も予定のまま**: FOMCの行は発表時刻を過ぎても`status = SCHEDULED`・`data_status = PENDING`のまま変わらない。このジョブは値を入れない。政策金利の値は別ジョブ `ingest:fomc-policy-rate`(NY連銀)が `fomc_policy_decisions` に入れる。`economic_events` は `SCHEDULED`・`PENDING` のまま
 - **値動き・過去の結果は自動では入らない**: 値動きの取り込み(`npm run ingest:event-reactions`)は`status = RELEASED`の行だけを対象にする(`src/repositories/ingestionRepository.ts`の`listReleasedEventsForReactions`)。FOMCの行は`RELEASED`にならないので、相場反応・`/events/{id}/history`の過去の結果は作られない
 - **ホームでは当日中「これから」の側**: iOSのホームは`status = SCHEDULED`の行を「これからの予定」に分ける(`HomeViewModel.swift`の`upcomingEvents`)。発表後もその日のうちは「これから」の側に出続ける(日付が変われば出なくなる)
 - **暫定の表示**: 過ぎた会合は API が`is_provisional = false`で返すので「予定（暫定）」は出ない(15.5節)。DBの値は人が表を直してジョブを動かすまで`true`のまま
 - **通知**: 指標`US_FOMC`は重要度`HIGH`なので、暫定の会合も含め、通常の指標と同じく発表の数分前(既定5分前)の通知・通知一覧の対象になる。DEVでの注意は dev-environment.md 12.5節
-- 結果の取り込みや「発表済み」への切り替えは、この Task の範囲外(HQの判断を待つ)
+- 政策金利の値の取り込みは実装済み(18章)。「発表済み」への切り替え(`RELEASED` 化)・相場反応・過去履歴は未実装(HQ の判断待ち)
 
 ## 16. 米国コアCPI・失業率・平均時給(2026-10-26、HQ指示「米国コアCPI・失業率・平均時給の追加」)
 
@@ -758,3 +759,59 @@ Census Bureauは会合日程のような「暫定」の概念を公表してい�
 - Census Bureauは発表日程を事前に変更することがある(例: 2026年3月分の発表が2026-04-16予定から2026-04-21に変更された例を確認)。`blsSchedule.ts`と同じ制約(14.6節)で、表が古いままだと実際の変更に追随しない。対策は上の17.5節の更新手順のみ(自動検知の仕組みは無い)
 - 値(小売売上高の結果)の取り込みは対象外。Census Bureauの実際の値のAPI(`api.census.gov/data/timeseries/eits/marts`)はBLSと異なりAPIキーが必須(無料登録制)で、本作業では未確認・未使用。13章の「代わりが必要」は本章の対応では解消していない(発表予定の日程だけが分かるようになった)
 - 本作業を行った環境からcensus.govへの直接アクセスは不安定だった(複数回HTTP 500)。本番のCI実行環境での到達性は未確認だが、表方式(案A)は外部アクセスが無いため、この制約の影響を受けない
+
+---
+
+## 18. NY連銀(FOMC 政策金利の値)(2026-11-05、HQ承認「FOMC政策金利の実データ取り込み」案A)
+
+FOMC の会合(15章の `US_FOMC` の予定)の**政策決定の値**(フェデラルファンド金利の誘導目標レンジの下限・上限)を、NY連銀の公開 API から専用表 `fomc_policy_decisions` に入れる。13章の「照合元」ではなく、値そのものの取得元。
+
+- **取得元**: NY連銀 Markets Data API `GET https://markets.newyorkfed.org/api/rates/unsecured/effr/search.json?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`(`adapters/nyFedRates.ts`)。ログイン・キー不要。取得の間隔は 2 秒以上(`config.ts` の `nyfed`)
+- **読む項目**: 応答の `refRates[]` の `effectiveDate`・`targetRateFrom`(下限)・`targetRateTo`(上限)。実績の `percentRate`(EFFR)は誘導目標ではないので読まない・入れない。値が読めない記録(数値でない・欠け・下限 ≥ 上限・負・25% 超・日付不正)は `skipped` にして補わない
+- **公開の時刻**: その日の値は翌営業日の 9:00(ニューヨーク)ごろ。新しいレンジは発表の翌営業日から有効
+- **ジョブ**: `npm run ingest:fomc-policy-rate`(`src/jobs/ingestFomcPolicyRates.ts` → `pipelines/fomcPolicyRates.ts`)。ワークフローは**手動実行のみ**(`target=fomc-policy-rate`)。定期実行には入れていない
+- **会合への結びつけ**: 発表日(ニューヨークの日付)より後の最初の `effectiveDate` の記録。**発表から `MAX_DAYS_AFTER_ANNOUNCEMENT = 7` 日以内**で、次の会合の発表日より前のときだけ使う。当てはまらなければ書かない(`NO_RECORD_IN_WINDOW`・`FIRST_RECORD_UNREADABLE`。発表から 180 日(`MAX_LOOKBACK_DAYS`)を超えて記録の無い会合は `OUTSIDE_LOOKBACK`)。記録がまだ公開されていない会合は待つ(`awaiting`)。DB に会合の予定の行が無い会合は対象外
+- **保存先**: 専用の表 `fomc_policy_decisions`(migration `20261105000001`。db-design.md 3.22節)。1会合 1行・書いたら変えない。`economic_events`・`event_snapshots` は変えない(`status`・`data_status` は `SCHEDULED`・`PENDING` のまま)。API は `GET /events/{id}` の `policy_rate`(api-design.md v1.47)
+- **訂正の監視(取得元の規約上の責務)**: NY連銀の規約は、利用者が取得元の訂正を見守ることを求める。実行のたびに、記録済みの会合(発表から 180 日以内)を今の NY連銀の値と突き合わせ、違いを `ingestion_logs.details.conflicts` に残す(記録した値は自動では変えない)。人の対応は dev-environment.md 15.4節
+- **利用条件**: 業務での利用・自動取得・再配布は可。出典と告知・免責文を付ける(`domain/attribution.ts` の `NY_FED_SOURCE`・`nyFedAttribution`)。根拠はコードのコメント(規約ページ newyorkfed.org/privacy/termsofuse の確認結果)
+- **未実装**: `RELEASED` 化、相場反応(`event_price_reactions`)、過去履歴(15.7節)。FREE/PRO の扱いも別
+
+---
+
+## 19. e-Stat(JP_CPI)(2026-11-10〜12、HQ指示「経済指標の網羅性改善」「JP_CPI: ESTAT_APP_ID を利用する取得処理」)
+
+日本の消費者物価指数(全国・総合・前年同月比、`JP_CPI`)の**初回の公表値**を、e-Stat(政府統計の総合窓口)の API から取り込む。手順書は jp-cpi-runbook.md。
+
+- **取得元**: e-Stat API 3.0(`https://api.e-stat.go.jp/rest/3.0/app/json`、`adapters/estatCpi.ts`)。2025年基準の統計表 `0004052037`。アプリケーション ID は環境変数 `ESTAT_APP_ID`(GitHub の Secret。URL にしか入れず、出力・ログでは `redactAppId` で伏せる)
+- **予定表**(`mappings/jpCpiSchedule.ts`。人が e-Stat の公表予定カレンダー(https://www.e-stat.go.jp/release-calendar/statistics/00200573)を読んで書く表。公表 08:30、時刻の基準は `Asia/Tokyo`、確認日 2026-11-10): 5回 — 対象 2026-10 → 2026-11-20、2026-11 → 2026-12-18、2026-12 → 2027-01-22、2027-01 → 2027-02-19、2027-02 → 2027-03-19。2027年3月分以降はカレンダーにまだ載っていないので入れていない
+- **ジョブ**: `ingest:jp-cpi-schedule`(予定を `economic_events` に入れる)、`ingest:official:jp-cpi-values`(初回値を RELEASE スナップショットとして保存)。どちらも**手動実行のみ**。ワークフローの target は 4 つ: `jp-cpi-schedule-dry-run`・`jp-cpi-schedule`・`jp-cpi-values-dry-run`・`jp-cpi-values`。dry-run は DB にも `ingestion_logs` にも書かない
+- **値を保存する条件**(すべて満たすときだけ。欠ければ何も書かず `SCHEDULED`・`PENDING` のまま。推測・前回値の流用はしない): (1) 予定表の回で、公表時刻を過ぎ、公表から `JP_CPI_MAX_DAYS_AFTER_RELEASE = 14` 日以内、(2) 対象月の全国・総合・前年同月比の値が API にちょうど1件で数値、(3) 統計表の更新日(`TABLE_INF.UPDATED_DATE`)がその回の公表日以降、(4) 分類(表章項目・地域・品目)をメタ情報の code と名前で特定できた。e-Stat のデータベースへの反映は公表から数日遅れることがあるため 14 日
+- **改定**: `RELEASED` の回は、同じ対象月の今の値が初回値(と最後の改定)と違うときだけ `event_revisions` に足す。初回値は変えない
+- **利用条件**: e-Stat 利用規約(政府標準利用規約 第2.0版に準拠)で商用利用可。出典の記載が必要(11章)。API 利用の表記(`ESTAT_API_CREDIT`): 「このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。」
+- **DEV での実施(HQ の報告による。この版の作成では確認していない)**: 2026-11-20 公表の 2026-10 分は DEV で取り込み済み(`jp-cpi-values` の本実行が SUCCESS、actual = 2.3、`RELEASED`・`AVAILABLE`)
+- **運用上の注意**: 公表時刻を過ぎた予定は `ingest:jp-cpi-schedule` が作らない(`past` として数え、`past_release` でスキップ)。予定の登録は公表前に行う必要がある
+
+---
+
+## 20. ONS・ABS・Statistics Canada(英国・豪州・カナダ)(2026-11-10、HQ指示「6地域の経済指標拡張・実装準備」)
+
+英国・豪州・カナダの主要指標の予定と発表値を、各国の統計機関の公式 API から取り込む。キー・契約・有料 API は不要。
+
+- **利用条件**(2026-11-10 に原文を確認、いずれも商用利用可・出典の表示が必要。根拠は migration `20261110000002_gb_au_ca_indicators.sql` のコメント): 英国 ONS = Open Government Licence v3.0(出典「Source: Office for National Statistics licensed under the Open Government Licence v.3.0」)。豪州 ABS = Creative Commons Attribution 4.0 International(CC BY 4.0)。カナダ Statistics Canada = Open Licence(出典「Source: Statistics Canada, name of product, reference date. Reproduced and distributed on an 'as is' basis with the permission of Statistics Canada.」)。政策金利(BoE・RBA・BoC)はこの対応に入れていない(BoE はサイトの本文の商用利用に許可が必要。RBA・BoE は公表時刻を公式で確認できていない)
+- **指標マスタ**: migration `20261110000002` の7件 — `GB_CPI`・`GB_CORE_CPI`・`GB_UNEMPLOYMENT_RATE`・`AU_CPI`・`AU_UNEMPLOYMENT_RATE`・`CA_CPI`・`CA_UNEMPLOYMENT_RATE`。その後の migration `20261118000001`〜`3` が英国 GDP 前月比・英国小売売上高 前月比・豪州 WPI 前期比を足す(ファイル名による。DEV 未適用は統合コミットのメッセージの記載で、DEV の状態は確認していない)
+- **予定**: `mappings/gbAuCaSchedule.ts`(人が公式ページを読んで書く表)→ `npm run ingest:gb-au-ca-schedules`
+- **発表値**: `npm run ingest:official-values`(`pipelines/officialValues.ts`)。その回の公表日と API が示す公表日が**一致したときだけ**値を使う(前の回の値を使わない・推測しない)。英国 ONS は時系列 API(`adapters/gbCaOfficialValues.ts`): `GB_CPI` = D7G7、`GB_CORE_CPI` = DKO8、`GB_UNEMPLOYMENT_RATE` = MGSX。カナダは Web Data Service: `CA_UNEMPLOYMENT_RATE` = v2062815。`CA_CPI` は公式 API に前年比の系列が見つからず、前年比を計算で作らないため対象外(コードのコメント)。豪州 ABS は SDMX(`adapters/absOfficialValues.ts`): `AU_CPI`(CPI 2.0.0)・`AU_UNEMPLOYMENT_RATE`(LF 1.0.0)・`AU_WPI_QOQ`(WPI 1.2.0、四半期)。ABS の値には公表日が無いので `updatedAfter` で、公表日より後に更新された系列だけを受け取る(公表前は 404)
+- **実行**: どちらも手動実行のみ(ワークフローの target: `gb-au-ca-schedules-dry-run`・`gb-au-ca-schedules`・`official-values-dry-run`・`official-values`)。定期実行には入れていない。dry-run は DB に書かない
+
+---
+
+## 21. 要人発言の本文・要約(2026-11-10〜12、HQ指示「要人発言本文の取得・保存機能」ほか)
+
+要人発言(`speech_events`)に、公式ページの URL・本文・要約を持たせる。列は db-design.md 3.16節(migration `20261110000001`・`20261111000001`・`20261112000001`)。本文の取得と要約の生成は**別の工程**。
+
+- **本文の取得**(`npm run ingest:speech-bodies`、`pipelines/speechBodies.ts`): 発言済み(`DELIVERED`)で本文が未取得の、直近 30 日(既定)の発言が対象。1回の実行で読むページは 20 件まで(既定)。URL は、ECB は取り込み時の RSS の link、FRB は公式の講演の RSS・一覧 JSON から姓と日付が1件だけ一致するときに結ぶ(結べなければ `PENDING`、推測で結ばない)。公式の https の URL だけを読み、`FETCHED`(本文・取得日時)または `FAILED`(理由を `body_error`)にする。本文を推測で補わない
+- **本文を保存してよい発言元**: `STORE_BODY_FOR = ['frb_calendar']`(FRB だけ。FRB のサイトの情報は原則パブリックドメインで、出典を示す)。**ECB は保存しない**: `source_url` だけ残し、`body_status = NOT_APPLICABLE`・`body_error = RIGHTS_UNCONFIRMED`(発言者の名前の付いた文書の再掲に ECB の書面の許可が要る例外に当たるか確認できていないため。ECB が認めたら足す)
+- **試行の上限**: 本文の取得は発言の行ごとに最大 3 回(`MAX_BODY_ATTEMPTS = 3`。`body_attempts`・`body_last_attempt_at` に記録)。3 回で自動の対象から外す
+- **要約の生成**(`npm run ingest:speech-summaries`、`pipelines/speechSummaries.ts`): `body_status = FETCHED` の発言だけが対象。**抜粋式**(`summary_method = EXTRACTIVE_EN`。原文からの抜粋で、言語モデル・有料 API は使わない)。作れたら `summary`・`summary_generated_at`、作れなければ `summary` を null のまま `summary_error` に理由。人が書いた要約(`summary_method` が無い `summary`)は上書きしない。本文を保存しない発言元(ECB)は要約も作られない
+- **実行**: 手動実行のみ(ワークフローの target: `speech-bodies-dry-run`・`speech-bodies`・`speech-summaries-dry-run`・`speech-summaries`)。dry-run は DB に書かず、本文のページも読まない。手順書は speech-pipeline-runbook.md
+- **API**: 本文(`speech_body`)は API ではまだ返さない(migration `20261110000001` の列コメント。`src/routes` に `speech_body` の参照が無いことを確認)
