@@ -80,6 +80,30 @@ describe('isPolicyRateLockedForPlan', () => {
     ).toBe(false);
   });
 
+  it('meetings at the same time are ordered by id (ascending), so the 3rd / 4th are decided deterministically whatever the row order', async () => {
+    const at = (iso: string, id: string) => ({ id, indicator_id: 'ind-fomc', release_datetime: iso });
+    const tie = '2026-02-15T18:00:00Z';
+    // 新しい順: t-new1, t-new2, [tie の x(id が小さい = 3 番目), y(4 番目)]。行の並びは y を先にして、挿入順に頼らないことを確かめる
+    for (const tieRows of [
+      [at(tie, 'y'), at(tie, 'x')],
+      [at(tie, 'x'), at(tie, 'y')],
+    ]) {
+      const client = fakeSupabaseClient({
+        economic_events: [
+          at('2026-01-15T18:00:00Z', 'old'),
+          ...tieRows,
+          at('2026-03-15T18:00:00Z', 'n1'),
+          at('2026-04-15T18:00:00Z', 'n2'),
+        ],
+        fomc_policy_decisions: ['old', 'x', 'y', 'n1', 'n2'].map((event_id) => ({ event_id })),
+      });
+      const result = await Promise.all(
+        ['n2', 'n1', 'x', 'y', 'old'].map((id) => isPolicyRateLockedForPlan(client, 'FREE', { id, ...FOMC })),
+      );
+      expect(result).toEqual([false, false, false, true, true]);
+    }
+  });
+
   it('decisions of a different indicator do not count toward the 3', async () => {
     const client = fakeSupabaseClient({
       economic_events: [

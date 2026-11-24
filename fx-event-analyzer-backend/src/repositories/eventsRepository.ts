@@ -141,7 +141,9 @@ export async function listRecordedFomcMeetings(
     .select('id, release_datetime')
     .in('id', ids)
     .eq('indicator_id', indicatorId)
-    .order('release_datetime', { ascending: false });
+    .order('release_datetime', { ascending: false })
+    // 同時刻の会合の順序を決定的にする(第2キー)
+    .order('id', { ascending: true });
   if (events.error) throw events.error;
   return (events.data ?? []).map((row: { id: string; release_datetime: string }) => ({
     event_id: row.id,
