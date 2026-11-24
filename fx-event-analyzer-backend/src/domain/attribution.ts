@@ -126,6 +126,89 @@ export const STATCAN_LFS_ATTRIBUTION: Attribution = {
   notice: `Source: Statistics Canada, Table 14-10-0287-01 Labour force characteristics, monthly, seasonally adjusted and trend-cycle. ${STATCAN_AS_IS}`,
 };
 
+/**
+ * カナダのコアCPI(CA_CPI_TRIM・CA_CPI_MEDIAN。設計書 ca-cpi-detailed-design.md §14.7・§16.5): 公表値をそのまま出すので
+ * `Source:` の形。Open Licence の `name of product, reference date` を満たすため、イベント単位の応答では notice に**対象月**
+ * (reference date。例 `October 2026`。公表日ではない)を入れる(A案)。対象月が無い面(GET /indicators)・欠落・不正のときは、
+ * 月を入れない基本形(推測した月は入れない)。
+ */
+export const STATCAN_CORE_CPI_TABLE =
+  'Table 18-10-0256-01 Consumer Price Index (CPI) statistics, measures of core inflation and other related statistics - Bank of Canada definitions';
+
+export const STATCAN_CORE_CPI_ATTRIBUTION: Attribution = {
+  ...STATCAN_ATTRIBUTION,
+  source_url: 'https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810025601',
+  notice: `Source: Statistics Canada, ${STATCAN_CORE_CPI_TABLE}. ${STATCAN_AS_IS}`,
+};
+
+const CA_CORE_CPI_CODES: ReadonlySet<string> = new Set(['CA_CPI_TRIM', 'CA_CPI_MEDIAN']);
+
+export function isCaCoreCpiIndicator(code: string | null | undefined): boolean {
+  return code != null && CA_CORE_CPI_CODES.has(code);
+}
+
+/** 固定の英語の月名(Intl・ロケール・タイムゾーンに依存しない) */
+const MONTH_NAMES_EN = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const;
+
+/** 出典の対象月を決めるための、イベントの内部の情報(公開 API の項目ではない)。 */
+export interface AttributionContext {
+  /** economic_events.provider_event_id(最後の ':' の後ろが対象月 'YYYY-MM') */
+  providerEventId?: string | null | undefined;
+  /** 初回値のスナップショットの verification_source('<系列>@<対象月>')。あれば対象月と一致すること */
+  snapshotVerificationSource?: string | null | undefined;
+  /** economic_events.release_datetime。対象月はこの月以前であること */
+  releaseDatetime?: string | null | undefined;
+  /** 対象月が欠落・不正のとき(ATTRIBUTION_REFERENCE_PERIOD_INVALID)。値そのものは渡さない */
+  onInvalidReferencePeriod?:
+    ((info: { code: 'ATTRIBUTION_REFERENCE_PERIOD_INVALID'; reason: string }) => void) | undefined;
+}
+
+/** 対象月('YYYY-MM')。欠落・不正・食い違い・未来の月は reason を返す(推測しない)。 */
+export function resolveReferencePeriod(context: AttributionContext): { period: string } | { invalid: string } {
+  const key = context.providerEventId?.split(':').at(-1);
+  const match = key ? /^(\d{4})-(0[1-9]|1[0-2])$/.exec(key) : null;
+  if (!match) return { invalid: 'KEY_MISSING_OR_MALFORMED' };
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (year < 2000 || year > 2100) return { invalid: 'YEAR_OUT_OF_RANGE' };
+  const verified = context.snapshotVerificationSource?.split('@')[1];
+  if (context.snapshotVerificationSource != null && verified !== key) return { invalid: 'SNAPSHOT_MISMATCH' };
+  if (context.releaseDatetime != null) {
+    const release = new Date(context.releaseDatetime);
+    if (Number.isNaN(release.getTime())) return { invalid: 'RELEASE_DATETIME_INVALID' };
+    if (year * 12 + month > release.getUTCFullYear() * 12 + release.getUTCMonth() + 1)
+      return { invalid: 'FUTURE_PERIOD' };
+  }
+  return { period: key! };
+}
+
+function caCoreCpiAttribution(context: AttributionContext | undefined): Attribution {
+  if (!context) return STATCAN_CORE_CPI_ATTRIBUTION; // 対象月の無い面(GET /indicators)
+  const resolved = resolveReferencePeriod(context);
+  if ('invalid' in resolved) {
+    context.onInvalidReferencePeriod?.({ code: 'ATTRIBUTION_REFERENCE_PERIOD_INVALID', reason: resolved.invalid });
+    return STATCAN_CORE_CPI_ATTRIBUTION;
+  }
+  const [year, month] = resolved.period.split('-') as [string, string];
+  return {
+    ...STATCAN_CORE_CPI_ATTRIBUTION,
+    notice: `Source: Statistics Canada, ${STATCAN_CORE_CPI_TABLE}, ${MONTH_NAMES_EN[Number(month) - 1]} ${year}. ${STATCAN_AS_IS}`,
+  };
+}
+
 export const ESTAT_ATTRIBUTION: Attribution = {
   source: '政府統計の総合窓口（e-Stat）',
   source_url: 'https://www.e-stat.go.jp',
@@ -151,9 +234,13 @@ const INDICATOR_ATTRIBUTIONS: Readonly<Record<string, Attribution>> = {
  * economic_indicators.code(経済指標)から。Eurostat の指標(api-design v1.43)と、英国・豪州・カナダ・日本の公式統計の指標
  * (上の説明)。それ以外(米国の BLS・FRB の指標など、出典の表示の義務が無いもの)は null。
  */
-export function attributionForIndicator(code: string | null | undefined): Attribution | null {
+export function attributionForIndicator(
+  code: string | null | undefined,
+  context?: AttributionContext,
+): Attribution | null {
   if (code == null) return null;
   if (EUROSTAT_INDICATOR_CODES.has(code)) return EUROSTAT_ATTRIBUTION;
+  if (CA_CORE_CPI_CODES.has(code)) return caCoreCpiAttribution(context);
   return INDICATOR_ATTRIBUTIONS[code] ?? null;
 }
 

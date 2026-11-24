@@ -14,7 +14,7 @@
  * official-values(pipelines/officialValues.ts)は、公表から lookbackDays(既定 45 日)より前のイベントを見ない。そのため、
  * 状態更新の失敗から 45 日を超えて残った stuck 行は、再実行しても自動では回復しない。人が data_status などを確認して直す。
  * 期間は ingestOfficialValues の deps.lookbackDays で変えられる(例: 回復のために一度だけ 120 を渡す)。ただし lookbackDays を
- * 延ばすと、初回値を保存していない古い回の取り込み(maxDaysAfterRelease などの個別の期限で止まるものを除く)や改定の確認の
+ * 延ばすと、初回値を保存していない古い回の取り込み(firstValueWindow などの個別の期限で止まるものを除く)や改定の確認の
  * 対象も同じだけ広がる。jp-cpi-values・経済カレンダーは、それぞれの対象の回・取得の範囲に入る行だけを回復する。
  */
 import type { StoredEvent } from '../store.js';

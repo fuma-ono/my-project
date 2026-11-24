@@ -128,6 +128,7 @@ export class MemoryIngestionStore implements IngestionStore {
             actual: s.actual,
             previous: s.previous,
             verification_source: s.verification_source ?? null,
+            captured_at: s.captured_at ?? null,
           }
         : null,
     );

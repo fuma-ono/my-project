@@ -7,7 +7,12 @@
  * the indicator name, a speech row's title is the speech's own title with
  * the speaker's display name alongside in `speaker_name`.
  */
-import { attributionForIndicator, attributionForOrganization, type Attribution } from './attribution.js';
+import {
+  attributionForIndicator,
+  attributionForOrganization,
+  isCaCoreCpiIndicator,
+  type Attribution,
+} from './attribution.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from './dataQuality.js';
 import { resultTypeForIndicator, type ResultType } from './resultType.js';
 import { effectiveIsProvisional } from './provisional.js';
@@ -70,6 +75,8 @@ export interface CalendarIndicatorEvent {
   indicator_code?: string | undefined;
   /** economic_events.data_status (DB value). Absent = null (test fixtures). */
   data_status?: string | undefined;
+  /** economic_events.provider_event_id(出典の対象月。attribution に使う。応答の項目ではない)。Absent = null。 */
+  provider_event_id?: string | null | undefined;
 }
 
 export interface CalendarSpeech {
@@ -134,7 +141,13 @@ export function buildCalendarItems(
     datetime_precision: event.release_datetime_precision,
     status: event.status,
     is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, now),
-    attribution: attributionForIndicator(event.indicator_code),
+    attribution: attributionForIndicator(
+      event.indicator_code,
+      // コアCPIだけ、キー(provider_event_id)の対象月を notice に入れる。ほかの指標は変えない
+      isCaCoreCpiIndicator(event.indicator_code)
+        ? { providerEventId: event.provider_event_id, releaseDatetime: event.release_datetime }
+        : undefined,
+    ),
     result_type: resultTypeForIndicator(event.indicator_code),
     data_status: event.data_status ? mapEventDataStatus(event.data_status as EconomicEventDbStatus) : null,
   }));

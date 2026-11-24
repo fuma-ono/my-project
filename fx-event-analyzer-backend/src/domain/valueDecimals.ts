@@ -1,4 +1,5 @@
 import { findMappingByCode } from '../ingestion/mappings/indicators.js';
+import { isCaCoreCpiIndicator } from './attribution.js';
 
 /**
  * 経済指標の値を表示する小数の桁数(HQ指示 2026-11-02「表示桁数」、api-design v1.46)。
@@ -11,6 +12,8 @@ import { findMappingByCode } from '../ingestion/mappings/indicators.js';
  */
 export function valueDecimalsForIndicator(code: string | null | undefined): number | null {
   if (!code) return null;
+  // カナダのコアCPI(公表値は小数第1位。設計書 ca-cpi-detailed-design.md §14.2)。ヘッドライン CA_CPI は変えない(null のまま)
+  if (isCaCoreCpiIndicator(code)) return 1;
   const mapping = findMappingByCode(code);
   if (!mapping || mapping.unit !== 'PERCENT') return null;
   if (!mapping.providers.bls_schedule || !mapping.official.every((ref) => ref.source === 'BLS')) return null;

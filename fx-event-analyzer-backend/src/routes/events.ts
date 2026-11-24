@@ -1,5 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { attributionForIndicator, nyFedAttribution } from '../domain/attribution.js';
+import {
+  attributionForIndicator,
+  isCaCoreCpiIndicator,
+  nyFedAttribution,
+  type Attribution,
+} from '../domain/attribution.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
@@ -12,6 +17,7 @@ import {
   getLatestExplanation,
   getFomcPolicyDecision,
   getReleaseSnapshot,
+  getSnapshotVerificationSource,
   listRevisions,
   type EventRow,
 } from '../repositories/eventsRepository.js';
@@ -76,6 +82,23 @@ function isValidTimeframe(value: unknown): value is ValidTimeframe {
 /** v1.47: FOMC の会合(US_FOMC)の政策決定。fomc_policy_decisions に行がある会合だけ(ほかの指標は読まない)。 */
 const POLICY_RATE_INDICATOR_CODE = 'US_FOMC';
 
+/**
+ * 出典。カナダのコアCPIだけ、対象月(キー = provider_event_id の最後の部分。スナップショットの verification_source があれば一致を
+ * 確認)を notice に入れる(設計書 ca-cpi-detailed-design.md §16.5)。ロック中でも出す(値ではない)。不正なら月なしの基本形で、
+ * ATTRIBUTION_REFERENCE_PERIOD_INVALID をログに残す(値は出さない)。ほかの指標は従来どおり。
+ */
+export async function eventAttribution(app: FastifyInstance, event: EventRow): Promise<Attribution | null> {
+  if (!isCaCoreCpiIndicator(event.indicator_code)) return attributionForIndicator(event.indicator_code);
+  const snapshotVerificationSource = await getSnapshotVerificationSource(app.supabase, event.id);
+  return attributionForIndicator(event.indicator_code, {
+    providerEventId: event.provider_event_id,
+    snapshotVerificationSource,
+    releaseDatetime: event.release_datetime,
+    onInvalidReferencePeriod: (info) =>
+      app.log.error({ ...info, event_id: event.id, indicator: event.indicator_code }, info.code),
+  });
+}
+
 async function lockedEventDetail(app: FastifyInstance, event: EventRow, precision: ReleaseDatetimePrecision) {
   const [snapshot, relatedFxPairs, activeFxPairs] = await Promise.all([
     getReleaseSnapshot(app.supabase, event.id),
@@ -101,7 +124,7 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       // v1.32 is_provisional: ロックされるのは過去の RELEASED だけなので常に false(応答の形を揃える)。
       is_provisional: false,
       // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。ロックしても出典は隠さない。
-      attribution: attributionForIndicator(event.indicator_code),
+      attribution: await eventAttribution(app, event),
       // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
       value_decimals: valueDecimalsForIndicator(event.indicator_code),
       // v1.47: 値なので、ロックしたら隠す(FOMC の会合は RELEASED にならないので、実際にはロックされない)。
@@ -213,7 +236,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
         // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。v1.47: 政策決定があれば NY連銀。
-        attribution: policyRate ? nyFedAttribution() : attributionForIndicator(event.indicator_code),
+        attribution: policyRate ? nyFedAttribution() : await eventAttribution(app, event),
         // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
         value_decimals: valueDecimalsForIndicator(event.indicator_code),
         // v1.47: FOMC の誘導目標レンジ(下限・上限は別々の値)。まだ記録が無い会合・ほかの指標は null。
