@@ -175,6 +175,16 @@ enum AppInfo {
                 // 同じ(iOS側で独自の文言を作らない)。
                 "出典：Eurostat（欧州連合統計局）。ユーロ圏の消費者物価指数・失業率に使用しています。",
                 "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。",
+                // 英国・豪州・カナダ・日本の公式統計。文言は domain/attribution.ts の ONS_ATTRIBUTION・ABS_ATTRIBUTION・
+                // STATCAN_ATTRIBUTION・ESTAT_ATTRIBUTION の source と notice と同じ(iOS側で独自の文言を作らない)。
+                "出典：英国国家統計局（ONS）。英国の経済指標に使用しています。",
+                "Source: Office for National Statistics licensed under the Open Government Licence v.3.0",
+                "出典：オーストラリア統計局（ABS）。豪州の経済指標に使用しています。",
+                "Source: Australian Bureau of Statistics. © Commonwealth of Australia. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Disclaimer: https://www.abs.gov.au/website-privacy-copyright-and-disclaimer",
+                "出典：カナダ統計局（Statistics Canada）。カナダの経済指標に使用しています。",
+                "Source: Statistics Canada. Reproduced and distributed on an \"as is\" basis with the permission of Statistics Canada.",
+                "出典：政府統計の総合窓口（e-Stat）。日本の経済指標に使用しています。",
+                "出典：政府統計の総合窓口(e-Stat)。このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。",
             ]),
             // HQ指示(2026-11-05「NY連銀の出典表示の軽微な修正」): FOMC政策金利(誘導目標レンジ、api-design v1.47)。
             // 文言は Backend の domain/attribution.ts の nyFedAttribution と同じ(iOS側で独自の文言を作らない)。

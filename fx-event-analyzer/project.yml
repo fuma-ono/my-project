@@ -98,6 +98,10 @@ targets:
       path: FXEventAnalyzer/Resources/Info.plist
       properties:
         UILaunchScreen: {}
+        # App Store Connectの輸出コンプライアンス(暗号化の使用)の質問を省く。
+        # 標準のHTTPS(URLSession)・OS標準の暗号のみで、独自の暗号化は使わない
+        # (免除対象)。指示はHQ(App Store審査準備)。
+        ITSAppUsesNonExemptEncryption: false
         # XcodeGen's generated Info.plist otherwise hard-codes "1.0" / "1";
         # read the build settings so SCR-023 アプリ情報 shows the real version.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"

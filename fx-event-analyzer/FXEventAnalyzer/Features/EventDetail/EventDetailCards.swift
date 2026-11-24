@@ -67,8 +67,18 @@ struct EventDetailCards: View {
             comparisonLink
             nextReleaseFooter
             attributionNotice
+            disclaimerFooter
         }
         .frame(width: 214)
+    }
+
+    /// 売買の推奨ではない旨の小さな注記(フッター)。文言は`StrategyAnalysisText.footerDisclaimer`。
+    private var disclaimerFooter: some View {
+        NotoText.text(StrategyAnalysisText.footerDisclaimer, size: 6)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 214, alignment: .leading)
+            .accessibilityIdentifier("eventDetailDisclaimer")
     }
 
     // MARK: - 指標のカード

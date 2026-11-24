@@ -77,6 +77,10 @@ struct MovementDetailView: View {
                         priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
                         approximateTimingNotice
                         analysisCard(reactions: reactions)
+                        NotoText.text(StrategyAnalysisText.footerDisclaimer, size: 6)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("movementDetailDisclaimer")
                     }
                     .frame(width: 214)
                     .padding(.vertical, 6)

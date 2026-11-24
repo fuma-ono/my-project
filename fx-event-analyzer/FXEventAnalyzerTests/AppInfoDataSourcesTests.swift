@@ -30,6 +30,20 @@ final class AppInfoDataSourcesTests: XCTestCase {
         XCTAssertEqual(AppInfo.currentUTCYear, calendar.component(.year, from: Date()))
     }
 
+    /// App Store審査準備: 英国・豪州・カナダ・日本の公式統計の出典。文言は Backend の domain/attribution.ts と同じ。
+    func testTheOfficialStatisticsSourcesAreListed() {
+        let section = AppInfo.dataSourcesDocument.sections.first { $0.heading == "経済指標の結果の照合" }
+        let items = section?.items ?? []
+        XCTAssertTrue(items.contains("出典：英国国家統計局（ONS）。英国の経済指標に使用しています。"))
+        XCTAssertTrue(items.contains("Source: Office for National Statistics licensed under the Open Government Licence v.3.0"))
+        XCTAssertTrue(items.contains("出典：オーストラリア統計局（ABS）。豪州の経済指標に使用しています。"))
+        XCTAssertTrue(items.contains { $0.hasPrefix("Source: Australian Bureau of Statistics. © Commonwealth of Australia. Licensed under CC BY 4.0") })
+        XCTAssertTrue(items.contains("出典：カナダ統計局（Statistics Canada）。カナダの経済指標に使用しています。"))
+        XCTAssertTrue(items.contains("Source: Statistics Canada. Reproduced and distributed on an \"as is\" basis with the permission of Statistics Canada."))
+        XCTAssertTrue(items.contains("出典：政府統計の総合窓口（e-Stat）。日本の経済指標に使用しています。"))
+        XCTAssertTrue(items.contains { $0.contains("政府統計総合窓口(e-Stat)のAPI機能を使用していますが") })
+    }
+
     func testTheExistingSourcesStayInPlace() {
         XCTAssertEqual(
             AppInfo.dataSourcesDocument.sections.map(\.heading),
