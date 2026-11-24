@@ -16,7 +16,8 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  *
  *   npm run ingest:fomc-policy-rate
  *
- * 外部へのアクセスは NY連銀の API への1回だけ(キー不要)。economic_events・event_snapshots は変えない。
+ * 外部へのアクセスは NY連銀の API への1回だけ(キー不要)。記録した会合は economic_events の status・data_status を RELEASED・AVAILABLE にする
+ * (insert 直後。記録済みで SCHEDULED のままの会合は次の実行で同じ更新をして回復する。SCHEDULED の行だけ変える冪等な更新)。event_snapshots は変えない。
  * 定期実行・workflow には登録していない(手動で動かす)。
  * 前提: migration 20261105000001(fomc_policy_decisions)が適用済み(無ければ書き込みがエラーになる)。
  * Exit 0 / 1。

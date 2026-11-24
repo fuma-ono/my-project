@@ -23,7 +23,8 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     FOMC議事要旨(US_FOMC_MINUTES)も入れ、FRB の公式カレンダー(calendar.json、無料・キー不要、1回)を読んで
 #     表に無い会合の議事要旨だけを足す(取れなければ表だけ)。会合の予定は今までどおり表だけ
 #   - FOMCの政策金利(手動実行のみ、target=fomc-policy-rate): HQ承認2026-11-05 案A。NY連銀 Markets Data API
-#     (無料・キー不要、1回)の誘導目標レンジを fomc_policy_decisions に入れる。economic_events は変えない。
+#     (無料・キー不要、1回)の誘導目標レンジを fomc_policy_decisions に入れる。記録した会合は economic_events を RELEASED・AVAILABLE にする
+#     (記録済みで SCHEDULED のままの会合は次の実行で回復する)。
 #     migration 20261105000001(fomc_policy_decisions)が前提(無ければ表を読むところで止まり、政策金利は書かない。実行の記録は ingestion_logs に残る)。
 #     定期実行には入れていない
 #   - 米国小売売上高の発表予定(手動実行のみ、target=retail-sales-schedule): HQ承認2026-11-05。人が確認した表

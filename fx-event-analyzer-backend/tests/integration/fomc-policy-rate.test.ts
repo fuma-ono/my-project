@@ -132,7 +132,11 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     };
     const fetchRanges = () => Promise.resolve(parseNyFedTargetRanges(body));
     const now = () => new Date('2019-12-13T15:00:00Z');
-    const before = await ctx.serviceClient.from('economic_events').select('*').in('id', [meetingId, otherMeetingId]);
+    const before = await ctx.serviceClient
+      .from('economic_events')
+      .select('*')
+      .in('id', [meetingId, otherMeetingId])
+      .order('id');
     expect(before.data?.map((r) => [r.status, r.data_status])).toEqual([
       ['SCHEDULED', 'PENDING'],
       ['SCHEDULED', 'PENDING'],
@@ -160,7 +164,11 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     expect(again).toMatchObject({ recorded: [], alreadyRecorded: 2 });
 
     // 設計 S1: 記録した会合は RELEASED・AVAILABLE になる(ほかの列は変えない。updated_at はトリガーで進む)。2回目の実行では変わらない(冪等)。
-    const after = await ctx.serviceClient.from('economic_events').select('*').in('id', [meetingId, otherMeetingId]);
+    const after = await ctx.serviceClient
+      .from('economic_events')
+      .select('*')
+      .in('id', [meetingId, otherMeetingId])
+      .order('id');
     const withoutUpdatedAt = ({ updated_at: _ignored, ...row }: Record<string, unknown>) => row;
     expect(after.data?.map(withoutUpdatedAt)).toEqual(
       before.data?.map((row) => ({ ...withoutUpdatedAt(row), status: 'RELEASED', data_status: 'AVAILABLE' })),
