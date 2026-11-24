@@ -309,6 +309,11 @@ export interface IngestionStore {
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
   insertEvent(event: NewEvent): Promise<StoredEvent>;
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
+  /**
+   * FOMC の政策金利を記録した会合を RELEASED + AVAILABLE にする(設計 S1)。**status が SCHEDULED の行だけ**を変える
+   * (冪等。CANCELLED・既に RELEASED の行は変えない)。変えた行があれば true。
+   */
+  markEventReleased(eventId: string): Promise<boolean>;
   getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null>;
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void>;
   /**

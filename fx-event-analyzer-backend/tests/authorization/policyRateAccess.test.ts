@@ -37,6 +37,21 @@ const failingClient = { from: () => Promise.reject(new Error('the DB must not be
 const locked = (client: SupabaseClient, plan: 'FREE' | 'PRO', n: number, overrides = {}) =>
   isPolicyRateLockedForPlan(client, plan, { id: `m${n}`, ...FOMC, ...overrides });
 
+describe('isPolicyRateLockedForPlan with RELEASED meetings (設計 S1 の後)', () => {
+  it('the 3-most-recent rule does not change when recorded meetings are RELEASED + AVAILABLE; unrecorded SCHEDULED ones stay unlocked', async () => {
+    const client = fakeSupabaseClient({
+      economic_events: [1, 2, 3, 4, 5, 6].map((n) => ({
+        ...meeting(n),
+        status: n <= 5 ? 'RELEASED' : 'SCHEDULED',
+        data_status: n <= 5 ? 'AVAILABLE' : 'PENDING',
+      })),
+      fomc_policy_decisions: [1, 2, 3, 4, 5].map((n) => ({ event_id: `m${n}` })),
+    });
+    const result = await Promise.all([1, 2, 3, 4, 5, 6].map((n) => locked(client, 'FREE', n)));
+    expect(result).toEqual([true, true, false, false, false, false]);
+  });
+});
+
 describe('isPolicyRateLockedForPlan', () => {
   it('FREE: the 3 most recent recorded meetings are visible; older ones are locked (5 meetings → m3,m4,m5 visible; m1,m2 locked)', async () => {
     const client = world(5);

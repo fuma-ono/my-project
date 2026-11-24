@@ -176,6 +176,17 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       if (error) throw error;
     },
 
+    async markEventReleased(eventId: string): Promise<boolean> {
+      const { data, error } = await supabase
+        .from('economic_events')
+        .update({ status: 'RELEASED', data_status: 'AVAILABLE' })
+        .eq('id', eventId)
+        .eq('status', 'SCHEDULED')
+        .select('id');
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+
     async getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null> {
       const { data, error } = await supabase
         .from('event_snapshots')

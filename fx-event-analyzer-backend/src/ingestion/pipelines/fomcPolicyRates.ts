@@ -14,7 +14,9 @@
  * - 最初の記録が D から MAX_DAYS_AFTER_ANNOUNCEMENT 日より後、または次の会合の発表日以降 → NO_RECORD_IN_WINDOW
  * - D と最初の記録の間に、値の読めない記録がある(本当の最初の日の値が分からない)→ FIRST_RECORD_UNREADABLE
  *
- * 書くのは fomc_policy_decisions だけ。economic_events・event_snapshots は変えない(data_status は PENDING のまま)。
+ * 書くのは fomc_policy_decisions と、記録できた会合の economic_events の status・data_status(設計 S1: insert が成功した
+ * 直後に SCHEDULED → RELEASED・AVAILABLE。store.markEventReleased が status='SCHEDULED' の行だけ変えるので冪等で、
+ * CANCELLED・記録されなかった会合・insert に失敗した会合は変えない)。event_snapshots は変えない。
  * 一度書いた行は変えない・消さない(DB のトリガー)。同じ会合は1行だけ(既にあれば読まずに飛ばす。DB の一意制約)。
  * API が取れなければ何も書かず、エラーとして記録する(次の実行で取り直す)。
  *
@@ -260,6 +262,15 @@ export async function ingestFomcPolicyRates(
       });
     } catch (error) {
       counters.error(`${row.provider_event_id}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+    // insert が成功した会合だけ RELEASED + AVAILABLE にする(失敗しても記録は残る。エラーとして記録する)。
+    try {
+      await deps.store.markEventReleased(row.id);
+    } catch (error) {
+      counters.error(
+        `${row.provider_event_id}: mark RELEASED failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   // 訂正の検知: 記録済みの会合を、NY連銀の今の値と突き合わせる(記録は変えない)。
