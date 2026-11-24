@@ -67,8 +67,8 @@ struct AppRouteDestinationView: View {
             )
         case .speakerComparison(let speakerId, let fxPairId, let symbol):
             SpeakerComparisonView(apiClient: apiClient, speakerId: speakerId, fxPairId: fxPairId, symbol: symbol, tabSelection: $tabSelection)
-        case .indicatorReleases(let id, let name):
-            IndicatorReleasesView(apiClient: apiClient, indicatorId: id, indicatorName: name, tabSelection: $tabSelection)
+        case .indicatorReleases(let id, let name, let code):
+            IndicatorReleasesView(apiClient: apiClient, indicatorId: id, indicatorName: name, indicatorCode: code, tabSelection: $tabSelection)
 
         // MARK: - 仮画面(PlaceholderScreenView)への解決。実装本体はまだ存在せず、
         // 正式なUIは別途デザイン仕様確定後に実装する。SCR番号はHQ指示

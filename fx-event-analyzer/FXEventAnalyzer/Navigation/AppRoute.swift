@@ -81,7 +81,7 @@ enum AppRoute: Hashable {
     /// SCR-020 お問い合わせ履歴。通知一覧の「お問い合わせに返信しました」から開く。
     case supportHistory
     /// SCR-006 指標詳細の「過去の発表日」。その指標の発表済みの回の一覧(HQ指示 2026-10-09)。
-    case indicatorReleases(id: String, name: String)
+    case indicatorReleases(id: String, name: String, code: String? = nil)
     /// レートアラート(HQ指示 2026-10-15)。通知設定と、通知一覧のレートアラートから開く。
     case rateAlerts
     /// 要人発言の相場反応詳細(HQ指示 2026-10-15、api-design v1.28)。画面はSCR-008と同じ。

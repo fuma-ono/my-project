@@ -10,9 +10,9 @@ struct IndicatorReleasesView: View {
     @ObservedObject private var plan = PlanStore.shared
     @State private var planPrompt: String?
 
-    init(apiClient: APIClient, indicatorId: String, indicatorName: String, tabSelection: Binding<Int>) {
+    init(apiClient: APIClient, indicatorId: String, indicatorName: String, indicatorCode: String? = nil, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
-        _viewModel = StateObject(wrappedValue: IndicatorReleasesViewModel(apiClient: apiClient, indicatorId: indicatorId, indicatorName: indicatorName))
+        _viewModel = StateObject(wrappedValue: IndicatorReleasesViewModel(apiClient: apiClient, indicatorId: indicatorId, indicatorName: indicatorName, indicatorCode: indicatorCode))
         _tabSelection = tabSelection
     }
 
@@ -72,7 +72,7 @@ struct IndicatorReleasesView: View {
             }
             ForEach(events) { event in
                 SettingsListSeparator()
-                if let values = Self.releaseValues(event) {
+                if let values = Self.releaseValues(event, isPolicyRate: viewModel.isPolicyRate) {
                     NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
                         HStack(spacing: 0) {
                             dateText(event)
@@ -114,6 +114,17 @@ struct IndicatorReleasesView: View {
                     .accessibilityIdentifier("indicatorReleaseLockedRow")
                 }
             }
+            if viewModel.isPolicyRate, !events.isEmpty {
+                // FOMCは/indicators/{id}/eventsに結果・予想・前回の値が無い(政策金利のレンジはイベント詳細で出る)。
+                SettingsListSeparator()
+                NotoText.text(PolicyRateReleaseNote.text, size: 6.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .frame(width: 214, alignment: .leading)
+                    .accessibilityIdentifier("indicatorReleasePolicyRateNote")
+            }
         }
         .frame(width: 214)
         .background(AccountCardBackground())
@@ -145,12 +156,20 @@ struct IndicatorReleasesView: View {
 
     /// 行に出す結果・予想・前回の文字。無料プランで隠された発表(`isLocked`)ではnil
     /// (値を「-」で出すとデータが無いように見えるため、行ごと鍵の印に替える)。
-    static func releaseValues(_ event: IndicatorEventSummary) -> (actual: String, forecast: String, previous: String)? {
+    /// `isPolicyRate`(FOMC)の行は結果・予想・前回の値をこの一覧では持たないため、3列とも「—」にする。
+    static func releaseValues(_ event: IndicatorEventSummary, isPolicyRate: Bool = false) -> (actual: String, forecast: String, previous: String)? {
         guard !event.isLocked else { return nil }
+        if isPolicyRate { return ("—", "—", "—") }
         // 桁はapi-design v1.46の`value_decimals`(BLSの%の指標は1、ほかはnilで今までどおり)。
         func text(_ value: Double?) -> String { value.map { ValueFormat.indicatorNumber($0, decimals: event.valueDecimals) } ?? "-" }
         return (text(event.actual), text(event.forecast), text(event.previous))
     }
+}
+
+/// FOMC(政策金利)の指標コードと、一覧の薄い説明。
+enum PolicyRateReleaseNote {
+    static let indicatorCode = "US_FOMC"
+    static let text = "政策金利は詳細でご確認ください"
 }
 
 @MainActor
@@ -164,10 +183,15 @@ final class IndicatorReleasesViewModel: ObservableObject {
 
     @Published private(set) var state: State = .loading
     let indicatorName: String
+    /// 指標コード(`IndicatorSummary.code`)。分からないときはnil(今までの表示)。
+    let indicatorCode: String?
     private let apiClient: APIClient
     private let indicatorId: String
 
-    init(apiClient: APIClient, indicatorId: String, indicatorName: String) {
+    var isPolicyRate: Bool { indicatorCode == PolicyRateReleaseNote.indicatorCode }
+
+    init(apiClient: APIClient, indicatorId: String, indicatorName: String, indicatorCode: String? = nil) {
+        self.indicatorCode = indicatorCode
         self.apiClient = apiClient
         self.indicatorId = indicatorId
         self.indicatorName = indicatorName
