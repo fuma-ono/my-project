@@ -11,6 +11,7 @@ import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES } from '../authorization/entitlements.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
+import { priceFeaturesEnabled, requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { isPolicyRateLockedForPlan } from '../authorization/policyRateAccess.js';
 import {
   countRevisions,
@@ -101,10 +102,12 @@ export async function eventAttribution(app: FastifyInstance, event: EventRow): P
 }
 
 async function lockedEventDetail(app: FastifyInstance, event: EventRow, precision: ReleaseDatetimePrecision) {
+  const withPrices = priceFeaturesEnabled(app);
   const [snapshot, relatedFxPairs, activeFxPairs] = await Promise.all([
     getReleaseSnapshot(app.supabase, event.id),
     listRelatedFxPairs(app.supabase, event.indicator_id),
-    listActiveFxPairs(app.supabase),
+    // 価格由来の機能が無効なら、主要ペアの反応は返さないので、通貨ペアの一覧も読まない。
+    withPrices ? listActiveFxPairs(app.supabase) : Promise.resolve([]),
   ]);
   const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
 
@@ -140,12 +143,17 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       fx_pair_id: pair.fx_pair_id,
       symbol: pair.symbol,
       priority: pair.priority,
-      reaction: {
-        timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
-        pips: null,
-        change_percent: null,
-        analysis_status: LOCKED_ANALYSIS_STATUS,
-      },
+      // 価格由来の機能が無効なら reaction キーごと外す(通貨ペアの識別・名前だけ)。
+      ...(withPrices
+        ? {
+            reaction: {
+              timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+              pips: null,
+              change_percent: null,
+              analysis_status: LOCKED_ANALYSIS_STATUS,
+            },
+          }
+        : {}),
     })),
     major_fx_reactions: majorFxPairs.map((pair) => ({
       fx_pair_id: pair.fx_pair_id,
@@ -190,12 +198,13 @@ export function registerEventRoutes(app: FastifyInstance): void {
     // 発表)、その結果にあたる「前回」と、前回の改定・解説(前回を書いていることがある)を隠す。
     const previousLocked = previousLockedIds.has(event.id);
 
+    const withPrices = priceFeaturesEnabled(app);
     const [rawSnapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs, policyRate] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
       previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
       countRevisions(app.supabase, eventId, previousLocked ? { excludeField: PREVIOUS_REVISION_FIELD } : {}),
       listRelatedFxPairs(app.supabase, event.indicator_id),
-      listActiveFxPairs(app.supabase),
+      withPrices ? listActiveFxPairs(app.supabase) : Promise.resolve([]),
       event.indicator_code === POLICY_RATE_INDICATOR_CODE
         ? getFomcPolicyDecision(app.supabase, eventId)
         : Promise.resolve(null),
@@ -203,20 +212,23 @@ export function registerEventRoutes(app: FastifyInstance): void {
 
     const snapshot = rawSnapshot && previousLocked ? nullFields(rawSnapshot, PREVIOUS_VALUE_FIELDS) : rawSnapshot;
     const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
-    const [reactions, majorReactionRows] = await Promise.all([
-      listReactionsForTimeframe(
-        app.supabase,
-        eventId,
-        relatedFxPairs.map((pair) => pair.fx_pair_id),
-        RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
-      ),
-      listReactionsForPairsAndTimeframes(
-        app.supabase,
-        eventId,
-        majorFxPairs.map((pair) => pair.fx_pair_id),
-        MAJOR_FX_REACTION_TIMEFRAMES,
-      ),
-    ]);
+    // 価格由来の機能が無効なら、価格反応の行は読まない(応答にも出さない)。
+    const [reactions, majorReactionRows] = withPrices
+      ? await Promise.all([
+          listReactionsForTimeframe(
+            app.supabase,
+            eventId,
+            relatedFxPairs.map((pair) => pair.fx_pair_id),
+            RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+          ),
+          listReactionsForPairsAndTimeframes(
+            app.supabase,
+            eventId,
+            majorFxPairs.map((pair) => pair.fx_pair_id),
+            MAJOR_FX_REACTION_TIMEFRAMES,
+          ),
+        ])
+      : [[], []];
     const reactionByFxPairId = new Map(reactions.map((reaction) => [reaction.fx_pair_id, reaction]));
     // v1.44 reaction_state: 行が無い理由を事実で言える範囲だけ(domain/reactionState.ts)。analysis_status は変えない。
     const reactionStateContext = {
@@ -257,6 +269,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
       },
       explanation: explanation ?? null,
       related_fx_pairs: relatedFxPairs.map((pair) => {
+        if (!withPrices) {
+          return { fx_pair_id: pair.fx_pair_id, symbol: pair.symbol, priority: pair.priority };
+        }
         const reaction = reactionByFxPairId.get(pair.fx_pair_id);
         return {
           fx_pair_id: pair.fx_pair_id,
@@ -279,7 +294,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
           },
         };
       }),
-      major_fx_reactions: buildMajorFxReactions(majorFxPairs, majorReactionRows, precision, reactionStateContext),
+      major_fx_reactions: withPrices
+        ? buildMajorFxReactions(majorFxPairs, majorReactionRows, precision, reactionStateContext)
+        : [],
       available_timeframes: availableTimeframes(precision),
     };
   });
@@ -320,6 +337,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{ Params: { event_id: string }; Querystring: { fx_pair_id?: string; timeframe?: string } }>(
     '/events/:event_id/reaction',
     async (request) => {
+      requirePriceFeatures(app);
       const userId = request.user!.id;
       const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 
@@ -415,6 +433,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{ Params: { event_id: string }; Querystring: { fx_pair_id?: string; timeframe?: string } }>(
     '/events/:event_id/reaction/chart',
     async (request) => {
+      requirePriceFeatures(app);
       const userId = request.user!.id;
       const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 

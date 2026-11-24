@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireEntitlement, FEATURE_CODES } from '../authorization/entitlements.js';
 import { resolvePlan } from '../authorization/plan.js';
+import { priceFeaturesEnabled } from '../authorization/priceFeatures.js';
 import { ApiError } from '../errors/ApiError.js';
 import { applyNotificationPlanLimits, planLimitsFor, type Plan } from '../domain/planLimits.js';
 import { toSettingsResponse } from '../domain/userSettings.js';
@@ -156,12 +157,14 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
 
     const now = new Date();
     const nowIso = now.toISOString();
+    const withPrices = priceFeaturesEnabled(app);
     const { prefs, settingsUpdatedAt, plan } = await loadNotificationPreferences(app.supabase, userId);
 
     // push = false records nothing new — no INDICATOR / SPEECH /
     // CALENDAR_UPDATE rows, and rate alerts are not evaluated (they stay
     // active until push is turned back on).
-    if (prefs.push && plan) {
+    // 価格由来の機能が無効(PRICE_FEATURES_ENABLED)なら、レートアラートの判定は飛ばす(RATE_ALERT の行を作らない)。
+    if (prefs.push && plan && withPrices) {
       await evaluateRateAlertsForUser(app.supabase, userId, planLimitsFor(plan).rate_alerts_max, now);
     }
 
@@ -181,8 +184,13 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
     await deleteExpiredInboxNotificationsForUser(app.supabase, userId, nowIso);
 
     const [rows, unreadCount] = await Promise.all([
-      listInboxNotifications(app.supabase, userId, nowIso, { order: query.order, kind: query.kind }),
-      countUnreadInboxNotifications(app.supabase, userId, nowIso),
+      // 無効の間は、すでに保存済みの RATE_ALERT の行(本文に価格を含む)も一覧・未読数から外す(行は削除しない)。
+      listInboxNotifications(app.supabase, userId, nowIso, {
+        order: query.order,
+        kind: query.kind,
+        excludeRateAlerts: !withPrices,
+      }),
+      countUnreadInboxNotifications(app.supabase, userId, nowIso, { excludeRateAlerts: !withPrices }),
     ]);
     // 出典と告知(api-design v1.39): 要人発言の行だけ、発言の要人の機関から付ける(問い合わせは最大2種類、N+1 なし)
     const attributions = await resolveInboxAttributions(rows, {

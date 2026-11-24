@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { resolvePlan } from '../authorization/plan.js';
+import { requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { ApiError } from '../errors/ApiError.js';
 import { checkRateAlertCreate, rateAlertLimitFor } from '../domain/planLimits.js';
 import { toRateAlertItem } from '../domain/rateAlerts.js';
@@ -19,7 +20,9 @@ import { createRateAlertBodySchema, rateAlertParamsSchema } from '../schemas/rat
  * from GET /notifications and `npm run jobs:evaluate-rate-alerts`.
  */
 export function registerRateAlertRoutes(app: FastifyInstance): void {
+  // 価格由来の機能が無効(PRICE_FEATURES_ENABLED)の間は、3 つとも 404(権限・DB の確認より前。既存の行は変更しない)。
   app.get('/rate-alerts', async (request) => {
+    requirePriceFeatures(app);
     const userId = request.user!.id;
     const [rows, plan] = await Promise.all([
       listRateAlertsForUser(app.supabase, userId),
@@ -29,6 +32,7 @@ export function registerRateAlertRoutes(app: FastifyInstance): void {
   });
 
   app.post('/rate-alerts', async (request, reply) => {
+    requirePriceFeatures(app);
     const userId = request.user!.id;
     const body = createRateAlertBodySchema.parse(request.body);
 
@@ -63,6 +67,7 @@ export function registerRateAlertRoutes(app: FastifyInstance): void {
   });
 
   app.delete('/rate-alerts/:id', async (request, reply) => {
+    requirePriceFeatures(app);
     const { id } = rateAlertParamsSchema.parse(request.params);
     const deleted = await deleteRateAlert(app.supabase, request.user!.id, id);
     if (!deleted) {

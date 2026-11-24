@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
+import { runIfPriceFeaturesEnabled } from '../config/priceFeatures.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { FX_FETCH_SETTINGS } from '../ingestion/config.js';
 import { ingestEventPriceReactions } from '../ingestion/pipelines/eventReactions.js';
@@ -29,6 +30,8 @@ function arg(name: string): string | undefined {
 }
 
 async function main(): Promise<void> {
+  // 価格由来の機能が無効(PRICE_FEATURES_ENABLED が 'true' でない。未設定を含む)なら、何も計算・書き込みをせず正常終了(exit 0)。
+  if (!runIfPriceFeaturesEnabled('ingest:event-reactions')) return;
   const env = loadEnv();
   const from = arg('from');
   const to = arg('to');

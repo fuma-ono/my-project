@@ -99,6 +99,9 @@ jobs:
       SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
       TWELVE_DATA_API_KEY: ${{ secrets.FX_TWELVE_DATA_API_KEY }}
+      # 価格に由来する機能のフラグ(オーナー決定 2026-11-24)。リポジトリの変数 PRICE_FEATURES_ENABLED が 'true' のときだけ有効。
+      # 未設定・その他は無効で、為替の取り込み・値動きの計算・価格アラートの判定は何もしない。自動では有効にならない。
+      PRICE_FEATURES_ENABLED: ${{ vars.PRICE_FEATURES_ENABLED }}
     steps:
       - name: Check secrets and target
         id: check
@@ -137,6 +140,12 @@ jobs:
         # 定時(AUTOMATIC、台帳の 700/日)。--manual は付けない。1回の取り込みは 10 分で打ち切る。
         # 次の回は「前の回の開始 + 20 分」に始める。次の回の開始が締め切り(開始から 335 分)を過ぎるなら終える。
         run: |
+          # 価格の機能が無効(PRICE_FEATURES_ENABLED が 'true' 以外)なら、繰り返しを始めずに正常終了する(約5.5時間の空回りを避ける)。
+          if [ "${PRICE_FEATURES_ENABLED:-}" != "true" ]; then
+            echo "FX prices loop: skipped (price_features_disabled)"
+            echo "FX prices loop: skipped (price_features_disabled)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           deadline=$(( $(date +%s) + 335 * 60 ))
           runs=0
           failures=0

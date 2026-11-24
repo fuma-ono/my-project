@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parsePriceFeaturesEnabled } from './priceFeatures.js';
 
 /** An optional variable, where an empty value (`NAME=` in .env) also counts as unset. */
 function optionalString(schema: z.ZodString) {
@@ -35,6 +36,12 @@ const envSchema = z.object({
   // 見られるようにする)。未設定ならルートは404(既定で無効)。設定したら
   // ?token=<この値> を付けてスマホのブラウザで開く。社内限定・READ-ONLY。
   INTERNAL_REPORT_TOKEN: optionalString(z.string().min(1)),
+  // 価格由来の機能(価格反応・チャート・pips・major_fx・レートアラート)。'true' のときだけ有効、既定 false
+  // (オーナー決定 2026-11-24。config/priceFeatures.ts)。テストは Env のこの値を差し替える。
+  PRICE_FEATURES_ENABLED: z.string().optional().transform(parsePriceFeaturesEnabled),
+  // 購入導線を出すか(iOS が見て、購入導線と「PRO で…」の文言を隠す)。'true' のときだけ有効、既定 false。バックエンドの挙動(locked / required_plan /
+  // PLAN_LIMIT_EXCEEDED / POST /subscription/verify)は、この値で変えない(古いビルドとの互換)。GET /entitlements の purchases_enabled。
+  PURCHASES_ENABLED: z.string().optional().transform(parsePriceFeaturesEnabled),
 });
 
 export type Env = z.infer<typeof envSchema>;
