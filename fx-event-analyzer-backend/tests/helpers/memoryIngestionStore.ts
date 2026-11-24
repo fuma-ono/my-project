@@ -119,6 +119,14 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve();
   }
 
+  markEventReleased(eventId: string): Promise<boolean> {
+    const event = this.events.find((e) => e.id === eventId);
+    if (!event || event.status !== 'SCHEDULED') return Promise.resolve(false);
+    event.status = 'RELEASED';
+    event.data_status = 'AVAILABLE';
+    return Promise.resolve(true);
+  }
+
   getReleaseSnapshot(eventId: string) {
     const s = this.snapshots.find((snapshot) => snapshot.event_id === eventId);
     return Promise.resolve(

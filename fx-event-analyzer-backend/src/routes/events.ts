@@ -6,6 +6,7 @@ import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES } from '../authorization/entitlements.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
+import { isPolicyRateLockedForPlan } from '../authorization/policyRateAccess.js';
 import {
   countRevisions,
   getEventById,
@@ -104,7 +105,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       attribution: attributionForIndicator(event.indicator_code),
       // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
       value_decimals: valueDecimalsForIndicator(event.indicator_code),
-      // v1.47: 値なので、ロックしたら隠す(FOMC の会合は RELEASED にならないので、実際にはロックされない)。
+      // v1.47: 値なので、ロックしたら隠す。FOMC の会合は RELEASED にならないので、RELEASED のロックでは起きないが、
+      // 過去の会合の政策金利は FREE には直近 3 回だけ(authorization/policyRateAccess.ts。HQ 指示 2026-11-19)で、その外の会合がここに来る。
       policy_rate: null,
       ...LOCKED,
     },
@@ -154,6 +156,11 @@ export function registerEventRoutes(app: FastifyInstance): void {
     // ロックされた発表も 403 にはせず、値を隠して locked: true で返す。
     const { lockedIds, previousLockedIds } = await resolvePastReleaseAccessForPlan(app.supabase, plan, [event]);
     if (lockedIds.has(event.id)) {
+      return lockedEventDetail(app, event, precision);
+    }
+    // HQ 指示 2026-11-19: FOMC の会合は RELEASED にならず、上の RELEASED のロックの対象外。過去の会合の政策金利を、FREE には直近 3 回だけ見せる
+    // (authorization/policyRateAccess.ts)。ロックなら、同じ形(locked: true、値は null)で返す。
+    if (await isPolicyRateLockedForPlan(app.supabase, plan, event)) {
       return lockedEventDetail(app, event, precision);
     }
     // HQ指示 2026-10-22: ひとつ前の発表がロックされていれば(FREE で見られる一番古い

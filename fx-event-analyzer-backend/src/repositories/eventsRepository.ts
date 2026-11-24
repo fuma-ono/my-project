@@ -122,6 +122,36 @@ export async function getFomcPolicyDecision(supabase: SupabaseClient, eventId: s
   };
 }
 
+/**
+ * 政策金利が記録済み(fomc_policy_decisions に行がある)の、ある指標(US_FOMC)の会合を、会合の日時の新しい順に返す。
+ * FREE プランの「直近 N 回だけ値を見られる」(past_releases_max)を、FOMC の政策金利にも当てはめるための読み取り。
+ * FOMC の会合は、記録した実行で RELEASED になる(設計 S1)が、記録前や補正前の過去の会合は SCHEDULED のまま残り得る。
+ * 政策金利は専用の表に入り、RELEASED を数える既存のロック(authorization/pastReleaseAccess.ts)はその表を見ないので、
+ * 記録済みかどうか(status に関係なく)で数える。記録済みの会合は数が少ない(年 8 回前後)ので、全部読む。
+ */
+export async function listRecordedFomcMeetings(
+  supabase: SupabaseClient,
+  indicatorId: string,
+): Promise<{ event_id: string; release_datetime: string }[]> {
+  const decisions = await supabase.from('fomc_policy_decisions').select('event_id');
+  if (decisions.error) throw decisions.error;
+  const ids = (decisions.data ?? []).map((row: { event_id: string }) => row.event_id);
+  if (ids.length === 0) return [];
+  const events = await supabase
+    .from('economic_events')
+    .select('id, release_datetime')
+    .in('id', ids)
+    .eq('indicator_id', indicatorId)
+    .order('release_datetime', { ascending: false })
+    // 同時刻の会合の順序を決定的にする(第2キー)
+    .order('id', { ascending: true });
+  if (events.error) throw events.error;
+  return (events.data ?? []).map((row: { id: string; release_datetime: string }) => ({
+    event_id: row.id,
+    release_datetime: row.release_datetime,
+  }));
+}
+
 export interface ExplanationRow {
   version: number;
   explanation_type: string;
