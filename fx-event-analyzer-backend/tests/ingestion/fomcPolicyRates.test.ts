@@ -281,6 +281,73 @@ describe('ingestFomcPolicyRates', () => {
     });
   });
 
+  describe('already recorded meetings (recovery and backfill)', () => {
+    const decision = (eventId: string, effective: string) => ({
+      event_id: eventId,
+      target_range_lower: 3.75,
+      target_range_upper: 4.0,
+      announced_at: '2026-09-16T18:00:00.000Z',
+      effective_date: effective,
+      source: NY_FED_SOURCE,
+      source_url: 'https://example.test',
+      fetched_at: '2026-09-18T00:00:00.000Z',
+    });
+    const state = (id: string) => store.events.find((e) => e.id === id)!;
+
+    it('(a) a recorded meeting still SCHEDULED becomes RELEASED + AVAILABLE on the next run, without a new insert', async () => {
+      store.fomcPolicyDecisions.push(decision('ev-sep', '2026-09-17'));
+      const { result, counters } = await run(SEPT_OCT);
+      expect([state('ev-sep').status, state('ev-sep').data_status]).toEqual(['RELEASED', 'AVAILABLE']);
+      expect(result.markedReleased).toContain('fomc_schedule:2026-09-16');
+      expect(result.recorded.map((r) => r.provider_event_id)).toEqual(['fomc_schedule:2026-10-28']);
+      // カウンターは新しい記録(ev-oct)だけ。補正は success に数えない
+      expect(counters.success).toBe(1);
+      expect(store.fomcPolicyDecisions.filter((d) => d.event_id === 'ev-sep')).toHaveLength(1);
+    });
+
+    it('(a) recovers even when the NY Fed fetch fails', async () => {
+      store.fomcPolicyDecisions.push(decision('ev-sep', '2026-09-17'));
+      await run(new Error('network down'));
+      expect(state('ev-sep').status).toBe('RELEASED');
+    });
+
+    it('(b) an already RELEASED recorded meeting is left alone, and markEventReleased returns false for it', async () => {
+      store.fomcPolicyDecisions.push(decision('ev-sep', '2026-09-17'));
+      state('ev-sep').status = 'RELEASED';
+      state('ev-sep').data_status = 'AVAILABLE';
+      const before = JSON.stringify(state('ev-sep'));
+      const { result } = await run({ refRates: [record('2026-09-17', 3.75, 4.0)] });
+      expect(JSON.stringify(state('ev-sep'))).toBe(before);
+      expect(result.markedReleased).not.toContain('fomc_schedule:2026-09-16');
+      expect(await store.markEventReleased('ev-sep')).toBe(false);
+    });
+
+    it('(c) a CANCELLED meeting stays CANCELLED even with a decision row', async () => {
+      store.events.push(
+        meeting('ev-cancel', '2026-07-29', '2026-07-29T18:00:00.000Z', 'CANCELLED') as (typeof store.events)[number],
+      );
+      store.fomcPolicyDecisions.push(decision('ev-cancel', '2026-07-30'));
+      await run(SEPT_OCT);
+      expect(state('ev-cancel')).toMatchObject({ status: 'CANCELLED', data_status: 'PENDING' });
+    });
+
+    it('(d) a failure while marking an already recorded meeting is recorded as an error; the rest still run', async () => {
+      store.fomcPolicyDecisions.push(decision('ev-sep', '2026-09-17'));
+      const mark = store.markEventReleased.bind(store);
+      store.markEventReleased = (id) => (id === 'ev-sep' ? Promise.reject(new Error('db down')) : mark(id));
+      const { counters } = await run(SEPT_OCT);
+      expect(counters.errorMessages).toEqual(['fomc_schedule:2026-09-16: mark RELEASED failed: db down']);
+      expect(state('ev-sep').status).toBe('SCHEDULED');
+      expect(state('ev-oct').status).toBe('RELEASED');
+    });
+
+    it('a future meeting with no decision is never marked', async () => {
+      store.fomcPolicyDecisions.push(decision('ev-sep', '2026-09-17'));
+      await run(SEPT_OCT);
+      expect(state('ev-dec')).toMatchObject({ status: 'SCHEDULED', data_status: 'PENDING' });
+    });
+  });
+
   it('does not mark a meeting RELEASED when its insert fails', async () => {
     const insert = store.insertFomcPolicyDecision.bind(store);
     store.insertFomcPolicyDecision = (row) =>

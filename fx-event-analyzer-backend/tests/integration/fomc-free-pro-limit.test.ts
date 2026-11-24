@@ -21,7 +21,8 @@ const USDJPY_FX_PAIR_ID = '20000000-0000-0000-0000-000000000001';
 
 /**
  * FOMC の FREE/PRO 制限(HQ指示 2026-11-19、authorization/policyRateAccess.ts)を本物の Postgres で確かめる。
- * FOMC の会合は SCHEDULED のままなので、既存の「過去の発表」制限(RELEASED だけを数える)では守れなかった。
+ * FOMC の政策金利は専用の表(fomc_policy_decisions)にあり、既存の「過去の発表」制限(RELEASED だけを数える)は、記録前・補正前の
+ * SCHEDULED のままの会合を数えない。このテストの会合は SCHEDULED で作る(記録済みかどうかで数えることを確かめる)。
  * 政策金利が記録済みの会合を新しい順に並べ、FREE は直近 3 回だけ・PRO は全部。
  *
  * 同じ DB を使う他のテスト(fomc-policy-rate など、2018〜2019 年の会合)の「直近 3 回」を変えないよう、

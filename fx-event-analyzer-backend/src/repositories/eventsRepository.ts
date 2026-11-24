@@ -125,8 +125,9 @@ export async function getFomcPolicyDecision(supabase: SupabaseClient, eventId: s
 /**
  * 政策金利が記録済み(fomc_policy_decisions に行がある)の、ある指標(US_FOMC)の会合を、会合の日時の新しい順に返す。
  * FREE プランの「直近 N 回だけ値を見られる」(past_releases_max)を、FOMC の政策金利にも当てはめるための読み取り。
- * FOMC の会合は RELEASED にならない(政策金利は専用の表に入り、会合の行は SCHEDULED のまま)ので、RELEASED を数える
- * 既存のロック(authorization/pastReleaseAccess.ts)には、会合が入らない。記録済みの会合は数が少ない(年 8 回前後)ので、全部読む。
+ * FOMC の会合は、記録した実行で RELEASED になる(設計 S1)が、記録前や補正前の過去の会合は SCHEDULED のまま残り得る。
+ * 政策金利は専用の表に入り、RELEASED を数える既存のロック(authorization/pastReleaseAccess.ts)はその表を見ないので、
+ * 記録済みかどうか(status に関係なく)で数える。記録済みの会合は数が少ない(年 8 回前後)ので、全部読む。
  */
 export async function listRecordedFomcMeetings(
   supabase: SupabaseClient,

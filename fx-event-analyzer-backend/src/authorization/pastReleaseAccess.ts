@@ -102,7 +102,7 @@ export async function requireUnlockedEventForPlan(
   if (lockedIds.has(event.id)) {
     throw ApiError.planLimitExceeded(lockedReleaseMessage(plan), PAST_RELEASE_REQUIRED_PLAN);
   }
-  // HQ 指示 2026-11-19: FOMC の会合は RELEASED にならないので、上のロックの対象外。過去の会合の政策金利を FREE には直近 3 回だけ見せる規則を、
+  // HQ 指示 2026-11-19: FOMC の政策金利は、RELEASED の数え方(上のロック)とは別に、記録済みの会合を数えて判定する(記録前・補正前の会合は SCHEDULED のまま残り得る)。過去の会合の政策金利を FREE には直近 3 回だけ見せる規則を、
   // 子リソース(revisions・reaction・reaction/chart・history)にも当てはめる(政策金利の本体と同じ判定: policyRateAccess.ts)。
   // US_FOMC 以外の指標は影響を受けない(isPolicyRateLockedForPlan が、DB を読まずに false)。同じ PLAN_LIMIT_EXCEEDED(required_plan PRO)で返す。
   if (

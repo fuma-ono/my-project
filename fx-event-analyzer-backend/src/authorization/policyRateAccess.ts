@@ -23,9 +23,10 @@ export function assertEventIndicatorCode(code: unknown): asserts code is string 
  * 過去の FOMC の政策金利のロック(HQ 指示 2026-11-19「FOMC の FREE/PRO 制御」)。
  *
  * 既存のロック(HQ 判断 2026-10-22。FREE は指標ごとに直近 3 回の発表だけ値を見られる)は、**RELEASED の発表だけ**を数える
- * (resolvePastReleaseAccessForPlan)。FOMC の会合は RELEASED にならない(政策金利は fomc_policy_decisions に入り、会合の行は
- * SCHEDULED のまま)ので、そのままだと、**FREE でも過去の全部の会合の政策金利が見えてしまう**。
- * そこで、政策金利が記録済みの会合を新しい順に並べ、FREE(past_releases_max = 3)は直近 3 回だけ、PRO(上限なし)は全部を見られるとする。
+ * (resolvePastReleaseAccessForPlan)。FOMC の会合は、政策金利を記録した実行で RELEASED になる(設計 S1)が、記録前の会合や、
+ * 補正前の過去の会合は SCHEDULED のまま残り得る。また政策金利は専用の表 fomc_policy_decisions に入り、既存のロックは
+ * その表を見ない。そのままだと、**FREE でも過去の記録済みの会合の政策金利が、既存のロックの数え方の差で見えてしまう**ことがある。
+ * そこで、記録済み(fomc_policy_decisions に行がある)の会合を、RELEASED かどうかに関係なく新しい順に並べ、FREE(past_releases_max = 3)は直近 3 回だけ、PRO(上限なし)は全部を見られるとする。
  *   - 対象: 指標が US_FOMC で、その会合に政策金利が記録されているとき。記録が無い会合(これからの会合・まだ記録が無い会合)は
  *     隠す値が無いので、ロックしない。
  *   - ロックされた会合は、GET /events/{id} が、既存のロックと同じ形(locked: true、値を null)で返す。policy_rate は null。

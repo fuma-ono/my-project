@@ -114,7 +114,7 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     expect(deleteError?.message).toMatch(/immutable/);
   });
 
-  it('the job records the range for its meetings through the real repository, once, and leaves economic_events alone', async () => {
+  it('the job records the range for its meetings through the real repository, once, and marks the recorded meetings RELEASED + AVAILABLE (no other column changes)', async () => {
     const repository = createIngestionRepository(ctx.serviceClient);
     // ほかのテストの US_FOMC の行に触れないよう、このテストの2つの会合だけを見せる。
     const store: IngestionStore = {
@@ -133,6 +133,10 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     const fetchRanges = () => Promise.resolve(parseNyFedTargetRanges(body));
     const now = () => new Date('2019-12-13T15:00:00Z');
     const before = await ctx.serviceClient.from('economic_events').select('*').in('id', [meetingId, otherMeetingId]);
+    expect(before.data?.map((r) => [r.status, r.data_status])).toEqual([
+      ['SCHEDULED', 'PENDING'],
+      ['SCHEDULED', 'PENDING'],
+    ]);
 
     const first = new JobCounters();
     await ingestFomcPolicyRates({ store, fetchRanges, now }, first);
@@ -155,8 +159,14 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     const again = await ingestFomcPolicyRates({ store, fetchRanges, now }, second);
     expect(again).toMatchObject({ recorded: [], alreadyRecorded: 2 });
 
+    // 設計 S1: 記録した会合は RELEASED・AVAILABLE になる(ほかの列は変えない。updated_at はトリガーで進む)。2回目の実行では変わらない(冪等)。
     const after = await ctx.serviceClient.from('economic_events').select('*').in('id', [meetingId, otherMeetingId]);
-    expect(after.data).toEqual(before.data);
+    const withoutUpdatedAt = ({ updated_at: _ignored, ...row }: Record<string, unknown>) => row;
+    expect(after.data?.map(withoutUpdatedAt)).toEqual(
+      before.data?.map((row) => ({ ...withoutUpdatedAt(row), status: 'RELEASED', data_status: 'AVAILABLE' })),
+    );
+    expect(first.errorMessages).toEqual([]);
+    expect(second.errorMessages).toEqual([]);
   });
 
   it('GET /events/{id} returns policy_rate (lower and upper apart) with the NY Fed attribution, and null without a decision', async () => {
@@ -176,7 +186,9 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     expect(event.attribution.notice).toContain(
       'FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。',
     );
-    expect(event.data_status).toBe('DATA_PENDING'); // 会合の行は変えていない(DB の PENDING は API で DATA_PENDING)
+    // 設計 S1: 記録した会合は RELEASED・AVAILABLE(AVAILABLE は API で READY)
+    expect(event.status).toBe('RELEASED');
+    expect(event.data_status).toBe('READY');
 
     const noDecisionId = randomUUID();
     const { error } = await ctx.serviceClient

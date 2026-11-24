@@ -67,7 +67,7 @@ describe.skipIf(!integration)('listPolicyRateEventsForReactions (FOMC meetings w
     await ctx.app.close();
   });
 
-  it('lists only non-cancelled meetings with a decision row, with the indicator currency, status unchanged', async () => {
+  it('lists only non-cancelled meetings with a decision row, with the indicator currency, regardless of status (the fixtures here are SCHEDULED)', async () => {
     const store = createIngestionRepository(ctx.serviceClient);
     const listed = (await store.listPolicyRateEventsForReactions('2018-01-01T00:00:00Z')).filter((e) =>
       [recordedId, noDecisionId, cancelledId].includes(e.id),
@@ -83,7 +83,7 @@ describe.skipIf(!integration)('listPolicyRateEventsForReactions (FOMC meetings w
     // sinceIso より前の会合は入らない
     const later = await store.listPolicyRateEventsForReactions('2018-07-01T00:00:00Z');
     expect(later.some((e) => e.id === recordedId)).toBe(false);
-    // RELEASED の一覧には入らない(会合は SCHEDULED のまま)
+    // RELEASED の一覧には入らない(このテストの会合は、ジョブを通さずに SCHEDULED で作ったもの。ジョブを通すと RELEASED になる)
     const released = await store.listReleasedEventsForReactions('2018-01-01T00:00:00Z');
     expect(released.some((e) => e.id === recordedId)).toBe(false);
     const { data } = await ctx.serviceClient
