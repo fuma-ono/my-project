@@ -78,6 +78,8 @@ export interface StoredSnapshot {
   previous: number | null;
   /** '<系列>@<対象期間>'(公式機関の実績値の初回値。改定の確認で、どの期間の値かを読む)。 */
   verification_source?: string | null;
+  /** 初回値を保存した時刻(ISO)。CA のコアCPIの同日の差の判定に使う。読めない取得元は省略(null と同じ扱い)。 */
+  captured_at?: string | null;
 }
 
 export interface NewReleaseSnapshot {

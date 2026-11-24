@@ -20,13 +20,15 @@ export interface EventRow {
   favorable_direction: string;
   /** 取り込みジョブ(発表元)。同時発表イベントのグループ化(domain/marketEventGrouping.ts)に使う。無ければ null。 */
   provider: string | null;
+  /** economic_events.provider_event_id(出典の対象月。domain/attribution.ts。公開 API の項目ではない)。 */
+  provider_event_id: string | null;
 }
 
 export async function getEventById(supabase: SupabaseClient, eventId: string): Promise<EventRow | null> {
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, provider, economic_indicators!inner(code, name, display_name, country_code, currency_code, favorable_direction)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, provider, provider_event_id, economic_indicators!inner(code, name, display_name, country_code, currency_code, favorable_direction)',
     )
     .eq('id', eventId)
     .maybeSingle();
@@ -58,6 +60,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
     currency_code: indicator.currency_code,
     favorable_direction: indicator.favorable_direction,
     provider: data.provider,
+    provider_event_id: (data.provider_event_id as string | null | undefined) ?? null,
   };
 }
 
@@ -81,6 +84,21 @@ export interface SnapshotRow {
 /** GET /events/{id}・履歴の RELEASE スナップショットの列。値の列は FREE で隠す一覧(RELEASE_VALUE_FIELDS)と突き合わせる。 */
 export const RELEASE_SNAPSHOT_COLUMNS =
   'forecast, actual, previous, unit, source, source_url, captured_at, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous';
+
+/**
+ * 初回値のスナップショットの verification_source('<系列>@<対象月>')。カナダのコアCPIの出典の対象月を、キーと突き合わせる
+ * ためだけに読む(応答には出さない)。スナップショットが無ければ null。
+ */
+export async function getSnapshotVerificationSource(supabase: SupabaseClient, eventId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('event_snapshots')
+    .select('verification_source')
+    .eq('event_id', eventId)
+    .eq('snapshot_type', 'RELEASE')
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.verification_source as string | null | undefined) ?? null;
+}
 
 export async function getReleaseSnapshot(supabase: SupabaseClient, eventId: string): Promise<SnapshotRow | null> {
   const { data, error } = await supabase

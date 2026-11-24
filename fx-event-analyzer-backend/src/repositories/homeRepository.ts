@@ -20,6 +20,8 @@ export interface HomeEventRow {
   currency_code: string;
   /** 指標の単位(`economic_indicators.unit`、例: `%`・`千人`)。未登録はnull。 */
   unit: string | null;
+  /** economic_events.provider_event_id(出典の対象月。domain/attribution.ts)。無ければ null。 */
+  provider_event_id: string | null;
 }
 
 export async function listEventsInRange(
@@ -30,7 +32,7 @@ export async function listEventsInRange(
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, economic_indicators!inner(code, name, display_name, country_code, currency_code, unit)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, provider_event_id, economic_indicators!inner(code, name, display_name, country_code, currency_code, unit)',
     )
     .gte('release_datetime', startUtc)
     .lt('release_datetime', endUtc)
@@ -61,6 +63,7 @@ export async function listEventsInRange(
       country_code: indicator.country_code,
       currency_code: indicator.currency_code,
       unit: indicator.unit ?? null,
+      provider_event_id: (row.provider_event_id as string | null | undefined) ?? null,
     };
   });
 }

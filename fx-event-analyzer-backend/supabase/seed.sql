@@ -122,7 +122,10 @@ from (values
   ('AU_UNEMPLOYMENT_RATE', 'AUDUSD', 1), ('AU_UNEMPLOYMENT_RATE', 'AUDJPY', 2),
   ('AU_WPI_QOQ', 'AUDUSD', 1), ('AU_WPI_QOQ', 'AUDJPY', 2),
   ('CA_CPI', 'CADJPY', 1),
-  ('CA_UNEMPLOYMENT_RATE', 'CADJPY', 1)
+  ('CA_UNEMPLOYMENT_RATE', 'CADJPY', 1),
+  -- カナダのコアCPI(migration 20261124000001。設計書 §15.6)
+  ('CA_CPI_TRIM', 'CADJPY', 1),
+  ('CA_CPI_MEDIAN', 'CADJPY', 1)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol

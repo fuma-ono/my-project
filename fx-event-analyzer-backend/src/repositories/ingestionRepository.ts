@@ -190,7 +190,7 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null> {
       const { data, error } = await supabase
         .from('event_snapshots')
-        .select('forecast, actual, previous, verification_source')
+        .select('forecast, actual, previous, verification_source, captured_at')
         .eq('event_id', eventId)
         .eq('snapshot_type', 'RELEASE')
         .maybeSingle();
@@ -201,6 +201,7 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
         actual: num(data.actual),
         previous: num(data.previous),
         verification_source: (data.verification_source as string | null) ?? null,
+        captured_at: (data.captured_at as string | null) ?? null,
       };
     },
 
