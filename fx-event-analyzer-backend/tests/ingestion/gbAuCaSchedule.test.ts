@@ -31,6 +31,8 @@ const CODES = [
   'AU_UNEMPLOYMENT_RATE',
   'AU_WPI_QOQ',
   'CA_CPI',
+  'CA_CPI_TRIM',
+  'CA_CPI_MEDIAN',
   'CA_UNEMPLOYMENT_RATE',
 ];
 
@@ -90,13 +92,23 @@ describe('the tables read from the official pages on 2026-11-10', () => {
     for (const e of ABS_SCHEDULE.entries) expect(e.key).toBe(e.releaseDate);
   });
 
-  it('StatCan: CPI (5) and Labour Force Survey (4), 08:30 Eastern, keyed by the data month the official JSON gives', () => {
+  it('StatCan: CPI, CPI-trim and CPI-median (5 each, the same release) and Labour Force Survey (4), 08:30 Eastern, keyed by the data month the official JSON gives', () => {
     expect(STATCAN_SCHEDULE.entries.map((e) => `${e.indicatorCode} ${e.key} ${e.releaseDate}`)).toEqual([
       'CA_CPI 2026-10 2026-11-16',
       'CA_CPI 2026-11 2026-12-14',
       'CA_CPI 2026-12 2027-01-18',
       'CA_CPI 2027-01 2027-02-16',
       'CA_CPI 2027-02 2027-03-15',
+      'CA_CPI_TRIM 2026-10 2026-11-16',
+      'CA_CPI_TRIM 2026-11 2026-12-14',
+      'CA_CPI_TRIM 2026-12 2027-01-18',
+      'CA_CPI_TRIM 2027-01 2027-02-16',
+      'CA_CPI_TRIM 2027-02 2027-03-15',
+      'CA_CPI_MEDIAN 2026-10 2026-11-16',
+      'CA_CPI_MEDIAN 2026-11 2026-12-14',
+      'CA_CPI_MEDIAN 2026-12 2027-01-18',
+      'CA_CPI_MEDIAN 2027-01 2027-02-16',
+      'CA_CPI_MEDIAN 2027-02 2027-03-15',
       'CA_UNEMPLOYMENT_RATE 2026-11 2026-12-04',
       'CA_UNEMPLOYMENT_RATE 2026-12 2027-01-08',
       'CA_UNEMPLOYMENT_RATE 2027-01 2027-02-05',
@@ -116,6 +128,72 @@ describe('the tables read from the official pages on 2026-11-10', () => {
         );
       }
     }
+  });
+});
+
+describe('StatCan core CPI (CA_CPI_TRIM / CA_CPI_MEDIAN) schedule: same release as CA_CPI (design §3, §16.15.3 step 4)', () => {
+  const core = STATCAN_SCHEDULE.entries.filter((e) => e.indicatorCode.startsWith('CA_CPI_'));
+
+  it('has 10 rows (2 indicators x 5 releases) with the same date, time, zone and reference period as CA_CPI', () => {
+    expect(core).toHaveLength(10);
+    const head = STATCAN_SCHEDULE.entries.filter((e) => e.indicatorCode === 'CA_CPI');
+    for (const code of ['CA_CPI_TRIM', 'CA_CPI_MEDIAN']) {
+      const mine = core.filter((e) => e.indicatorCode === code);
+      expect(mine.map((e) => [e.key, e.referencePeriod, e.releaseDate, e.time, e.timeZone])).toEqual(
+        head.map((e) => [e.key, e.referencePeriod, e.releaseDate, e.time, e.timeZone]),
+      );
+    }
+  });
+
+  it('provider_event_id is statcan_release_schedule:<code>:<month>, unique across the three CPI series', () => {
+    const ids = STATCAN_SCHEDULE.entries
+      .filter((e) => e.indicatorCode.startsWith('CA_CPI'))
+      .map((e) => officialScheduleProviderEventId(STATCAN_SCHEDULE.provider, e));
+    expect(new Set(ids).size).toBe(15);
+    expect(ids).toContain('statcan_release_schedule:CA_CPI_TRIM:2026-10');
+    expect(ids).toContain('statcan_release_schedule:CA_CPI_MEDIAN:2027-02');
+  });
+
+  it('UTC instants: 13:30Z in winter (2026-12-14), 12:30Z after daylight saving starts (2027-03-15)', () => {
+    for (const e of core) {
+      const iso = officialScheduleUtc(e)!.toISOString();
+      expect(iso).toBe(e.releaseDate === '2027-03-15' ? '2027-03-15T12:30:00.000Z' : `${e.releaseDate}T13:30:00.000Z`);
+    }
+    expect(core.find((e) => e.indicatorCode === 'CA_CPI_TRIM' && e.releaseDate === '2026-12-14')).toBeDefined();
+  });
+
+  const dry = async (now: Date) => {
+    const store = new MemoryIngestionStore();
+    store.indicators = ['CA_CPI_TRIM', 'CA_CPI_MEDIAN'].map((code, i) => ({
+      id: `core-${i}`,
+      code,
+      importance: 'MEDIUM',
+      favorable_direction: 'HIGHER_IS_POSITIVE',
+    }));
+    const counters = new JobCounters();
+    const planned = await ingestOfficialScheduleTables(
+      { store, tables: [{ ...STATCAN_SCHEDULE, entries: core }], now: () => now, dryRun: true },
+      counters,
+    );
+    expect(counters.errors).toBe(0);
+    expect(store.events).toEqual([]); // dry-run は何も書かない
+    return planned;
+  };
+
+  it('dry run before the first release: 10 INSERTs (2 indicators x 5), at the UTC instants of the table', async () => {
+    const planned = await dry(NOW);
+    expect(planned).toMatchObject({ inserted: 10, updated: 0, unchanged: 0, past: 0 });
+    expect(planned.plan.every((p) => p.action === 'INSERT')).toBe(true);
+    expect(planned.plan.map((p) => p.release_datetime).sort()).toEqual(
+      core.map((e) => officialScheduleUtc(e)!.toISOString()).sort(),
+    );
+  });
+
+  it('dry run after the 2026-11-16 release time: that release is past (not created), 8 INSERTs remain', async () => {
+    const planned = await dry(new Date('2026-12-08T00:00:00Z'));
+    expect(planned).toMatchObject({ inserted: 8, updated: 0, unchanged: 0, past: 2 });
+    expect(planned.plan.filter((p) => p.action === 'INSERT')).toHaveLength(8);
+    expect(planned.plan.map((p) => p.provider_event_id).some((id) => id.endsWith(':2026-10'))).toBe(false);
   });
 });
 
@@ -166,11 +244,11 @@ describe('ingestOfficialScheduleTables', () => {
     }));
   };
 
-  it('creates one SCHEDULED, EXACT, value-less row per entry (41 rows) with each indicator', async () => {
+  it('creates one SCHEDULED, EXACT, value-less row per entry (51 rows) with each indicator', async () => {
     const { result, counters } = await run();
-    expect(result).toMatchObject({ inserted: 41, updated: 0, unchanged: 0, past: 0 });
+    expect(result).toMatchObject({ inserted: 51, updated: 0, unchanged: 0, past: 0 });
     expect(counters.errors).toBe(0);
-    expect(store.events).toHaveLength(41);
+    expect(store.events).toHaveLength(51);
     expect(
       store.events.every(
         (e) => e.status === 'SCHEDULED' && e.data_status === 'PENDING' && e.release_datetime_precision === 'EXACT',
@@ -181,18 +259,18 @@ describe('ingestOfficialScheduleTables', () => {
   });
 
   // HQ指示(2026-11-13): dry-run は DB に書かない。plan で、各エントリに何をするはずかを返す
-  it('dry run: lists 41 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
+  it('dry run: lists 51 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
     const counters = new JobCounters();
     const planned = await ingestOfficialScheduleTables(
       { store, tables: GB_AU_CA_SCHEDULES, now: () => NOW, dryRun: true },
       counters,
     );
-    expect(planned).toMatchObject({ inserted: 41, updated: 0, unchanged: 0 });
-    expect(planned.plan).toHaveLength(41);
+    expect(planned).toMatchObject({ inserted: 51, updated: 0, unchanged: 0 });
+    expect(planned.plan).toHaveLength(51);
     expect(planned.plan.every((p) => p.action === 'INSERT')).toBe(true);
     expect(store.events).toEqual([]);
     const { result } = await run();
-    expect(result.inserted).toBe(41);
+    expect(result.inserted).toBe(51);
     expect(store.events.map((e) => e.provider_event_id).sort()).toEqual(
       planned.plan.map((p) => p.provider_event_id).sort(),
     );
@@ -227,8 +305,8 @@ describe('ingestOfficialScheduleTables', () => {
   it('is idempotent (no duplicate rows on a re-run)', async () => {
     await run();
     const { result } = await run();
-    expect(result).toMatchObject({ inserted: 0, unchanged: 41 });
-    expect(store.events).toHaveLength(41);
+    expect(result).toMatchObject({ inserted: 0, unchanged: 51 });
+    expect(store.events).toHaveLength(51);
   });
 
   it('a changed official date updates the same row (no duplicate); a past or RELEASED row is never changed', async () => {
@@ -269,7 +347,7 @@ describe('ingestOfficialScheduleTables', () => {
     const { counters } = await run();
     expect(counters.errors).toBe(1);
     expect(store.events.some((e) => e.provider === 'abs_release_calendar')).toBe(false);
-    expect(store.events).toHaveLength(41 - 15);
+    expect(store.events).toHaveLength(51 - 15);
   });
 
   it('an entry removed from the table is only logged, never deleted', async () => {
