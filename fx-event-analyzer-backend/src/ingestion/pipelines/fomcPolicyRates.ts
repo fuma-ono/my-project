@@ -14,7 +14,11 @@
  * - 最初の記録が D から MAX_DAYS_AFTER_ANNOUNCEMENT 日より後、または次の会合の発表日以降 → NO_RECORD_IN_WINDOW
  * - D と最初の記録の間に、値の読めない記録がある(本当の最初の日の値が分からない)→ FIRST_RECORD_UNREADABLE
  *
- * 書くのは fomc_policy_decisions だけ。economic_events・event_snapshots は変えない(data_status は PENDING のまま)。
+ * 書くのは fomc_policy_decisions と、記録済みの会合の economic_events の status・data_status(設計 S1: insert が成功した
+ * 直後に SCHEDULED → RELEASED・AVAILABLE。**既に記録済みで SCHEDULED のままの会合にも、毎回の実行で同じ更新を試す**
+ * (mark の失敗からの回復と、S1 より前の記録の補正を兼ねる。HQ判断)。store.markEventReleased が status='SCHEDULED' の行だけ
+ * 変えるので冪等で、CANCELLED・RELEASED・記録されなかった会合・insert に失敗した会合は変えない)。event_snapshots は変えない。
+ * このジョブに dry-run は無い(常に書く)。
  * 一度書いた行は変えない・消さない(DB のトリガー)。同じ会合は1行だけ(既にあれば読まずに飛ばす。DB の一意制約)。
  * API が取れなければ何も書かず、エラーとして記録する(次の実行で取り直す)。
  *
@@ -63,6 +67,8 @@ export interface FomcPolicyRateResult {
     reason: 'NO_RECORD_IN_WINDOW' | 'FIRST_RECORD_UNREADABLE' | 'OUTSIDE_LOOKBACK';
   }[];
   alreadyRecorded: number;
+  /** 今回 SCHEDULED から RELEASED・AVAILABLE にした会合(新しい記録の直後と、記録済みで SCHEDULED のままだったものの両方)。 */
+  markedReleased: string[];
   /** 今回新しく出た食い違い(記録は変えない)。前回から続いているものは入れない。 */
   conflicts: FomcPolicyRateConflict[];
   /** 前回から続いている食い違いの数。 */
@@ -132,6 +138,22 @@ function addDays(date: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/** 記録済みの会合を RELEASED・AVAILABLE にする(SCHEDULED の行だけ変わる)。失敗は counters.error に記録し、投げない。 */
+async function markReleased(
+  store: IngestionStore,
+  row: ProviderEventRow,
+  counters: JobCounters,
+  result: FomcPolicyRateResult,
+): Promise<void> {
+  try {
+    if (await store.markEventReleased(row.id)) result.markedReleased.push(row.provider_event_id);
+  } catch (error) {
+    counters.error(
+      `${row.provider_event_id}: mark RELEASED failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 export async function ingestFomcPolicyRates(
   deps: {
     store: IngestionStore;
@@ -146,6 +168,7 @@ export async function ingestFomcPolicyRates(
     awaiting: [],
     unmatched: [],
     alreadyRecorded: 0,
+    markedReleased: [],
     conflicts: [],
     continuingConflicts: 0,
     resolvedConflicts: [],
@@ -157,6 +180,7 @@ export async function ingestFomcPolicyRates(
     counters.details.awaiting = result.awaiting;
     counters.details.unmatched = result.unmatched;
     counters.details.already_recorded = result.alreadyRecorded;
+    counters.details.marked_released = result.markedReleased;
     counters.details.conflicts = result.conflicts;
     counters.details.continuing_conflicts = result.continuingConflicts;
     counters.details.resolved_conflicts = result.resolvedConflicts;
@@ -182,6 +206,8 @@ export async function ingestFomcPolicyRates(
   type Target = { row: ProviderEventRow; date: string; nextDate: string | null };
   const pending: Target[] = [];
   const toVerify: (Target & { stored: StoredFomcPolicyDecision })[] = [];
+  /** 記録済みで、まだ SCHEDULED のままの会合(RELEASED・AVAILABLE にし直す)。 */
+  const recordedScheduled: ProviderEventRow[] = [];
   meetings.forEach((row, index) => {
     if (Date.parse(row.release_datetime) > now.getTime()) return;
     const date = localDate(new Date(row.release_datetime), NEW_YORK);
@@ -190,6 +216,7 @@ export async function ingestFomcPolicyRates(
     const stored = recorded.get(row.id);
     if (stored) {
       result.alreadyRecorded += 1;
+      if (row.status === 'SCHEDULED') recordedScheduled.push(row);
       // 発表から MAX_LOOKBACK_DAYS を過ぎた記録は突き合わせない(取得の期間に入れない)。
       if (date >= lookbackStart) toVerify.push({ row, date, nextDate, stored });
       return;
@@ -201,6 +228,8 @@ export async function ingestFomcPolicyRates(
     pending.push({ row, date, nextDate });
   });
   counters.fetched += pending.length;
+  // 記録済みで SCHEDULED のままの会合: NY連銀の取得より前に直す(取得に失敗しても回復できる)。失敗は会合ごとにエラーとして記録。
+  for (const row of recordedScheduled) await markReleased(deps.store, row, counters, result);
   if (pending.length === 0 && toVerify.length === 0) {
     writeDetails({ conflicts_checked: false });
     return result;
@@ -260,7 +289,10 @@ export async function ingestFomcPolicyRates(
       });
     } catch (error) {
       counters.error(`${row.provider_event_id}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
     }
+    // insert が成功した会合だけ RELEASED + AVAILABLE にする(失敗しても記録は残る。エラーとして記録する)。
+    await markReleased(deps.store, row, counters, result);
   }
   // 訂正の検知: 記録済みの会合を、NY連銀の今の値と突き合わせる(記録は変えない)。
   const detected: FomcPolicyRateConflict[] = [];

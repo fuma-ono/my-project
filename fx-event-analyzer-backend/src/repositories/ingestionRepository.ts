@@ -176,10 +176,21 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       if (error) throw error;
     },
 
+    async markEventReleased(eventId: string): Promise<boolean> {
+      const { data, error } = await supabase
+        .from('economic_events')
+        .update({ status: 'RELEASED', data_status: 'AVAILABLE' })
+        .eq('id', eventId)
+        .eq('status', 'SCHEDULED')
+        .select('id');
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+
     async getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null> {
       const { data, error } = await supabase
         .from('event_snapshots')
-        .select('forecast, actual, previous, verification_source')
+        .select('forecast, actual, previous, verification_source, captured_at')
         .eq('event_id', eventId)
         .eq('snapshot_type', 'RELEASE')
         .maybeSingle();
@@ -190,6 +201,7 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
         actual: num(data.actual),
         previous: num(data.previous),
         verification_source: (data.verification_source as string | null) ?? null,
+        captured_at: (data.captured_at as string | null) ?? null,
       };
     },
 

@@ -18,7 +18,7 @@
  *   https://www150.statcan.gc.ca/n1/dai-quo/ssi/homepage/schedule-key_indicators-eng.json の title・description・date。
  *   時刻は「The Daily is released Monday to Friday at 8:30 a.m. Eastern time」https://www150.statcan.gc.ca/n1/dai-quo/index-eng.htm):
  *   - 「Consumer Price Index」October 2026 → 2026-11-16、November → 12-14、December → 2027-01-18、January 2027 → 02-16、
- *     February 2027 → 03-15
+ *     February 2027 → 03-15(CA_CPI_TRIM・CA_CPI_MEDIAN も同じ公表なので同じ日付・時刻)
  *   - 「Labour Force Survey」November 2026 → 2026-12-04、December → 2027-01-08、January 2027 → 02-05、February 2027 → 03-12
  *
  * 利用条件はどれも商用利用可・出典の表示が必要(migration 20261110000002 の説明)。
@@ -206,23 +206,24 @@ export const ABS_SCHEDULE: OfficialScheduleTable = {
   ]),
 };
 
+/**
+ * 「Consumer Price Index」の公表(StatCan の schedule JSON。key は description の対象月)。ヘッドライン CA_CPI と、コア2指標
+ * (CA_CPI_TRIM・CA_CPI_MEDIAN。設計書 ca-cpi-detailed-design.md §3・§15.10)は同じ公表なので、同じ日付・時刻を使う。
+ */
+const STATCAN_CPI: readonly (readonly [string, string])[] = [
+  ['2026-10', '2026-11-16'],
+  ['2026-11', '2026-12-14'],
+  ['2026-12', '2027-01-18'],
+  ['2027-01', '2027-02-16'],
+  ['2027-02', '2027-03-15'],
+];
+
 export const STATCAN_SCHEDULE: OfficialScheduleTable = {
   provider: 'statcan_release_schedule',
   entries: [
-    ...rows(
-      'CA_CPI',
-      '08:30',
-      'America/Toronto',
-      STATCAN_SCHEDULE_URL,
-      [
-        ['2026-10', '2026-11-16'],
-        ['2026-11', '2026-12-14'],
-        ['2026-12', '2027-01-18'],
-        ['2027-01', '2027-02-16'],
-        ['2027-02', '2027-03-15'],
-      ],
-      true,
-    ),
+    ...rows('CA_CPI', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, STATCAN_CPI, true),
+    ...rows('CA_CPI_TRIM', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, STATCAN_CPI, true),
+    ...rows('CA_CPI_MEDIAN', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, STATCAN_CPI, true),
     ...rows(
       'CA_UNEMPLOYMENT_RATE',
       '08:30',

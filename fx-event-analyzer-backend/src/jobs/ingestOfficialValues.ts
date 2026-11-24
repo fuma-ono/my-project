@@ -4,9 +4,25 @@ import { createSupabaseClient } from '../db/supabaseClient.js';
 import { HttpClient } from '../ingestion/http.js';
 import { GB_AU_CA_SCHEDULES } from '../ingestion/mappings/gbAuCaSchedule.js';
 import { readOnlyIngestionStore } from '../ingestion/pipelines/blsCalendar.js';
+import {
+  caCoreAnnotations,
+  ingestCaCoreCpiValues,
+  validateCaCoreSources,
+  type CaCoreCpiResult,
+} from '../ingestion/pipelines/caCoreCpiValues.js';
 import { ingestOfficialValues } from '../ingestion/pipelines/officialValues.js';
 import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
+
+function coreOutput(core: CaCoreCpiResult) {
+  return {
+    ca_core_cpi: { published: core.published, pending: core.pending, plan: core.plan },
+    revision_detection: core.revision_detection,
+    revision_observations: core.revision_observations,
+    same_day_diff: core.same_day_diff,
+    deadline_warnings: core.deadline_warnings,
+  };
+}
 
 /**
  * 公式機関の発表値(英国 ONS・カナダ Statistics Canada・豪州 ABS)を RELEASE として保存する(HQ決定 2026-11-10「公式経済指標の
@@ -15,10 +31,15 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  *   npm run ingest:official-values
  *   npm run ingest:official-values -- --dry-run   # 公式の API は読むが、DB には書かない(ingestion_logs にも)。plan と値だけ出す(HQ指示 2026-11-13)
  *
+ * カナダのコアCPI(CA_CPI_TRIM・CA_CPI_MEDIAN)の初回値も、同じ target で取り込む(設計書 ca-cpi-detailed-design.md §16.15.1
+ * 第1段階。pipelines/caCoreCpiValues.ts。改定の検知・書き込みはしない)。出力には ca_core_cpi・revision_detection・
+ * revision_observations・same_day_diff・deadline_warnings を足す(既存の項目は変えない)。
+ *
  * 定期実行には登録していない(HQ の承認の後)。前提: migration 20261110000002 と、ingest:gb-au-ca-schedules で公表予定が
  * 入っていること。Exit 0 / 1。
  */
 async function main(): Promise<void> {
+  validateCaCoreSources(); // 受付期間の設定漏れ・改定モードの誤りは、取得・書き込みの前に止める
   const env = loadEnv();
   const store = createIngestionRepository(createSupabaseClient(env));
   const fetcher = new HttpClient('official_values', {
@@ -33,6 +54,11 @@ async function main(): Promise<void> {
       { store: readOnlyIngestionStore(store), fetcher, tables: GB_AU_CA_SCHEDULES, dryRun: true },
       counters,
     );
+    const core = await ingestCaCoreCpiValues(
+      { store: readOnlyIngestionStore(store), fetcher, tables: GB_AU_CA_SCHEDULES, dryRun: true },
+      counters,
+    );
+    for (const line of caCoreAnnotations(core)) console.log(line);
     console.log(
       JSON.stringify({
         job: 'ingest:official-values',
@@ -42,6 +68,7 @@ async function main(): Promise<void> {
         pending: planned.pending,
         skipped: counters.skipReasons,
         plan: planned.plan,
+        ...coreOutput(core),
         notes: counters.details,
         errors: counters.errorMessages,
         at: new Date().toISOString(),
@@ -50,13 +77,16 @@ async function main(): Promise<void> {
     process.exitCode = counters.errors > 0 ? 1 : 0;
     return;
   }
+  const held: { core: CaCoreCpiResult | null } = { core: null };
   const result = await runIngestionJob(
     store,
     { provider: 'official_values', dataType: 'ECONOMIC_EVENT', job: 'ingest:official-values' },
     async (counters) => {
       await ingestOfficialValues({ store, fetcher, tables: GB_AU_CA_SCHEDULES }, counters);
+      held.core = await ingestCaCoreCpiValues({ store, fetcher, tables: GB_AU_CA_SCHEDULES }, counters);
     },
   );
+  if (held.core) for (const line of caCoreAnnotations(held.core)) console.log(line);
   console.log(
     JSON.stringify({
       job: 'ingest:official-values',
@@ -65,6 +95,7 @@ async function main(): Promise<void> {
       revisions: result.counters.details.revisions,
       pending: result.counters.details.pending,
       skipped: result.counters.skipReasons,
+      ...(held.core ? coreOutput(held.core) : {}),
       errors: result.counters.errorMessages,
     }),
   );

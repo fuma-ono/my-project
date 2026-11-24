@@ -43,6 +43,7 @@ import {
 } from '../adapters/gbCaOfficialValues.js';
 import type { OfficialScheduleEntry, OfficialScheduleTable } from '../mappings/gbAuCaSchedule.js';
 import { HttpError } from '../http.js';
+import { isFirstValueWindowExpired, validateFirstValueWindows, type FirstValueWindow } from '../firstValueWindow.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
 import { officialScheduleProviderEventId } from './officialScheduleTable.js';
@@ -67,8 +68,11 @@ export interface OfficialValueSource {
    * GB_UNEMPLOYMENT_RATE だけ)。表に referencePeriod がある回は、これまでどおり表と照合する。
    */
   periodFromOfficialLabel?: boolean;
-  /** 初回値として保存してよいのは、公表からこの日数の間だけ(次の回の公表の後に、改定された値を初回値としない)。 */
-  maxDaysAfterRelease?: number;
+  /**
+   * 初回値として保存してよい期間(次の回の公表の後に、改定された値を初回値としない)。ABS は { days: 7, basis: 'ELAPSED' }。
+   * 設定が無い系列は、免除リスト(firstValueWindow.ts の FIRST_VALUE_WINDOW_EXEMPT)に無ければ起動時に止まる。
+   */
+  firstValueWindow?: FirstValueWindow;
   /** fullBody = request の応答(releaseRequest のある取得元で、単位・桁を読む)。 */
   parseForRelease(body: unknown, releaseDate: string, fullBody?: unknown): OfficialValue | null;
   valueForPeriod(body: unknown, period: string): number | null;
@@ -127,7 +131,7 @@ const abs = (indicatorCode: string): OfficialValueSource => {
       const url = absReleaseUrl(series, entry.releaseDate);
       return url ? { url, headers } : null;
     },
-    maxDaysAfterRelease: 7, // ABS の同じ指標の公表の間隔は3週間以上
+    firstValueWindow: { days: 7, basis: 'ELAPSED' }, // ABS の同じ指標の公表の間隔は3週間以上
     parseForRelease: (body, releaseDate, fullBody) => parseAbsValueForRelease(series, body, releaseDate, fullBody),
     valueForPeriod: (body, period) => absValueForPeriod(series, body, period),
   };
@@ -200,6 +204,7 @@ export async function ingestOfficialValues(
   const result: OfficialValuesResult = { published: 0, revisions: 0, pending: 0, plan: [] };
   const dryRun = deps.dryRun === true;
   const sources = deps.sources ?? OFFICIAL_VALUE_SOURCES;
+  validateFirstValueWindows(sources); // 設定漏れは、取得・書き込みの前に例外で止める
 
   const indicators = await deps.store.findIndicatorsByCode(sources.map((s) => s.indicatorCode));
   for (const source of sources) {
@@ -332,8 +337,8 @@ export async function ingestOfficialValues(
       }
 
       if (
-        source.maxDaysAfterRelease !== undefined &&
-        now.getTime() - Date.parse(event.release_datetime) > source.maxDaysAfterRelease * 86_400_000
+        source.firstValueWindow !== undefined &&
+        isFirstValueWindowExpired(source.firstValueWindow, new Date(event.release_datetime), now)
       ) {
         counters.skip('TOO_LATE_FOR_FIRST_RELEASE'); // 改定後の値を初回値として保存しない
         result.pending += 1;

@@ -33,6 +33,9 @@ export function loadIntegrationEnv(): IntegrationEnv | null {
       PORT: '3000',
       HOST: '0.0.0.0',
       LOG_LEVEL: 'silent',
+      // 既存の結合テストは価格由来の機能を検証するので、既定で有効にする(無効の挙動は price-features-disabled.test.ts が
+      // buildIntegrationContext の env で PRICE_FEATURES_ENABLED: false に差し替えて検証)。
+      PRICE_FEATURES_ENABLED: 'true',
     }),
     anonKey: SUPABASE_ANON_KEY,
   };

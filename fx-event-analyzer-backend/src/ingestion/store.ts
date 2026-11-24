@@ -78,6 +78,8 @@ export interface StoredSnapshot {
   previous: number | null;
   /** '<系列>@<対象期間>'(公式機関の実績値の初回値。改定の確認で、どの期間の値かを読む)。 */
   verification_source?: string | null;
+  /** 初回値を保存した時刻(ISO)。CA のコアCPIの同日の差の判定に使う。読めない取得元は省略(null と同じ扱い)。 */
+  captured_at?: string | null;
 }
 
 export interface NewReleaseSnapshot {
@@ -309,6 +311,11 @@ export interface IngestionStore {
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
   insertEvent(event: NewEvent): Promise<StoredEvent>;
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
+  /**
+   * FOMC の政策金利を記録した会合を RELEASED + AVAILABLE にする(設計 S1)。**status が SCHEDULED の行だけ**を変える
+   * (冪等。CANCELLED・既に RELEASED の行は変えない)。変えた行があれば true。
+   */
+  markEventReleased(eventId: string): Promise<boolean>;
   getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null>;
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void>;
   /**

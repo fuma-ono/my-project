@@ -7,6 +7,7 @@ import {
   listRelatedFxPairsForIndicators,
   listSnapshotsForEvents,
 } from '../repositories/homeRepository.js';
+import { priceFeaturesEnabled } from '../authorization/priceFeatures.js';
 import { getHomeFxPairSymbols } from '../repositories/userSettingsRepository.js';
 import { resolveDayRangeUtc } from '../domain/timezone.js';
 import { homeQuerySchema } from '../schemas/home.js';
@@ -57,6 +58,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
         // 待つ形に変えた — 取得対象・フィルタ条件・返却データは一切変えて
         // いない(各関数自体は無変更)。
         const now = new Date();
+        const withPrices = priceFeaturesEnabled(app);
         const speechRange = homeSpeechesRange(now);
         const [snapshots, relatedFxPairsByIndicator, homeFxPairSymbols, recentSpeeches, speechRuns, pastReleaseAccess] =
           await Promise.all([
@@ -69,7 +71,8 @@ export function registerHomeRoutes(app: FastifyInstance): void {
               events.map((event) => event.indicator_id),
             ),
             // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
-            getHomeFxPairSymbols(app.supabase, request.user!.id),
+            // 価格由来の機能が無効なら major_fx は [] なので、読まない(priceFeaturesEnabled)。
+            withPrices ? getHomeFxPairSymbols(app.supabase, request.user!.id) : Promise.resolve([]),
             listRecentDeliveredSpeeches(
               app.supabase,
               speechRange.from.toISOString(),
@@ -87,7 +90,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
         const snapshotByEventId = new Map(snapshots.map((snapshot) => [snapshot.event_id, snapshot]));
         // majorFxはhomeFxPairSymbolsの結果が無いと呼べないため、これだけは
         // 上の並列処理の後に残す(依存関係があるため直列のまま)。
-        const majorFx = await listMajorFx(app.supabase, homeFxPairSymbols);
+        const majorFx = withPrices ? await listMajorFx(app.supabase, homeFxPairSymbols) : [];
         mark('major_fx');
         const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
 

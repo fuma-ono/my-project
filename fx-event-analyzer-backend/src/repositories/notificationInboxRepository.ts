@@ -40,11 +40,17 @@ export async function listInboxNotifications(
   supabase: SupabaseClient,
   userId: string,
   nowIso: string,
-  options: { order: 'asc' | 'desc'; kind?: NotificationInboxKind | undefined },
+  options: {
+    order: 'asc' | 'desc';
+    kind?: NotificationInboxKind | undefined;
+    /** 価格由来の機能が無効の間、RATE_ALERT の行(本文に価格を含む)を一覧から外す。行は削除しない。 */
+    excludeRateAlerts?: boolean;
+  },
 ): Promise<NotificationInboxRow[]> {
   const ascending = options.order === 'asc';
   let query = supabase.from('notification_inbox').select(COLUMNS).eq('user_id', userId).gt('expires_at', nowIso);
   if (options.kind) query = query.eq('kind', options.kind);
+  if (options.excludeRateAlerts) query = query.neq('kind', 'RATE_ALERT');
   const { data, error } = await query
     .order('notify_at', { ascending })
     .order('created_at', { ascending })
@@ -58,13 +64,16 @@ export async function countUnreadInboxNotifications(
   supabase: SupabaseClient,
   userId: string,
   nowIso: string,
+  options: { excludeRateAlerts?: boolean } = {},
 ): Promise<number> {
-  const { count, error } = await supabase
+  let query = supabase
     .from('notification_inbox')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
     .is('read_at', null)
     .gt('expires_at', nowIso);
+  if (options.excludeRateAlerts) query = query.neq('kind', 'RATE_ALERT');
+  const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
 }
