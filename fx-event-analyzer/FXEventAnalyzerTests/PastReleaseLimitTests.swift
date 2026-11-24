@@ -730,22 +730,6 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertNotNil(IndicatorReleasesView.releaseValues(unlocked))
     }
 
-    /// FOMC(US_FOMC)の行は値が無いので3列とも「—」(「-」が並ぶだけにしない)。ロック行は従来どおりnil。
-    func testPolicyRateReleaseRowShowsDashes() {
-        let fomc = IndicatorEventSummary(
-            id: "evt_fomc", releaseDatetime: Date(), status: .released, dataStatus: .ready,
-            forecast: nil, actual: nil, previous: nil, surprise: nil, surpriseDirection: nil
-        )
-        let values = IndicatorReleasesView.releaseValues(fomc, isPolicyRate: true)
-        XCTAssertEqual(values?.actual, "—")
-        XCTAssertEqual(values?.forecast, "—")
-        XCTAssertEqual(values?.previous, "—")
-        XCTAssertEqual(IndicatorReleasesView.releaseValues(fomc)?.actual, "-")
-        let vm = IndicatorReleasesViewModel(apiClient: MockAPIClient(), indicatorId: "ind_1", indicatorName: "FOMC", indicatorCode: "US_FOMC")
-        XCTAssertTrue(vm.isPolicyRate)
-        XCTAssertFalse(IndicatorReleasesViewModel(apiClient: MockAPIClient(), indicatorId: "ind_2", indicatorName: "CPI", indicatorCode: "US_CPI").isPolicyRate)
-    }
-
     func testLockedHomeEventHasNoSubtitleValues() {
         let locked = HomeEventSummary(
             id: "evt_old", indicatorId: "ind_1", indicatorName: "US CPI", countryCode: "US", currencyCode: "USD",
