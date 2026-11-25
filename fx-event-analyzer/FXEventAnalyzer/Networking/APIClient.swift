@@ -23,7 +23,7 @@ final class URLSessionAPIClient: APIClient {
     private let decoder: JSONDecoder
 
     init(
-        session: URLSession = .shared,
+        session: URLSession = URLSessionAPIClient.makeDefaultSession(),
         baseURLProvider: @escaping () -> URL? = URLSessionAPIClient.defaultBaseURLProvider,
         authTokenProvider: @escaping () async -> String? = { nil },
         diagnosticsStore: @escaping @MainActor () -> DiagnosticsStore = { DiagnosticsStore.shared }
@@ -37,7 +37,15 @@ final class URLSessionAPIClient: APIClient {
         self.decoder = decoder
     }
 
-    private static func defaultBaseURLProvider() -> URL? {
+    /// Renderの無料枠はスリープ後の初回応答に30〜60秒かかることがあり、既定の60秒では
+    /// 打ち切られうるため、API用だけ要求のタイムアウトを90秒にした専用のセッションを使う。
+    static func makeDefaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 90
+        return URLSession(configuration: configuration)
+    }
+
+    static func defaultBaseURLProvider() -> URL? {
         guard
             let raw = Bundle.main.infoDictionary?["API_BASE_URL"] as? String,
             !raw.isEmpty,
