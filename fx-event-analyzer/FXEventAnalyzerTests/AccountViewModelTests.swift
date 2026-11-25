@@ -338,6 +338,45 @@ final class AccountDeletionViewModelTests: XCTestCase {
         XCTAssertTrue(favorites.entries.isEmpty)
     }
 
+    func testAppleUserSendsAuthorizationCodeInDeleteBody() async {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(EmptyResponse())
+        let auth = MockAuthService(isConfigured: true)
+        auth.sessionResult = .success(UserSession(userID: UUID(), accessToken: "t", expiresAt: Date().addingTimeInterval(3600), hasAppleIdentity: true))
+        let viewModel = AccountDeletionViewModel(
+            apiClient: apiClient,
+            authService: auth,
+            favoritesStore: makeFavorites(),
+            appleReauthenticator: { "code-123" }
+        ) {}
+
+        await viewModel.delete()
+
+        XCTAssertEqual(apiClient.lastEndpoint?.method, .delete)
+        let body = apiClient.lastEndpoint?.body ?? Data()
+        let decoded = try? JSONDecoder().decode([String: String].self, from: body)
+        XCTAssertEqual(decoded?["apple_authorization_code"], "code-123")
+    }
+
+    func testAppleReauthCancelStillDeletesWithoutBody() async {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(EmptyResponse())
+        let auth = MockAuthService(isConfigured: true)
+        auth.sessionResult = .success(UserSession(userID: UUID(), accessToken: "t", expiresAt: Date().addingTimeInterval(3600), hasAppleIdentity: true))
+        var signOutCallCount = 0
+        let viewModel = AccountDeletionViewModel(
+            apiClient: apiClient,
+            authService: auth,
+            favoritesStore: makeFavorites(),
+            appleReauthenticator: { throw AppleSignInCoordinator.SignInError.cancelled }
+        ) { signOutCallCount += 1 }
+
+        await viewModel.delete()
+
+        XCTAssertNil(apiClient.lastEndpoint?.body)
+        XCTAssertEqual(signOutCallCount, 1)
+    }
+
     func testLocalSignOutFailureStillReturnsToLogin() async {
         let apiClient = MockAPIClient()
         apiClient.result = .success(EmptyResponse())

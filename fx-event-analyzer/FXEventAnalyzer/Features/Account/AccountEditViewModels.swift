@@ -199,10 +199,19 @@ final class AccountDeletionViewModel: ObservableObject {
     private let authService: AuthServicing?
     private let favoritesStore: FavoritesStore
     private let onSignOut: () -> Void
+    /// Appleの再認証で認可コードを取る処理。テストでは差し替える。
+    private let appleReauthenticator: () async throws -> String
 
-    init(apiClient: APIClient, authService: AuthServicing?, favoritesStore: FavoritesStore = .shared, onSignOut: @escaping () -> Void) {
+    init(
+        apiClient: APIClient,
+        authService: AuthServicing?,
+        favoritesStore: FavoritesStore = .shared,
+        appleReauthenticator: @escaping () async throws -> String = { try await AppleSignInCoordinator().reauthenticate() },
+        onSignOut: @escaping () -> Void
+    ) {
         self.accountService = AccountService(apiClient: apiClient)
         self.authService = authService
+        self.appleReauthenticator = appleReauthenticator
         self.favoritesStore = favoritesStore
         self.onSignOut = onSignOut
     }
@@ -210,8 +219,20 @@ final class AccountDeletionViewModel: ObservableObject {
     func delete() async {
         guard state != .submitting else { return }
         state = .submitting
+        // Appleログインのユーザーだけ、Appleのトークン失効のため再認証して
+        // 認可コードを取る。キャンセル・失敗しても削除は止めない(削除する権利を
+        // 優先し、コード無しで削除する。Apple側の連携は端末の設定から解除できる)。
+        var appleCode: String? = nil
+        var isAppleUser = false
+        if let authService {
+            let session: UserSession? = try? await authService.currentSession()
+            isAppleUser = session?.hasAppleIdentity ?? false
+        }
+        if isAppleUser {
+            appleCode = try? await appleReauthenticator()
+        }
         do {
-            try await accountService.deleteAccount()
+            try await accountService.deleteAccount(appleAuthorizationCode: appleCode)
         } catch let error as APIError where error.isNotConfigured {
             state = .error("Backendが準備中のため削除できません。")
             return
