@@ -74,7 +74,10 @@ export function registerAccountRoutes(app: FastifyInstance): void {
           fetch: app.appleFetch,
         });
       } else {
-        request.log.info({ event: 'siwa_revoke_skipped', reason: 'not_apple_user' }, 'Sign in with Apple revocation skipped');
+        request.log.info(
+          { event: 'siwa_revoke_skipped', reason: 'not_apple_user' },
+          'Sign in with Apple revocation skipped',
+        );
       }
     } else {
       request.log.info({ event: 'siwa_revoke_skipped', reason: 'no_code' }, 'Sign in with Apple revocation skipped');

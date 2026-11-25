@@ -7,13 +7,13 @@ const CODE = 'c-authorization-code-SECRET';
 const REFRESH = 'r-refresh-token-SECRET';
 
 let privateKeyPem: string;
-let publicKey: CryptoKey;
+let publicKey: Awaited<ReturnType<typeof generateKeyPair>>['publicKey'];
 let config: { APPLE_TEAM_ID: string; APPLE_KEY_ID: string; APPLE_PRIVATE_KEY: string; APPLE_CLIENT_ID: string };
 
 beforeAll(async () => {
   const pair = await generateKeyPair('ES256', { extractable: true });
   privateKeyPem = await exportPKCS8(pair.privateKey);
-  publicKey = pair.publicKey as CryptoKey;
+  publicKey = pair.publicKey;
   config = {
     APPLE_TEAM_ID: 'TEAM123456',
     APPLE_KEY_ID: 'KEY1234567',
@@ -79,7 +79,7 @@ describe('revokeAppleAccess', () => {
   it('exchanges the code then revokes the refresh token, in order, with form bodies', async () => {
     const calls: { url: string; form: URLSearchParams }[] = [];
     const fetchFn = vi.fn((url: string, init: RequestInit) => {
-      calls.push({ url, form: new URLSearchParams(String(init.body)) });
+      calls.push({ url, form: new URLSearchParams(typeof init.body === 'string' ? init.body : '') });
       return Promise.resolve(url.endsWith('/auth/token') ? json(200, { refresh_token: REFRESH }) : json(200, {}));
     });
     const logger = makeLogger();

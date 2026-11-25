@@ -70,7 +70,8 @@ describe('DELETE /api/v1/account with Sign in with Apple revocation', () => {
     const deleted: string[] = [];
     const fetchFn = vi.fn(
       opts.fetchFn ??
-        ((url: string) => Promise.resolve(url.endsWith('/auth/token') ? json(200, { refresh_token: 'r' }) : json(200, {}))),
+        ((url: string) =>
+          Promise.resolve(url.endsWith('/auth/token') ? json(200, { refresh_token: 'r' }) : json(200, {}))),
     );
     app = buildApp({
       env: loadEnv({
