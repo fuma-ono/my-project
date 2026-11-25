@@ -12,7 +12,10 @@ import {
   ECB_DECISION_DATES,
   ECB_MEETING_PROVIDER,
 } from '../../src/ingestion/mappings/centralBankSchedule.js';
-import { ingestOfficialScheduleTables, officialScheduleUtc } from '../../src/ingestion/pipelines/officialScheduleTable.js';
+import {
+  ingestOfficialScheduleTables,
+  officialScheduleUtc,
+} from '../../src/ingestion/pipelines/officialScheduleTable.js';
 import { readOnlyIngestionStore } from '../../src/ingestion/pipelines/blsCalendar.js';
 import { JobCounters } from '../../src/ingestion/runner.js';
 import { MemoryIngestionStore } from '../helpers/memoryIngestionStore.js';
@@ -33,14 +36,28 @@ beforeEach(() => {
 describe('the tables read from the official pages on 2026-11-25', () => {
   it('BOJ: decision days (2nd day of each 2-day meeting) shown on the official page, future only', () => {
     expect(BOJ_DECISION_DATES).toEqual([
-      '2026-12-18', '2027-01-22', '2027-03-18', '2027-04-28', '2027-06-11',
-      '2027-07-22', '2027-09-22', '2027-10-29', '2027-12-17',
+      '2026-12-18',
+      '2027-01-22',
+      '2027-03-18',
+      '2027-04-28',
+      '2027-06-11',
+      '2027-07-22',
+      '2027-09-22',
+      '2027-10-29',
+      '2027-12-17',
     ]);
   });
   it('ECB: Day 2 of each monetary policy meeting shown on the official calendar', () => {
     expect(ECB_DECISION_DATES).toEqual([
-      '2026-12-17', '2027-02-04', '2027-03-18', '2027-04-29', '2027-06-10',
-      '2027-07-22', '2027-09-09', '2027-10-28', '2027-12-16',
+      '2026-12-17',
+      '2027-02-04',
+      '2027-03-18',
+      '2027-04-29',
+      '2027-06-10',
+      '2027-07-22',
+      '2027-09-09',
+      '2027-10-28',
+      '2027-12-16',
     ]);
   });
   it('keys are the stable meeting month (not the date); meeting period and decision day are kept apart', () => {
@@ -165,7 +182,9 @@ describe('schedule changes, source and display (HQ 2026-11-25)', () => {
     await run(moved({ releaseDate: '2026-12-18', meeting: { startDate: '2026-12-17', endDate: '2026-12-18' } }));
     const rows = store.events.filter((e) => e.provider === ECB_MEETING_PROVIDER);
     expect(store.events).toHaveLength(before);
-    expect(rows.find((e) => e.provider_event_id.endsWith(':2026-12'))!.release_datetime).toBe('2026-12-18T13:15:00.000Z');
+    expect(rows.find((e) => e.provider_event_id.endsWith(':2026-12'))!.release_datetime).toBe(
+      '2026-12-18T13:15:00.000Z',
+    );
     expect(store.eventMeetings.filter((m) => m.meeting_end_date === '2026-12-18')).toHaveLength(2); // BOJ と ECB
   });
 
@@ -203,7 +222,10 @@ describe('schedule changes, source and display (HQ 2026-11-25)', () => {
 });
 
 describe('ingestion workflow targets', () => {
-  const wf = readFileSync(join(process.cwd(), '..', '.github', 'workflows', 'fx-event-analyzer-ingestion.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const wf = readFileSync(
+    join(process.cwd(), '..', '.github', 'workflows', 'fx-event-analyzer-ingestion.yml'),
+    'utf8',
+  ).replace(/\r\n/g, '\n');
   const steps = wf.split('\n      - name: ').slice(1);
   it.each([
     ['boj-ecb-schedule-dry-run', 'npm run -s ingest:boj-ecb-schedule -- --dry-run'],
