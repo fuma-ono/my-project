@@ -354,7 +354,7 @@ final class PastReleaseLimitTests: XCTestCase {
         let legacy = try makeDecoder().decode(LegacyEventDetail.self, from: json)
 
         XCTAssertEqual(legacy.event.revisionStatus, RevisionStatus.none)
-        XCTAssertEqual(legacy.relatedFxPairs.first?.reaction?.analysisStatus, .notAnalyzable)
+        XCTAssertEqual(legacy.relatedFxPairs.first?.reaction.analysisStatus, .notAnalyzable)
         XCTAssertEqual(legacy.majorFxReactions.first?.reactions.map(\.analysisStatus), [.notAnalyzable, .notAnalyzable, .notAnalyzable])
     }
 
