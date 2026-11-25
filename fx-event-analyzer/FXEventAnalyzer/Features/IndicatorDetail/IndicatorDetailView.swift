@@ -76,7 +76,9 @@ struct IndicatorDetailView: View {
                         onToggleFavorite: {
                             // 無料プランはお気に入りの件数に上限がある(HQ指示 2026-10-08)。
                             guard favorites.canToggle(.indicator, id: indicatorId, max: plan.limits.favoritesMax) else {
-                                planPrompt = "無料プランのお気に入りは\(plan.limits.favoritesMax ?? 0)件までです。プレミアムプランなら件数の制限なく登録できます。"
+                                planPrompt = plan.purchasesEnabled
+                                    ? "無料プランのお気に入りは\(plan.limits.favoritesMax ?? 0)件までです。プレミアムプランなら件数の制限なく登録できます。"
+                                    : "お気に入りに登録できるのは\(plan.limits.favoritesMax ?? 0)件までです。"
                                 return
                             }
                             favorites.toggle(.indicator, id: indicatorId)

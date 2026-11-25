@@ -60,7 +60,7 @@ struct MovementDetailView: View {
                 Button {
                     planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
                 } label: {
-                    FXEmptyState(icon: "lock.fill", title: PastReleaseLock.label, message: "この発表の値動きはプレミアムプランで見られます。")
+                    FXEmptyState(icon: "lock.fill", title: PastReleaseLock.label, message: PastReleaseLock.movementLockedMessage)
                 }
                 .buttonStyle(.plain)
                 .onAppear { planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax) }

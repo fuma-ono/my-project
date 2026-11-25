@@ -117,7 +117,13 @@ final class NotificationsStore: ObservableObject {
 
     /// 届いた通知(新しい順)。
     func delivered(now: Date = Date()) -> [NotificationEntry] {
-        entries.filter { $0.notifyAt <= now && !$0.isExpired(now: now) }.reversed()
+        entries.filter { $0.notifyAt <= now && !$0.isExpired(now: now) && !isHiddenByFlags($0) }.reversed()
+    }
+
+    /// 価格フラグ(`price_features_enabled`)がfalseのとき(1.0の既定)は、端末に残っている古いレートアラート
+    /// (`RATE_ALERT`)の記録を表示しない・未読に数えない。記録自体は消さない(フラグがtrueになれば再び表示)。
+    func isHiddenByFlags(_ entry: NotificationEntry) -> Bool {
+        entry.kind == .rateAlert && !PlanStore.shared.priceFeaturesEnabled
     }
 
     /// 届いた通知のうち未読の件数。
@@ -154,7 +160,7 @@ final class NotificationsStore: ObservableObject {
     /// 時間の経過で予定が「届いた通知」に変わるので、定期的・フォアグラウンド
     /// 復帰時・通知の受信時にも呼ぶ。
     func refreshUnread(now: Date = Date()) {
-        let unread = entries.contains { $0.notifyAt <= now && isUnread($0) }
+        let unread = entries.contains { $0.notifyAt <= now && !isHiddenByFlags($0) && isUnread($0) }
         if hasUnread != unread { hasUnread = unread }
     }
 

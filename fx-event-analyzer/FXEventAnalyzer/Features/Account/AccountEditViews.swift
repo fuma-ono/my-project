@@ -285,6 +285,9 @@ struct AccountDeletionView: View {
     @Binding var tabSelection: Int
     @State private var showConfirmation = false
     @Environment(\.dismiss) private var dismiss
+    /// 購入の導線のフラグ(`purchases_enabled`)。falseのとき(1.0の既定)は購読が無いので、購読の記録の行と
+    /// 解約の案内を出さない(下の絶対座標の位置は変えず、案内のカードの分の空きだけが残る)。
+    @ObservedObject private var plan = PlanStore.shared
 
     init(apiClient: APIClient, authService: AuthServicing?, onSignOut: @escaping () -> Void, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: AccountDeletionViewModel(apiClient: apiClient, authService: authService, onSignOut: onSignOut))
@@ -325,7 +328,7 @@ struct AccountDeletionView: View {
                 .accountPinned(top: EmailChangeView.leadTop + 20, height: 32)
 
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Self.deletedData, id: \.label) { item in
+                ForEach(Self.deletedData.filter { plan.purchasesEnabled || $0.icon != "creditcard.fill" }, id: \.label) { item in
                     HStack(spacing: 8) {
                         Image(systemName: item.icon)
                             .font(.system(size: 11))
@@ -343,15 +346,17 @@ struct AccountDeletionView: View {
             .background(AccountCardBackground())
             .accountPinned(top: 176)
 
-            AccountInfoCard(
-                icon: "exclamationmark.circle.fill",
-                text: "App Storeのサブスクリプションは自動では解約されません。サブスクリプションの解約は、App Storeの設定から行ってください。",
-                tint: AccountPalette.destructive,
-                textColor: AccountPalette.destructive,
-                fill: AccountPalette.warningFill,
-                border: AccountPalette.warningBorder
-            )
-            .accountPinned(top: 301)
+            if plan.purchasesEnabled {
+                AccountInfoCard(
+                    icon: "exclamationmark.circle.fill",
+                    text: "App Storeのサブスクリプションは自動では解約されません。サブスクリプションの解約は、App Storeの設定から行ってください。",
+                    tint: AccountPalette.destructive,
+                    textColor: AccountPalette.destructive,
+                    fill: AccountPalette.warningFill,
+                    border: AccountPalette.warningBorder
+                )
+                .accountPinned(top: 301)
+            }
 
             AccountStatusText(state: viewModel.state).accountPinned(top: 366, height: 16)
             AccountPrimaryButton(title: "アカウントを削除する", isLoading: viewModel.state == .submitting, destructive: true) {

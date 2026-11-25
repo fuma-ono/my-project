@@ -225,6 +225,11 @@ final class CalendarViewModel: ObservableObject {
 
     /// 無料プランの範囲を超えたときの案内文。
     static let needsProMessage = "無料プランの経済カレンダーは、先月の1日から見られます。プレミアムプランなら5年前までさかのぼれます。"
+    /// 購入の導線を出さないとき(`purchases_enabled`がfalse、1.0の既定)の案内文(PRO・有料・プランに触れない)。
+    static let needsProMessageNeutral = "経済カレンダーは、先月の1日から見られます。"
+    @MainActor static var rangeMessage: String {
+        PlanStore.shared.purchasesEnabled ? needsProMessage : needsProMessageNeutral
+    }
 
     // MARK: - 表示
 

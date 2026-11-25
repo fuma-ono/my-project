@@ -267,8 +267,8 @@ final class HistoricalComparisonViewModelTests: XCTestCase {
         guard case .loaded(let response) = viewModel.state else {
             return XCTFail("Expected .loaded state")
         }
-        XCTAssertTrue(response.advancedStatistics.available)
-        XCTAssertNotNil(response.advancedStatistics.data)
+        XCTAssertEqual(response.advancedStatistics?.available, true)
+        XCTAssertNotNil(response.advancedStatistics?.data)
     }
 
     func testAdvancedStatisticsGatedForFreeUser() async {
@@ -285,9 +285,9 @@ final class HistoricalComparisonViewModelTests: XCTestCase {
             return XCTFail("Expected .loaded state")
         }
         // available:false must never be confused with "no data" — Entitlement gating only.
-        XCTAssertFalse(response.advancedStatistics.available)
-        XCTAssertEqual(response.advancedStatistics.requiredEntitlement, "VIEW_ADVANCED_STATS")
-        XCTAssertNil(response.advancedStatistics.data)
+        XCTAssertEqual(response.advancedStatistics?.available, false)
+        XCTAssertEqual(response.advancedStatistics?.requiredEntitlement, "VIEW_ADVANCED_STATS")
+        XCTAssertNil(response.advancedStatistics?.data)
     }
 
     func testChangingTimeframeReloads() async {

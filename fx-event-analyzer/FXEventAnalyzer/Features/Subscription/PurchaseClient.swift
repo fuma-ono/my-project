@@ -173,6 +173,11 @@ final class SubscriptionSync {
     /// フォアグラウンドに戻るたびに呼ぶ。端末で有効な購読は毎回送り直し(ユーザーが
     /// 入れ替わった場合や、更新・解約の反映)、更新の受け取りは一度だけ始める。
     func start(apiClient: APIClient) {
+        // 購入の導線のフラグ(`purchases_enabled`)がfalseのとき(1.0の既定)は、StoreKitに触れず、
+        // `POST /subscription/verify`も呼ばない。フラグは`PlanStore.load()`(`GET /entitlements`)が読むので、
+        // 呼び出し側(`RootView`)は読み込みの完了後に呼ぶ。読めていない・失敗した場合も既定のfalseで始めない。
+        // trueになった後の次のフォアグラウンド復帰で、あらためて始まる。
+        guard PlanStore.shared.purchasesEnabled else { return }
         let service = SubscriptionService(apiClient: apiClient)
         Task {
             if let current = await StoreKitPurchaseClient().currentSubscription() {

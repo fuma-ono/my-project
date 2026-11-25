@@ -50,6 +50,8 @@ struct HomeView: View {
     @Binding var path: NavigationPath
     @Binding var tabSelection: Int
     @ObservedObject private var notifications = NotificationsStore.shared
+    /// 価格由来の表示(通貨ペアカード・要人発言の値動き)を出すかのフラグ(`GET /entitlements`)。
+    @ObservedObject private var plan = PlanStore.shared
     private let apiClient: APIClient
 
     init(apiClient: APIClient, userID: UUID? = nil, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
@@ -90,7 +92,8 @@ struct HomeView: View {
             loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。実装が完了次第、ここに表示されます。") }
-        case .loaded(_, let majorFx) where majorFx.isEmpty:
+        // 価格フラグがfalseのときは、通貨ペアが空でも空状態にせず、他のカードを出し続ける。
+        case .loaded(_, let majorFx) where majorFx.isEmpty && plan.priceFeaturesEnabled:
             loadingScaffold { FXEmptyState(icon: "chart.bar", title: "表示できる通貨ペアがありません", message: "しばらくしてから再度お試しください。") }
         case .loaded:
             loadedScreen
@@ -548,8 +551,12 @@ struct HomeView: View {
 
     private var loadedScreen: some View {
         let topEvents = Array(mappedTodayEvents.prefix(3))
-        let pairs = Array(mappedPairs.prefix(3))
-        let favorites = Array(viewModel.favoriteItems.prefix(3))
+        let pairs = plan.priceFeaturesEnabled ? Array(mappedPairs.prefix(3)) : []
+        let favorites = Array(viewModel.favoriteItems.filter { item in
+            // 通貨ペア(価格を出す項目)は価格フラグがfalseのとき出さない。
+            if case .fxPair = item { return plan.priceFeaturesEnabled }
+            return true
+        }.prefix(3))
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
 
         return V5Viewport {
@@ -924,7 +931,7 @@ struct HomeView: View {
 
     /// 予想・前回のみ(`HomeEventSummary`に単位情報が無いため数値のみ)。
     /// 無料プランで隠された発表(`isLocked`)では値を出さない(nil)。
-    static func eventSubtitle(_ event: HomeEventSummary) -> String? {
+    @MainActor static func eventSubtitle(_ event: HomeEventSummary) -> String? {
         guard !event.isLocked else { return nil }
         var parts: [String] = []
         // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
@@ -1508,9 +1515,11 @@ struct HomeView: View {
                 // HQ指示(2026-10-14)「USD/JPY・発言前・現在と縦線の間に余白を設けて。詰まって見える」:
                 // 縦線を3pt左へ寄せ(11→8)、その分だけ縦線と右側の間を広げた(2→5)。右側の幅は変えないので
                 // 文字の大きさは変わらない。
-                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 8)
+                if plan.priceFeaturesEnabled {
+                    Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 8)
+                }
 
-                if let symbol = speech.reactionFxSymbol {
+                if plan.priceFeaturesEnabled, let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
                         // HQ再指摘(2026-10-06、3回目、CIキャプチャで再々確認)
                         // 「現在の価格がまだ'149...'のように切れている」:

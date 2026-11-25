@@ -205,7 +205,8 @@ struct EventRelatedFxPair: Decodable, Identifiable, Equatable {
     let fxPairId: String
     let symbol: String
     let priority: Int
-    let reaction: EventReactionSummary
+    /// 価格フラグがfalseのときBackendはこのキー自体を返さない(2026-11-24)ので、Optional。
+    let reaction: EventReactionSummary?
 
     var id: String { fxPairId }
 

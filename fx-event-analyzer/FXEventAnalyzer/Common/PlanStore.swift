@@ -14,6 +14,13 @@ final class PlanStore: ObservableObject {
     /// (`plan`は仮の無料プラン)。ホームのキャッシュがプランの一致を確かめるのに使う(HQ承認 2026-11-02)。
     @Published private(set) var isConfirmed = false
 
+    /// サーバー側フラグ(`GET /entitlements`の`price_features_enabled`)。価格由来の表示(為替レート・pips・
+    /// 値動き・チャート・戦略分析・価格アラート)を出してよいか。既定false(読み込み前・オフライン・失敗・
+    /// ログアウト時も隠す側)。1.0は常にfalse。1.1以降にサーバー側でtrueにして再有効化する。
+    @Published private(set) var priceFeaturesEnabled = false
+    /// サーバー側フラグ(`purchases_enabled`)。購入(PRO課金)の導線を出してよいか。既定false(同上)。
+    @Published private(set) var purchasesEnabled = false
+
     var isPro: Bool { plan == .pro }
 
     /// HQ指示(2026-11-05)「Splash先行通信」: `userID`を渡すと、Splash中に開始済みの
@@ -30,9 +37,14 @@ final class PlanStore: ObservableObject {
             }
             plan = response.plan ?? .free
             limits = response.limits ?? (plan == .pro ? .pro() : .free())
+            priceFeaturesEnabled = response.priceFeaturesEnabled ?? false
+            purchasesEnabled = response.purchasesEnabled ?? false
             isConfirmed = true
         } catch {
             // 取れないときは前回の値のまま(起動直後は無料プランの範囲)。
+            // フラグだけは、取れないときはfalse(隠す側)に戻す(オーナー指示)。
+            priceFeaturesEnabled = false
+            purchasesEnabled = false
         }
     }
 
@@ -40,13 +52,17 @@ final class PlanStore: ObservableObject {
     func reset() {
         plan = .free
         limits = .free()
+        priceFeaturesEnabled = false
+        purchasesEnabled = false
         isConfirmed = false
     }
 
     /// テスト用。
-    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true) {
+    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true, priceFeaturesEnabled: Bool? = nil, purchasesEnabled: Bool? = nil) {
         self.plan = plan
         self.limits = limits
+        if let priceFeaturesEnabled { self.priceFeaturesEnabled = priceFeaturesEnabled }
+        if let purchasesEnabled { self.purchasesEnabled = purchasesEnabled }
         isConfirmed = confirmed
     }
 

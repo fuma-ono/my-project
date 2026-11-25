@@ -13,6 +13,8 @@ struct NotificationListView: View {
     let apiClient: APIClient
     @Binding var tabSelection: Int
     @ObservedObject private var store = NotificationsStore.shared
+    /// 価格フラグがfalseのとき、レートアラートの絞り込みを出さない(記録も`NotificationsStore.delivered`が除く)。
+    @ObservedObject private var plan = PlanStore.shared
     @State private var now = Date()
     /// HQ指示(2026-10-13)「右上に新しい順/古い順の並び替え」。
     @State private var newestFirst = true
@@ -152,7 +154,7 @@ struct NotificationListView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 filterChip(label: "すべて", kind: nil)
-                ForEach(NotificationEntry.Kind.allCases, id: \.self) { kind in
+                ForEach(NotificationEntry.Kind.allCases.filter { $0 != .rateAlert || plan.priceFeaturesEnabled }, id: \.self) { kind in
                     filterChip(label: kind.label, kind: kind)
                 }
             }

@@ -82,7 +82,7 @@ struct AppInfoView: View {
             case .license: LegalDocumentView(document: AppInfo.licenseDocument, tabSelection: $tabSelection)
             case .openSource: OpenSourceLicensesView(tabSelection: $tabSelection)
             case .libraries: LegalDocumentView(document: AppInfo.librariesDocument, tabSelection: $tabSelection)
-            case .dataSources: LegalDocumentView(document: AppInfo.dataSourcesDocument, tabSelection: $tabSelection)
+            case .dataSources: LegalDocumentView(document: AppInfo.visibleDataSourcesDocument(priceFeaturesEnabled: PlanStore.shared.priceFeaturesEnabled), tabSelection: $tabSelection)
             }
         }
     }
@@ -196,6 +196,24 @@ enum AppInfo {
         ],
         footer: []
     ) }
+
+    /// 価格フラグ(`price_features_enabled`)がfalseのとき(1.0の既定)は、価格・pipsに触れる「値動き・pipsについて」の
+    /// 節を外した出典の文書。trueのときは`dataSourcesDocument`と同じ。
+    static func visibleDataSourcesDocument(priceFeaturesEnabled: Bool) -> LegalDocument {
+        let full = dataSourcesDocument
+        guard !priceFeaturesEnabled else { return full }
+        return LegalDocument(
+            id: full.id,
+            screenTitle: full.screenTitle,
+            title: full.title,
+            preamble: full.preamble,
+            sections: full.sections.filter { $0.heading != priceSectionHeading },
+            footer: full.footer
+        )
+    }
+
+    /// 価格・pipsに触れる節の見出し(価格フラグがfalseのとき外す)。
+    static let priceSectionHeading = "値動き・pipsについて"
 
     /// 今の年(UTC)。
     static var currentUTCYear: Int {

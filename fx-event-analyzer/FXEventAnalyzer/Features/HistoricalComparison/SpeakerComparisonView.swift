@@ -21,7 +21,8 @@ struct SpeakerComparisonEvent: Decodable, Equatable, Identifiable {
     let title: String
     let statementDatetime: Date
     let importance: Importance
-    let pipsByTimeframe: [String: Double?]
+    /// 価格フラグがfalseのときBackendはこのキーを返さないので、Optional(2026-11-24)。
+    let pipsByTimeframe: [String: Double?]?
 
     var id: String { speechId }
 
@@ -83,6 +84,8 @@ struct SpeakerComparisonView: View {
     @State private var planPrompt: String?
     private let apiClient: APIClient
     @Environment(\.dismiss) private var dismiss
+    /// 価格フラグ(pipsの列・通貨ペア)と購入フラグ(PRO・有料の併記)。1.0の既定はどちらもfalse。
+    @ObservedObject private var plan = PlanStore.shared
 
     init(apiClient: APIClient, speakerId: String, fxPairId: String?, symbol: String?, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -114,7 +117,12 @@ struct SpeakerComparisonView: View {
             VStack(alignment: .leading, spacing: 8) {
                 header(response)
                 table(response)
-                if let limit = response.historyLimit, limit.isLimited {
+                if let limit = response.historyLimit, limit.isLimited, !plan.purchasesEnabled {
+                    // 購入の導線を出さないとき(1.0): PRO・有料に触れず、表示している回数だけを案内する。
+                    NotoText.text(HistoricalComparisonView.neutralLimitText(maxForPlan: limit.maxForPlan), size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .padding(.leading, 4)
+                } else if let limit = response.historyLimit, limit.isLimited {
                     Button {
                         planPrompt = "無料プランで比べられるのは、直近\(limit.maxForPlan)回分です。プレミアムプランなら\(limit.proMax)回分(約5年)と比べられます。"
                     } label: {
@@ -157,7 +165,7 @@ struct SpeakerComparisonView: View {
                     NotoText.text("｜", size: 8.5).opacity(0.6)
                     NotoText.text(speaker.organization, size: 8.5)
                     Spacer(minLength: 4)
-                    if let pairSymbol {
+                    if plan.priceFeaturesEnabled, let pairSymbol {
                         OverlappingPairFlags(symbol: pairSymbol, diameter: 10)
                         NotoText.text(HistoricalComparisonView.pairLabel(pairSymbol), size: 9)
                             .foregroundStyle(.white)
@@ -175,7 +183,12 @@ struct SpeakerComparisonView: View {
         static let date: CGFloat = 42
         static let title: CGFloat = 87
         static let pips: [CGFloat] = [28, 28, 29]
+        /// pipsの列を出さないとき(価格フラグがfalse)の発言の列の幅(表の幅212から日時の列を引いた残り)。
+        static let titleWithoutPips: CGFloat = 212 - 42
     }
+
+    /// 発言の列の幅。pipsの列を出すときは従来の87。
+    private var titleWidth: CGFloat { plan.priceFeaturesEnabled ? Column.title : Column.titleWithoutPips }
 
     private func table(_ response: SpeakerComparisonResponse) -> some View {
         let events = newestFirst
@@ -230,10 +243,12 @@ struct SpeakerComparisonView: View {
                 .frame(width: Column.date, height: HistoricalComparisonView.headerHeight)
             }
             .buttonStyle(.plain)
-            headerCell("発言", width: Column.title)
-            headerCell("1分", width: Column.pips[0])
-            headerCell("5分", width: Column.pips[1])
-            headerCell("15分", width: Column.pips[2])
+            headerCell("発言", width: titleWidth)
+            if plan.priceFeaturesEnabled {
+                headerCell("1分", width: Column.pips[0])
+                headerCell("5分", width: Column.pips[1])
+                headerCell("15分", width: Column.pips[2])
+            }
         }
         .frame(height: HistoricalComparisonView.headerHeight)
         .background(Color(red: 0.06, green: 0.17, blue: 0.33))
@@ -266,10 +281,12 @@ struct SpeakerComparisonView: View {
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
-                .frame(width: Column.title, alignment: .leading)
-            pipsCell(event.pipsByTimeframe["1m"] ?? nil, width: Column.pips[0])
-            pipsCell(event.pipsByTimeframe["5m"] ?? nil, width: Column.pips[1])
-            pipsCell(event.pipsByTimeframe["15m"] ?? nil, width: Column.pips[2])
+                .frame(width: titleWidth, alignment: .leading)
+            if plan.priceFeaturesEnabled {
+                pipsCell(event.pipsByTimeframe?["1m"] ?? nil, width: Column.pips[0])
+                pipsCell(event.pipsByTimeframe?["5m"] ?? nil, width: Column.pips[1])
+                pipsCell(event.pipsByTimeframe?["15m"] ?? nil, width: Column.pips[2])
+            }
         }
         .frame(height: HistoricalComparisonView.rowHeight)
         .contentShape(Rectangle())

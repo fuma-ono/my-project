@@ -13,4 +13,17 @@ struct EntitlementsResponse: Decodable, Equatable {
     /// v1.15で追加(HQ指示 2026-10-08、無料プランの制限)。古いBackendではnil。
     var plan: Plan? = nil
     var limits: PlanLimits? = nil
+    /// 1.0公開用のサーバー側フラグ(2026-11-24 オーナー決定)。価格由来の情報(為替レート・pips・
+    /// チャート・戦略分析・価格アラート)を見せてよいか。キーが無い(古いBackend)ときはnil=false扱い。
+    var priceFeaturesEnabled: Bool? = nil
+    /// 購入(PRO課金)の導線を見せてよいか。キーが無いときはnil=false扱い。
+    var purchasesEnabled: Bool? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case features
+        case plan
+        case limits
+        case priceFeaturesEnabled = "price_features_enabled"
+        case purchasesEnabled = "purchases_enabled"
+    }
 }

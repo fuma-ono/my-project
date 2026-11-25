@@ -52,11 +52,43 @@ enum HelpFAQ {
         ]),
     ]
 
-    /// 質問・答えの両方からキーワードで探す(大文字・小文字は区別しない)。
-    static func search(_ keyword: String) -> [(category: HelpFAQCategory, item: HelpFAQItem)] {
+    /// 価格フラグ(`price_features_enabled`)がfalseのとき、価格・pipsに触れない答えに差し替える項目(質問 → 答え)。
+    private static let priceFreeAnswers: [String: String] = [
+        "サプライズとは？": "結果が予想からどれだけ離れていたかを示します。",
+        "重要度(HIGH / MEDIUM / LOW)の意味": "指標・発言の注目度の目安です。HIGHは特に注目度が高い指標・発言です。",
+        "投資の助言はもらえますか？": "このアプリは経済指標と要人発言の情報を提供するもので、投資の助言は行っていません。投資の判断はご自身の責任でお願いします。",
+    ]
+
+    /// 購入フラグ(`purchases_enabled`)がfalseのとき、購読・解約に触れない答えに差し替える項目。
+    private static let purchaseFreeAnswers: [String: String] = [
+        "アカウントを削除したい": "設定 → アカウント情報 → アカウント削除 から削除できます。削除すると、プロフィール・設定・お気に入りなどのデータは復元できません。",
+    ]
+
+    /// 今のフラグで見せる分類・項目。1.0(両方false)は、「プラン・支払いについて」と「チャートの使い方」の分類を
+    /// 出さず、価格・購読に触れる答えを中立の文に差し替える。両方trueのときは`categories`と同じ。
+    static func visibleCategories(priceFeaturesEnabled: Bool, purchasesEnabled: Bool) -> [HelpFAQCategory] {
+        categories.compactMap { category in
+            if category.id == "billing" && !purchasesEnabled { return nil }
+            if category.id == "chart" && !priceFeaturesEnabled { return nil }
+            let items = category.items.map { item -> HelpFAQItem in
+                if !priceFeaturesEnabled, let answer = priceFreeAnswers[item.question] {
+                    return HelpFAQItem(question: item.question, answer: answer)
+                }
+                if !purchasesEnabled, let answer = purchaseFreeAnswers[item.question] {
+                    return HelpFAQItem(question: item.question, answer: answer)
+                }
+                return item
+            }
+            return HelpFAQCategory(id: category.id, title: category.title, icon: category.icon, items: items)
+        }
+    }
+
+    /// 質問・答えの両方からキーワードで探す(大文字・小文字は区別しない)。`in`を渡すと、その分類の中だけで探す
+    /// (画面は`visibleCategories`を渡す。既定は全分類)。
+    static func search(_ keyword: String, in source: [HelpFAQCategory]? = nil) -> [(category: HelpFAQCategory, item: HelpFAQItem)] {
         let words = keyword.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty else { return [] }
-        return categories.flatMap { category in
+        return (source ?? categories).flatMap { category in
             category.items
                 .filter { item in words.allSatisfy { item.question.localizedCaseInsensitiveContains($0) || item.answer.localizedCaseInsensitiveContains($0) } }
                 .map { (category, $0) }

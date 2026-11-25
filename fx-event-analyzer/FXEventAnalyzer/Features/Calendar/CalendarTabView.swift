@@ -75,7 +75,7 @@ struct CalendarTabView: View {
                 // HQ指示(2026-10-13、2回目)「参考画像をピクセル単位で確認して」:
                 // 凡例(HIGH/MEDIUM/LOW)はカレンダーの外枠の中に含めたため、
                 // `CalendarMonthCard`側へ移した。
-                CalendarMonthCard(viewModel: viewModel) { planPrompt = CalendarViewModel.needsProMessage }
+                CalendarMonthCard(viewModel: viewModel) { planPrompt = CalendarViewModel.rangeMessage }
                 NotoText.text(viewModel.selectedTitle, size: 10)
                     .foregroundStyle(SettingsListLayout.sectionTitleColor)
                     .padding(.horizontal, 4)

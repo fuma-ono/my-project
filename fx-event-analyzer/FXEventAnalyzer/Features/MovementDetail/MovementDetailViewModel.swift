@@ -194,7 +194,7 @@ final class MovementDetailViewModel: ObservableObject {
         )
         pastReactions = comparison.map { response in
             response.events.filter { $0.speechId != eventId }.map { event in
-                MovementAnalysisText.PastReaction(id: event.speechId, pips: event.pipsByTimeframe.compactMapValues { $0 }, surprise: nil)
+                MovementAnalysisText.PastReaction(id: event.speechId, pips: (event.pipsByTimeframe ?? [:]).compactMapValues { $0 }, surprise: nil)
             }
         }
     }

@@ -10,6 +10,12 @@ struct HelpView: View {
     @State private var form: SupportRequest.Kind?
     @State private var showsHistory = false
     @Environment(\.dismiss) private var dismiss
+    /// 価格・購入のフラグ。falseのとき(1.0の既定)は、価格・課金に触れる分類・答えを出さない。
+    @ObservedObject private var plan = PlanStore.shared
+
+    private var visibleCategories: [HelpFAQCategory] {
+        HelpFAQ.visibleCategories(priceFeaturesEnabled: plan.priceFeaturesEnabled, purchasesEnabled: plan.purchasesEnabled)
+    }
 
     var body: some View {
         V5Viewport {
@@ -56,7 +62,7 @@ struct HelpView: View {
 
     private var faqSection: some View {
         SettingsListSection(title: "よくある質問") {
-            ForEach(Array(HelpFAQ.categories.enumerated()), id: \.element.id) { index, category in
+            ForEach(Array(visibleCategories.enumerated()), id: \.element.id) { index, category in
                 if index > 0 { SettingsListSeparator() }
                 SettingsListValueRow(title: category.title, value: "") { openedCategory = category }
             }
@@ -64,7 +70,7 @@ struct HelpView: View {
     }
 
     private var searchResults: some View {
-        let results = HelpFAQ.search(keyword)
+        let results = HelpFAQ.search(keyword, in: visibleCategories)
         return SettingsListSection(title: "検索結果") {
             if results.isEmpty {
                 NotoText.text("該当する質問が見つかりませんでした。お問い合わせからお送りください。", size: 8)
