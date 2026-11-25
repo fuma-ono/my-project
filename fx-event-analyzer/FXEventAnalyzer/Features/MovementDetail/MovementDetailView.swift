@@ -60,7 +60,7 @@ struct MovementDetailView: View {
                 Button {
                     planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
                 } label: {
-                    FXEmptyState(icon: "lock.fill", title: PastReleaseLock.label, message: "この発表の値動きはプレミアムプランで見られます。")
+                    FXEmptyState(icon: "lock.fill", title: PastReleaseLock.label, message: PastReleaseLock.movementLockedMessage)
                 }
                 .buttonStyle(.plain)
                 .onAppear { planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax) }
@@ -77,6 +77,10 @@ struct MovementDetailView: View {
                         priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
                         approximateTimingNotice
                         analysisCard(reactions: reactions)
+                        NotoText.text(StrategyAnalysisText.footerDisclaimer, size: 6)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("movementDetailDisclaimer")
                     }
                     .frame(width: 214)
                     .padding(.vertical, 6)

@@ -16,16 +16,18 @@ struct AppRouteDestinationView: View {
         case .eventDetail(let id):
             EventDetailView(apiClient: apiClient, eventId: id, tabSelection: $tabSelection)
         case .movementDetail(let eventId, let indicatorId, let fxPairId, let symbol, let indicatorName, let releaseDatetime):
-            MovementDetailView(
-                apiClient: apiClient,
-                eventId: eventId,
-                indicatorId: indicatorId,
-                fxPairId: fxPairId,
-                symbol: symbol,
-                indicatorName: indicatorName,
-                releaseDatetime: releaseDatetime,
-                tabSelection: $tabSelection
-            )
+            PriceFeatureGate {
+                MovementDetailView(
+                    apiClient: apiClient,
+                    eventId: eventId,
+                    indicatorId: indicatorId,
+                    fxPairId: fxPairId,
+                    symbol: symbol,
+                    indicatorName: indicatorName,
+                    releaseDatetime: releaseDatetime,
+                    tabSelection: $tabSelection
+                )
+            }
         case .historicalComparison(let indicatorId, let indicatorName, let fxPairId, let fxPairSymbol):
             HistoricalComparisonView(
                 apiClient: apiClient,
@@ -36,13 +38,15 @@ struct AppRouteDestinationView: View {
                 tabSelection: $tabSelection
             )
         case .eventStrategyAnalysis(let eventId, let indicatorName, let fxPairId):
-            StrategyAnalysisView(
-                apiClient: apiClient,
-                eventId: eventId,
-                indicatorName: indicatorName,
-                fxPairId: fxPairId,
-                tabSelection: $tabSelection
-            )
+            PriceFeatureGate {
+                StrategyAnalysisView(
+                    apiClient: apiClient,
+                    eventId: eventId,
+                    indicatorName: indicatorName,
+                    fxPairId: fxPairId,
+                    tabSelection: $tabSelection
+                )
+            }
         case .account:
             AccountView(apiClient: apiClient, tabSelection: $tabSelection)
         case .notifications:
@@ -52,19 +56,21 @@ struct AppRouteDestinationView: View {
         case .supportHistory:
             SupportHistoryView(apiClient: apiClient, tabSelection: $tabSelection)
         case .rateAlerts:
-            RateAlertsView(apiClient: apiClient, tabSelection: $tabSelection)
+            PriceFeatureGate { RateAlertsView(apiClient: apiClient, tabSelection: $tabSelection) }
         case .speechMovementDetail(let speechId, let fxPairId, let symbol, let title, let statementDatetime):
-            MovementDetailView(
-                apiClient: apiClient,
-                eventId: speechId,
-                indicatorId: speechId,
-                fxPairId: fxPairId,
-                symbol: symbol,
-                indicatorName: title,
-                releaseDatetime: statementDatetime,
-                isSpeech: true,
-                tabSelection: $tabSelection
-            )
+            PriceFeatureGate {
+                MovementDetailView(
+                    apiClient: apiClient,
+                    eventId: speechId,
+                    indicatorId: speechId,
+                    fxPairId: fxPairId,
+                    symbol: symbol,
+                    indicatorName: title,
+                    releaseDatetime: statementDatetime,
+                    isSpeech: true,
+                    tabSelection: $tabSelection
+                )
+            }
         case .speakerComparison(let speakerId, let fxPairId, let symbol):
             SpeakerComparisonView(apiClient: apiClient, speakerId: speakerId, fxPairId: fxPairId, symbol: symbol, tabSelection: $tabSelection)
         case .indicatorReleases(let id, let name):
@@ -83,7 +89,7 @@ struct AppRouteDestinationView: View {
         case .speechDetail(let id):
             SpeechDetailView(apiClient: apiClient, speechId: id, tabSelection: $tabSelection)
         case .homeCurrencyPairEditor:
-            HomeCurrencyPairEditorView(apiClient: apiClient, tabSelection: $tabSelection)
+            PriceFeatureGate { HomeCurrencyPairEditorView(apiClient: apiClient, tabSelection: $tabSelection) }
         case .launchDiagnostics:
             LaunchDiagnosticsView(tabSelection: $tabSelection)
         case .favoritesList:
@@ -97,6 +103,47 @@ struct AppRouteDestinationView: View {
             PlaceholderScreenView(scrNumber: "SCR-003", screenName: "パスワード再設定")
                 .navigationTitle("パスワード再設定")
                 .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+/// 購入(PRO課金)の画面(プラン・購読管理)への入口。`purchases_enabled`がfalseのとき(1.0の既定)は
+/// 画面を作らず、すぐ前の画面へ戻す(画面のファイルは残してあり、サーバー側のフラグで再有効化できる)。
+struct PurchaseFeatureGate<Content: View>: View {
+    @ObservedObject private var plan = PlanStore.shared
+    @Environment(\.dismiss) private var dismiss
+    private let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        if plan.purchasesEnabled {
+            content()
+        } else {
+            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea().onAppear { dismiss() }
+        }
+    }
+}
+
+/// 価格由来の画面(値動き詳細・トレード戦略分析・価格アラート・ホーム通貨ペア編集)への入口。
+/// `price_features_enabled`がfalseのとき(1.0の既定)は画面を作らず、すぐ前の画面へ戻す
+/// (ディープリンク・古い通知からの到達対策)。画面のファイルは残してあり、サーバー側のフラグで再有効化できる。
+struct PriceFeatureGate<Content: View>: View {
+    @ObservedObject private var plan = PlanStore.shared
+    @Environment(\.dismiss) private var dismiss
+    private let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        if plan.priceFeaturesEnabled {
+            content()
+        } else {
+            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea().onAppear { dismiss() }
         }
     }
 }

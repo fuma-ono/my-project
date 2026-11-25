@@ -47,9 +47,7 @@ final class DiagnosticsStore: ObservableObject {
             self.previous = nil
         }
 
-        var fresh = LaunchDiagnostics(launchID: UUID(), startedAt: Date())
-        fresh.systemUptimeAtLaunchSeconds = ProcessInfo.processInfo.systemUptime
-        self.current = fresh
+        self.current = LaunchDiagnostics(launchID: UUID(), startedAt: Date())
         persist()
     }
 

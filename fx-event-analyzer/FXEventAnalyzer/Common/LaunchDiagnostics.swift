@@ -18,10 +18,6 @@ struct LaunchDiagnostics: Codable, Equatable {
     let launchID: UUID
     /// この起動の記録を開始した日時(壁時計時刻、「最終起動日時」表示用)。
     let startedAt: Date
-    /// 参考値: OS起動(端末の最後の再起動)からの経過秒数。アプリ起動時間
-    /// とは別物であることを診断画面側で明記する。
-    var systemUptimeAtLaunchSeconds: Double?
-
     // MARK: - A. 起動シーケンス(SplashViewModel.runInitSequence)
 
     /// `runInitSequence()`が呼ばれた時点(基準点からの経過ms、通常0に近い)。
@@ -342,9 +338,6 @@ extension LaunchDiagnostics {
         lines.append("応答待ち(送信完了→応答開始)には、サーバーの処理時間と途中の中継(Renderの入り口など)での待ちの両方が入り、この計測だけでは区別できません。")
         lines.append("")
         lines.append("[参考・注記]")
-        if let uptime = systemUptimeAtLaunchSeconds {
-            lines.append("OS起動(端末の最後の再起動)からの経過秒数(起動時点): \(String(format: "%.1f", uptime))秒 — アプリの起動時間とは別物")
-        }
         lines.append("この計測の基準点(経過0ms)より前の時間(プロセス起動・Swiftランタイム初期化等)は、アプリ内計測だけでは直接測れません。")
         lines.append("「表示イベント」はSwiftUIの.onAppearが発生した時刻で、描画が完全に終了したことを保証するものではありません。")
         return lines.joined(separator: "\n")

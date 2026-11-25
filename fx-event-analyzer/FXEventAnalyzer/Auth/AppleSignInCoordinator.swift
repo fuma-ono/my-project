@@ -14,10 +14,14 @@ final class AppleSignInCoordinator: NSObject {
     enum SignInError: Error, Equatable {
         case cancelled
         case missingIdentityToken
+        case missingAuthorizationCode
     }
 
     private var continuation: CheckedContinuation<(idToken: String, nonce: String), Error>?
     private var currentNonce: String?
+    /// アカウント削除時の再認証(`reauthenticate()`)専用。値(認可コード)は
+    /// 呼び出し元へ返すだけで、このクラスは保持・保存しない。
+    private var reauthContinuation: CheckedContinuation<String, Error>?
 
     func signIn() async throws -> (idToken: String, nonce: String) {
         let nonce = Self.randomNonceString()
@@ -33,6 +37,22 @@ final class AppleSignInCoordinator: NSObject {
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
+            controller.performRequests()
+        }
+    }
+
+    /// アカウント削除時の再認証。Appleの`authorizationCode`(UTF-8文字列)を返す。
+    /// バックエンドがこれでAppleのトークンを失効させる。`nonce`は使わない。
+    func reauthenticate() async throws -> String {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.email]
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+
+        return try await withCheckedThrowingContinuation { continuation in
+            self.reauthContinuation = continuation
             controller.performRequests()
         }
     }
@@ -67,6 +87,17 @@ final class AppleSignInCoordinator: NSObject {
 
 extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let reauth = reauthContinuation {
+            reauthContinuation = nil
+            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+               let codeData = credential.authorizationCode,
+               let code = String(data: codeData, encoding: .utf8) {
+                reauth.resume(returning: code)
+            } else {
+                reauth.resume(throwing: SignInError.missingAuthorizationCode)
+            }
+            return
+        }
         defer { continuation = nil }
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
               let tokenData = credential.identityToken,
@@ -79,6 +110,15 @@ extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        if let reauth = reauthContinuation {
+            reauthContinuation = nil
+            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                reauth.resume(throwing: SignInError.cancelled)
+            } else {
+                reauth.resume(throwing: error)
+            }
+            return
+        }
         defer { continuation = nil }
         if let authError = error as? ASAuthorizationError, authError.code == .canceled {
             continuation?.resume(throwing: SignInError.cancelled)

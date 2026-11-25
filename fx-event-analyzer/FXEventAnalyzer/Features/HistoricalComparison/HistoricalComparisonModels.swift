@@ -4,12 +4,16 @@ import Foundation
 /// — single-`timeframe` shape; this screen never requests `timeframe=all`).
 struct ComparisonResponse: Decodable, Equatable {
     let indicator: ComparisonIndicatorSummary
-    let fxPairId: String
+    /// 価格フラグがfalseのとき(値のみのモード、2026-11-24)はBackendがこのキーを返さないので、Optional。
+    let fxPairId: String?
     let timeframe: String
     let totalEvents: Int
-    let analyzableEvents: Int
-    let stats: ComparisonStats
-    let advancedStatistics: AdvancedStatistics
+    /// 値のみのモードでは返らない(nil)。
+    let analyzableEvents: Int?
+    /// 値のみのモードでは返らない(nil)。
+    let stats: ComparisonStats?
+    /// 値のみのモードでは返らない(nil)。
+    let advancedStatistics: AdvancedStatistics?
     let events: [ComparisonEventSummary]
     let meta: PaginationMeta
     /// 比べた回数の上限(api-design v1.37、無料3回・プレミアム20回)。古いBackendではnil。

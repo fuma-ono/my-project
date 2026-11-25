@@ -13,6 +13,8 @@ struct FXEventAnalyzerApp: App {
         // 確定させる(ここより前のプロセス起動・Swiftランタイム初期化等の
         // 時間は、アプリ内計測だけでは直接測れない — 診断画面側で注記する)。
         _ = DiagnosticsStore.shared
+        // Render無料枠のコールドスタート対策: 認証より前に`/health`を空打ちして起こしておく。
+        ServerWarmUp.fire()
         let config = SupabaseConfig.loadFromInfoPlist()
         let authService = SupabaseAuthService(config: config)
         self.authService = authService

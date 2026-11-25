@@ -237,7 +237,7 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertEqual(response.snapshot?.unit, "%")
         XCTAssertNil(response.analysis.surprise)
         XCTAssertNil(response.explanation)
-        XCTAssertNil(response.relatedFxPairs.first?.reaction.analysisStatus)
+        XCTAssertNil(response.relatedFxPairs.first?.reaction?.analysisStatus)
         XCTAssertEqual(response.majorFxReactions?.first?.reactions.count, 3)
     }
 
@@ -301,7 +301,7 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertTrue(response.event.isLocked)
         XCTAssertEqual(response.event.requiredPlan, "PRO")
         XCTAssertNil(response.snapshot?.actual)
-        XCTAssertNil(response.relatedFxPairs.first?.reaction.pips)
+        XCTAssertNil(response.relatedFxPairs.first?.reaction?.pips)
         let cards = EventDetailCards(response: response)
         XCTAssertTrue(cards.isLocked)
         XCTAssertFalse(cards.canOpenReactions)

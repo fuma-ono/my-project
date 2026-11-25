@@ -55,6 +55,8 @@ struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
     @State private var pendingFeatureMessage: String?
+    // 案B(Apple/Googleのみ): ログイン画面から開く利用規約・プライバシーポリシー。
+    @State private var legalDocument: LegalDocument?
     @FocusState private var focusedField: Field?
     // HQ指示(2026-10-09、SignUp/PasswordReset本実装で判明): このスクリーン
     // だけ`NavigationStack(path:)`に明示的なpathを束縛しておらず(他の全画面は
@@ -190,6 +192,9 @@ struct LoginView: View {
         }
         }
         .preferredColorScheme(.dark)
+        .sheet(item: $legalDocument) { document in
+            LegalDocumentSheet(document: document)
+        }
         .alert(
             "準備中の機能です",
             isPresented: Binding(
@@ -214,6 +219,20 @@ struct LoginView: View {
             // traditional form below).
             socialSignInSection(controlHeight: controlHeight)
 
+            if AuthConfig.emailAuthEnabled {
+                emailFormSection(controlHeight: controlHeight)
+            } else {
+                socialOnlyFooter
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// メール/パスワードのログインフォーム(「または」区切り以下)。案B(2026-11-24)で
+    /// 1.0はApple/Googleのみにしたため、`AuthConfig.emailAuthEnabled`がfalseの間は表示しない。
+    /// コードは1.1での復活用に残してある。
+    private func emailFormSection(controlHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
                 NotoText.text("または", size: 15)
@@ -378,6 +397,40 @@ struct LoginView: View {
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Apple/Googleのみのとき: ログイン失敗のメッセージ(メール用ボタン下のオーバーレイの代わり)と
+    /// 利用規約・プライバシーポリシーへのリンク。
+    private var socialOnlyFooter: some View {
+        VStack(spacing: 0) {
+            if case .error(let message) = viewModel.state {
+                NotoText.text(message, size: 13)
+                    .foregroundStyle(DesignTokens.Colors.statusError)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 16)
+            }
+            HStack(spacing: 18) {
+                Button {
+                    legalDocument = LegalDocuments.terms
+                } label: {
+                    NotoText.text("利用規約", size: 13)
+                        .foregroundStyle(DesignTokens.Colors.accentCyan)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("loginTermsLink")
+                Button {
+                    legalDocument = LegalDocuments.privacy
+                } label: {
+                    NotoText.text("プライバシーポリシー", size: 13)
+                        .foregroundStyle(DesignTokens.Colors.accentCyan)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("loginPrivacyLink")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 20)
+        }
     }
 
     /// Not in the Reference at all — added per explicit user request.

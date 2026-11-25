@@ -19,6 +19,9 @@ struct EventDetailCards: View {
     /// `PlanStore`を見て渡す — 未確定(`isConfirmed == false`)のときは安全側としてfalseのまま
     /// (既定値もfalse)。
     var canOpenStrategyAnalysis: Bool = false
+    /// 価格由来の表示(主要通貨ペアの値動き・トレード戦略分析)を出すか(`GET /entitlements`の`price_features_enabled`)。
+    /// falseのとき(1.0の既定)は表と戦略分析のリンクを出さず、過去イベント比較は通貨ペアなしの値のみで開く。
+    @ObservedObject private var plan = PlanStore.shared
     /// `canOpenStrategyAnalysis`がfalseのときにタップされた(FREE・未確定): 遷移せず、
     /// アップグレードの確認ポップアップを出す。
     var onStrategyAnalysisBlockedTap: () -> Void = {}
@@ -63,12 +66,24 @@ struct EventDetailCards: View {
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
-            reactionTable
+            if plan.priceFeaturesEnabled {
+                reactionTable
+            }
             comparisonLink
             nextReleaseFooter
             attributionNotice
+            disclaimerFooter
         }
         .frame(width: 214)
+    }
+
+    /// 売買の推奨ではない旨の小さな注記(フッター)。文言は`StrategyAnalysisText.footerDisclaimer`。
+    private var disclaimerFooter: some View {
+        NotoText.text(StrategyAnalysisText.footerDisclaimer, size: 6)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 214, alignment: .leading)
+            .accessibilityIdentifier("eventDetailDisclaimer")
     }
 
     // MARK: - 指標のカード
@@ -449,7 +464,7 @@ struct EventDetailCards: View {
     /// 関連通貨ペアの5分の値だけで作る。
     var pairs: [EventMajorFxReaction] {
         if let major = response.majorFxReactions, !major.isEmpty { return major }
-        return response.relatedFxPairs.map { EventMajorFxReaction(fxPairId: $0.fxPairId, symbol: $0.symbol, reactions: [$0.reaction]) }
+        return response.relatedFxPairs.map { EventMajorFxReaction(fxPairId: $0.fxPairId, symbol: $0.symbol, reactions: [$0.reaction].compactMap { $0 }) }
     }
 
     /// HQ指示(2026-10-09)「縦線と横線を交わらせたきれいな表に」: どのマスも同じ幅・
@@ -598,7 +613,19 @@ struct EventDetailCards: View {
     @ViewBuilder private var comparisonLink: some View {
         let symbol = response.relatedFxPairs.first?.symbol ?? pairs.first?.symbol
         let pairId = response.relatedFxPairs.first?.fxPairId ?? pairs.first?.fxPairId
-        if let symbol, let pairId {
+        if !plan.priceFeaturesEnabled {
+            // 価格フラグがfalse: 通貨ペアなし(値のみ)の過去イベント比較。通貨ペアのID・記号は空で渡す
+            // (`HistoricalComparisonView`が空のとき`fx_pair_id`を付けない)。戦略分析のリンクは出さない。
+            NavigationLink(value: AppRoute.historicalComparison(
+                indicatorId: response.event.indicatorId,
+                indicatorName: response.event.indicatorName,
+                fxPairId: "",
+                fxPairSymbol: ""
+            )) {
+                linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
+            }
+            .buttonStyle(SettingsRowPressStyle())
+        } else if let symbol, let pairId {
             NavigationLink(value: AppRoute.historicalComparison(
                 indicatorId: response.event.indicatorId,
                 indicatorName: response.event.indicatorName,
@@ -647,11 +674,13 @@ struct EventDetailCards: View {
                 .foregroundStyle(SubscriptionPalette.gold)
                 .frame(width: 18)
             NotoText.text("トレード戦略分析", size: 9).foregroundStyle(.white)
-            NotoText.text("Pro", size: 6.5)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Capsule().fill(SubscriptionPalette.gold))
+            if plan.purchasesEnabled {
+                NotoText.text("Pro", size: 6.5)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(SubscriptionPalette.gold))
+            }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 9.5, weight: .semibold))

@@ -14,6 +14,9 @@ struct HistoricalComparisonView: View {
     /// 日時の並び(参考画像の「日時 ⇕」)。既定は新しい順。
     @State private var newestFirst = true
     @Environment(\.dismiss) private var dismiss
+    /// 価格フラグ(`price_features_enabled`)。falseのとき(1.0の既定)は値のみの表(pipsの列・通貨ペアの表示・
+    /// 統計を出さない)。購入フラグ(`purchases_enabled`)がfalseのときは、PRO・有料の併記を出さない。
+    @ObservedObject private var plan = PlanStore.shared
     /// HQ指示(2026-10-29、7回目)「横画面にしたけど直ってない(表の両サイド・
     /// 日時の余白)」: OSのインターフェース自体を回転させる方式
     /// (`UIWindowScene.requestGeometryUpdate`、旧`OrientationLock.swift`)を
@@ -29,6 +32,25 @@ struct HistoricalComparisonView: View {
     /// 見かけ上回転させる(ウィンドウの実寸は常にPortraitのまま変わらない
     /// ため、ジオメトリ更新のタイミング起因の不具合が原理的に起こらない)。
     @State private var deviceOrientation: UIDeviceOrientation = UIDevice.current.orientation
+
+    /// pipsの列・通貨ペアを出すか。
+    private var showsPips: Bool { plan.priceFeaturesEnabled }
+
+    /// 縦画面の表の「結果・予想・前回」1列の幅。pipsの列がある間は従来の28。pipsの列を出さないときは、
+    /// 表の幅(214)いっぱいに広げる(日時40、区切り線を除き、数値の列数で割る)。
+    private var valueWidth: CGFloat {
+        if showsPips { return Column.value }
+        var secondary = false
+        if case .loaded(let response) = viewModel.state { secondary = Self.hasSecondaryColumn(response.events) }
+        return Self.valueColumnWidthWithoutPips(showSecondary: secondary)
+    }
+
+    /// pipsの列を出さないときの、縦画面の数値1列の幅(表全体が214に収まる)。
+    static func valueColumnWidthWithoutPips(showSecondary: Bool) -> CGFloat {
+        // pipsの列が無いとき、実際の区切り線は日時の後ろの1本(前年/前月があればもう1本): 0.5 / 1.0。
+        let dividers: CGFloat = showSecondary ? 1.0 : 0.5
+        return (214 - Column.date - dividers) / (showSecondary ? 6 : 3)
+    }
 
     private var isLandscape: Bool {
         deviceOrientation == .landscapeLeft || deviceOrientation == .landscapeRight
@@ -190,10 +212,10 @@ struct HistoricalComparisonView: View {
         // 空白が残っていた(前年/前月列がある米国CPI等は自然な幅695ptのため
         // 必要倍率が1.4倍未満で収まり、この上限には引っかからなかった)。
         // 文字サイズが伸びない以上、上限を設ける理由がないため撤廃した。
-        let naturalWidth = Self.landscapeTableNaturalWidth(showSecondary: showSecondary)
+        let naturalWidth = Self.landscapeTableNaturalWidth(showSecondary: showSecondary, showsPips: showsPips)
         let targetWidth = availableWidth - 36
         let scale = max(targetWidth / naturalWidth, 1.0)
-        let columns = LandscapeColumns(scale: scale)
+        let columns = LandscapeColumns(scale: scale, showsPips: showsPips)
         return ZStack {
             V5GlowBackground()
             VStack(alignment: .center, spacing: 12) {
@@ -283,10 +305,12 @@ struct HistoricalComparisonView: View {
                     NotoText.text("｜", size: 8.5 * scale).opacity(0.6)
                     NotoText.text(indicator.currencyCode ?? "", size: 8.5 * scale)
                     Spacer(minLength: 4 * scale)
-                    OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10 * scale)
-                    NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9 * scale)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
+                    if showsPips && !viewModel.fxPairSymbol.isEmpty {
+                        OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10 * scale)
+                        NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9 * scale)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
                 }
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -301,6 +325,8 @@ struct HistoricalComparisonView: View {
     /// 計算した倍率でまとめて拡大できるようにした。
     private struct LandscapeColumns {
         let scale: CGFloat
+        /// pipsの列を出すか(価格フラグ)。falseのとき、pipsの3列と、その手前の区切り線は幅に含めない。
+        var showsPips: Bool = true
         // HQ指摘(2026-10-26)「日時の横の余白枠いらないから消して」:
         // 76ptでもまだ「MM/dd」+「HH:mm」の文字そのものより広く、左右に
         // 余白が残っていた。62に詰めた(列幅自体はそのまま。列内の
@@ -313,7 +339,8 @@ struct HistoricalComparisonView: View {
         /// 表全体の幅(縦線の分も含む)。`landscapeHeader`を表と同じ幅に
         /// 揃えるため(`landscapeLayout`参照)に使う。
         func totalWidth(showSecondary: Bool) -> CGFloat {
-            var width = date + 1 + value * 3 + 1 + pips * 3
+            var width = date + 1 + value * 3
+            if showsPips { width += 1 + pips * 3 }
             if showSecondary { width += value * 3 + 1 }
             return width
         }
@@ -322,8 +349,8 @@ struct HistoricalComparisonView: View {
     /// `LandscapeColumns(scale: 1.0)`(以前の固定値)での表全体の幅。
     /// `landscapeLayout`で実際の横幅との比率から`scale`を逆算するための
     /// 基準値として使う。
-    private static func landscapeTableNaturalWidth(showSecondary: Bool) -> CGFloat {
-        LandscapeColumns(scale: 1.0).totalWidth(showSecondary: showSecondary)
+    private static func landscapeTableNaturalWidth(showSecondary: Bool, showsPips: Bool = true) -> CGFloat {
+        LandscapeColumns(scale: 1.0, showsPips: showsPips).totalWidth(showSecondary: showSecondary)
     }
 
     private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?, showSecondary: Bool, columns: LandscapeColumns) -> some View {
@@ -404,8 +431,10 @@ struct HistoricalComparisonView: View {
                 landscapeGroupDivider
                 landscapeGroupLabel("前月", width: columns.value * 3)
             }
-            landscapeGroupDivider
-            Color.clear.frame(width: columns.pips * 3)
+            if columns.showsPips {
+                landscapeGroupDivider
+                Color.clear.frame(width: columns.pips * 3)
+            }
         }
         .frame(height: 20)
     }
@@ -472,10 +501,12 @@ struct HistoricalComparisonView: View {
                     landscapeHeaderCell("予想", "(市場予想)", width: columns.value)
                     landscapeHeaderCell("前回", "(前回値)", width: columns.value)
                 }
-                landscapeDivider
-                landscapeHeaderCell("1分", "(pips)", width: columns.pips)
-                landscapeHeaderCell("5分", "(pips)", width: columns.pips)
-                landscapeHeaderCell("15分", "(pips)", width: columns.pips)
+                if columns.showsPips {
+                    landscapeDivider
+                    landscapeHeaderCell("1分", "(pips)", width: columns.pips)
+                    landscapeHeaderCell("5分", "(pips)", width: columns.pips)
+                    landscapeHeaderCell("15分", "(pips)", width: columns.pips)
+                }
             }
             .frame(height: 40)
         }
@@ -532,10 +563,12 @@ struct HistoricalComparisonView: View {
                 landscapeValueCell(event.secondaryForecast, unit: unit, width: columns.value)
                 landscapeValueCell(event.secondaryPrevious, unit: unit, width: columns.value)
             }
-            landscapeRowDivider
-            landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil, width: columns.pips)
-            landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil, width: columns.pips)
-            landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil, width: columns.pips)
+            if columns.showsPips {
+                landscapeRowDivider
+                landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil, width: columns.pips)
+                landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil, width: columns.pips)
+                landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil, width: columns.pips)
+            }
         }
         .frame(height: Self.landscapeRowHeight)
         .contentShape(Rectangle())
@@ -608,10 +641,12 @@ struct HistoricalComparisonView: View {
                     Spacer(minLength: 4)
                     // HQ指示(2026-10-14)「通貨ペア名を出して」: 表のpipsがどのペアの値動きかを示す。
                     // 見た目はイベント詳細の値動き表のペア(重ねた国旗+USD/JPY)と同じ。
-                    OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10)
-                    NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
+                    if showsPips && !viewModel.fxPairSymbol.isEmpty {
+                        OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10)
+                        NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
                 }
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -652,9 +687,10 @@ struct HistoricalComparisonView: View {
     /// `includeSecondary`: 前年(結果/予想/前回)に加え、前月(結果/予想/前回)
     /// の3列も含めるか(HQ指示2026-10-25「前年の結果予想前回、前月の結果
     /// 予想前回が必要」) — 含める場合、区切り線がもう1本増える。
-    private static func tableContentWidth(includeSecondary: Bool) -> CGFloat {
-        let dividers: CGFloat = includeSecondary ? 1.5 : 1.0
-        return Column.date + dividers + Column.value * (includeSecondary ? 6 : 3) + Column.pips * 3
+    private func tableContentWidth(includeSecondary: Bool) -> CGFloat {
+        // pipsの列があるときは区切りが0.5本ぶん多い(pipsの手前の線)。
+        let dividers: CGFloat = (includeSecondary ? 1.5 : 1.0) - (showsPips ? 0 : 0.5)
+        return Column.date + dividers + valueWidth * (includeSecondary ? 6 : 3) + (showsPips ? Column.pips * 3 : 0)
     }
 
     /// HQ指示(2026-10-25)「縦画面に入らないから縦画面の場合は横スクロールで
@@ -691,7 +727,7 @@ struct HistoricalComparisonView: View {
                 NotoText.text("過去の発表はまだありません。", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .frame(maxHeight: .infinity, alignment: .center)
-                    .frame(width: Self.tableContentWidth(includeSecondary: showSecondary))
+                    .frame(width: tableContentWidth(includeSecondary: showSecondary))
             } else {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -797,13 +833,15 @@ struct HistoricalComparisonView: View {
         HStack(spacing: 0) {
             Color.clear.frame(width: Column.date)
             groupDivider
-            groupLabel("前年", width: Column.value * 3)
+            groupLabel("前年", width: valueWidth * 3)
             if showSecondary {
                 groupDivider
-                groupLabel("前月", width: Column.value * 3)
+                groupLabel("前月", width: valueWidth * 3)
             }
-            groupDivider
-            Color.clear.frame(width: Column.pips * 3)
+            if showsPips {
+                groupDivider
+                Color.clear.frame(width: Column.pips * 3)
+            }
         }
         .frame(height: Self.groupHeaderHeight)
     }
@@ -835,22 +873,24 @@ struct HistoricalComparisonView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
                 divider
-                headerCell("結果", "(実績)", width: Column.value)
-                headerCell("予想", "(市場予想)", width: Column.value)
-                headerCell("前回", "(前回値)", width: Column.value)
+                headerCell("結果", "(実績)", width: valueWidth)
+                headerCell("予想", "(市場予想)", width: valueWidth)
+                headerCell("前回", "(前回値)", width: valueWidth)
                 // HQ指示(2026-10-25)「前年の結果予想前回、前月の結果予想前回が
                 // 必要」: 副指標(米国CPIのMoM%)がある指標だけ、同じ3列構成を
                 // もう1組出す(`groupHeaderRow`の「前月」label と対になる)。
                 if showSecondary {
                     divider
-                    headerCell("結果", "(実績)", width: Column.value)
-                    headerCell("予想", "(市場予想)", width: Column.value)
-                    headerCell("前回", "(前回値)", width: Column.value)
+                    headerCell("結果", "(実績)", width: valueWidth)
+                    headerCell("予想", "(市場予想)", width: valueWidth)
+                    headerCell("前回", "(前回値)", width: valueWidth)
                 }
-                divider
-                headerCell("1分", "(pips)", width: Column.pips)
-                headerCell("5分", "(pips)", width: Column.pips)
-                headerCell("15分", "(pips)", width: Column.pips)
+                if showsPips {
+                    divider
+                    headerCell("1分", "(pips)", width: Column.pips)
+                    headerCell("5分", "(pips)", width: Column.pips)
+                    headerCell("15分", "(pips)", width: Column.pips)
+                }
             }
             .frame(height: Self.headerHeight)
         }
@@ -897,7 +937,7 @@ struct HistoricalComparisonView: View {
                 // 行を押すと従来どおりイベント詳細へ進み、そこで鍵の印とプランの案内が出る。
                 // 幅は、隠した列(値3列・前月比3列・pips3列)と、その間の縦線を合わせたもの。
                 PastReleaseLockBadge(size: 7)
-                    .frame(width: Column.value * (showSecondary ? 6 : 3) + Column.pips * 3 + (showSecondary ? 1.0 : 0.5))
+                    .frame(width: valueWidth * (showSecondary ? 6 : 3) + (showsPips ? Column.pips * 3 : 0) + (showSecondary ? 1.0 : 0.5))
                     .accessibilityIdentifier("historyLockedRow")
             } else {
                 valueCell(event.actual, unit: unit)
@@ -910,10 +950,12 @@ struct HistoricalComparisonView: View {
                     // 副指標の前回(secondary_previous)も、ひとつ前のロックされた発表の値なので同じく隠す(v1.36)。
                     previousCell(event.secondaryPrevious, unit: unit, locked: event.isPreviousLocked)
                 }
-                rowDivider
-                pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
-                pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
-                pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+                if showsPips {
+                    rowDivider
+                    pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
+                    pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
+                    pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+                }
             }
         }
         .frame(height: Self.rowHeight)
@@ -930,7 +972,7 @@ struct HistoricalComparisonView: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 6, weight: .semibold))
                 .foregroundStyle(V5P.cyan)
-                .frame(width: Column.value)
+                .frame(width: valueWidth)
                 .accessibilityLabel(PastReleaseLock.label)
         } else {
             valueCell(value, unit: unit)
@@ -944,7 +986,7 @@ struct HistoricalComparisonView: View {
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .frame(width: Column.value)
+            .frame(width: valueWidth)
     }
 
     private func pipsCell(_ pips: Double?) -> some View {
@@ -958,7 +1000,16 @@ struct HistoricalComparisonView: View {
             .frame(width: Column.pips, alignment: .trailing)
     }
 
-    private func planLimitRow(_ limit: ComparisonResponse.HistoryLimit) -> some View {
+    @ViewBuilder private func planLimitRow(_ limit: ComparisonResponse.HistoryLimit) -> some View {
+        if !plan.purchasesEnabled {
+            // 購入の導線を出さないとき(1.0): PRO・有料に触れず、表示している回数だけを案内する(押せない)。
+            HStack(spacing: 3) {
+                NotoText.text(Self.neutralLimitText(maxForPlan: limit.maxForPlan), size: 6.5)
+            }
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .padding(.leading, 4)
+            .accessibilityIdentifier("historyLimitNotice")
+        } else {
         Button {
             planPrompt = "無料プランで比べられるのは、直近\(limit.maxForPlan)回分です。プレミアムプランなら\(limit.proMax)回分(約5年)と比べられます。"
         } label: {
@@ -971,6 +1022,12 @@ struct HistoricalComparisonView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, 4)
+        }
+    }
+
+    /// 購入の導線を出さないときの、表示回数の案内(価格・PRO・有料の語を含まない)。
+    static func neutralLimitText(maxForPlan: Int) -> String {
+        "直近\(maxForPlan)回分を表示しています"
     }
 
     // MARK: - 書式

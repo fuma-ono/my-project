@@ -420,12 +420,14 @@ struct StrategyAnalysisView: View {
 
     private var lockedCard: some View {
         Button {
-            planPrompt = "トレード戦略分析はプレミアムプランの機能です。過去5回の発表の値動きの傾向(高値・安値ブレイク、反応、Sell the Fact)を確認できます。"
+            planPrompt = PlanStore.shared.purchasesEnabled
+                ? "トレード戦略分析はプレミアムプランの機能です。過去5回の発表の値動きの傾向(高値・安値ブレイク、反応、Sell the Fact)を確認できます。"
+                : "この範囲は現在ご利用いただけません。"
         } label: {
             card(title: "トレード戦略分析") {
                 HStack(spacing: 6) {
                     PastReleaseLockBadge(size: 10)
-                    NotoText.text("プレミアムプランで解放", size: 8).foregroundStyle(V5P.cyan)
+                    NotoText.text(PlanStore.shared.purchasesEnabled ? "プレミアムプランで解放" : PlanNeutralText.preparing, size: 8).foregroundStyle(V5P.cyan)
                     Spacer()
                     Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(V5P.cyan)
                 }

@@ -9,6 +9,7 @@ struct SupportFormView: View {
     @State private var showsHistory = false
     @FocusState private var editorFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var plan = PlanStore.shared
     private let apiClient: APIClient
 
     init(apiClient: APIClient, kind: SupportRequest.Kind, tabSelection: Binding<Int>) {
@@ -103,7 +104,7 @@ struct SupportFormView: View {
 
     private var categorySheet: some View {
         SettingsListOptionSheet(title: "お問い合わせの種類", footer: "不具合の報告は、開発チームで修正の対象として登録します。") {
-            ForEach(SupportCategory.inquiryOptions, id: \.value) { option in
+            ForEach(SupportCategory.options(priceFeaturesEnabled: plan.priceFeaturesEnabled, purchasesEnabled: plan.purchasesEnabled), id: \.value) { option in
                 SettingsListOptionRow(label: option.label, isSelected: viewModel.category == option.value) {
                     viewModel.category = option.value
                     showsCategories = false

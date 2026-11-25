@@ -172,6 +172,10 @@ enum StrategyAnalysisText {
     /// 既存の詳しい定義・注意事項(`notes`、画面下部)とは別に、常に最初に見える位置に置く。
     static let topDisclaimer = "過去の値動きの統計です。1分足の欠損などにより判定できない場合があります。売買推奨ではありません。"
 
+    /// イベント詳細・値動き詳細の下部に出す短い免責(App Store審査準備)。趣旨は利用規約の第2条(売買の推奨・勧誘ではない、
+    /// 投資助言を行わない、情報に誤り・遅延・欠落が生じ得る、判断は自己責任)と第9条に合わせ、新しい断定は足さない。
+    static let footerDisclaimer = "本アプリの情報は売買の推奨・投資助言ではありません。情報には誤り・遅延・欠落が生じる場合があります。投資の判断はご自身の責任で行ってください。"
+
     static func directionLine(_ summary: StrategyDirectionSummary?) -> String {
         guard let summary else { return preparing }
         var parts = ["上昇 \(summary.up)回", "下落 \(summary.down)回"]

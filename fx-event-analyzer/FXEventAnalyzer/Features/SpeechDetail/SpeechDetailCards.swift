@@ -27,6 +27,8 @@ struct SpeechDetailCards: View {
     /// HQレビュー結果(2026-11-12「要人発言詳細 追加改善」承認分): 長い原文抜粋を初期状態で
     /// 折りたたむ(「続きを読む／閉じる」)。既定は折りたたみ(false)。
     @State private var isExcerptExpanded = false
+    /// 価格由来の表示(通貨ペア別の値動き)を出すか(`price_features_enabled`、1.0の既定はfalse)。
+    @ObservedObject private var plan = PlanStore.shared
 
     var body: some View {
         // HQ指示(2026-10-12、2回目)「発言部分の枠もまだ上に上げて」:
@@ -37,7 +39,9 @@ struct SpeechDetailCards: View {
                 statementCard
                 attributionNotice
             }
-            reactionTable
+            if plan.priceFeaturesEnabled {
+                reactionTable
+            }
             comparisonLink
         }
         .frame(width: 214)

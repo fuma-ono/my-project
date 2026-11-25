@@ -68,7 +68,8 @@ struct SettingsSubRouteDestinationView: View {
         case .displaySettings:
             DisplaySettingsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .subscriptionManagement:
-            SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection)
+            // 購入の導線のフラグ(`purchases_enabled`)がfalseのとき(1.0の既定)は到達不能(画面を作らず戻る)。
+            PurchaseFeatureGate { SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection) }
         case .help:
             HelpView(apiClient: apiClient, tabSelection: $tabSelection)
         case .terms:
