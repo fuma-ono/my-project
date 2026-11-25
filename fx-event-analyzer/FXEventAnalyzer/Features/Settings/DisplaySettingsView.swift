@@ -5,6 +5,7 @@ import SwiftUI
 /// ボタンは無く、変えるとその場で保存し`AppPreferences`へ反映する。
 struct DisplaySettingsView: View {
     @StateObject private var viewModel: SettingsSectionViewModel<DisplaySettings>
+    @ObservedObject private var plan = PlanStore.shared
     @Binding var tabSelection: Int
     @State private var picker: OptionPicker?
     @Environment(\.dismiss) private var dismiss
@@ -136,7 +137,7 @@ struct DisplaySettingsView: View {
             case .language: sheet("言語", Self.languages, \.language)
             case .region: sheet("国・地域", Self.regions, \.region)
             case .timezone: sheet("タイムゾーン", Self.timezones, \.timezone, footer: "発表時刻などをこのタイムゾーンで表示します。")
-            case .currency: sheet("基本通貨", Self.currencies, \.currency, footer: "この通貨を含む通貨ペアを、通貨ペアの追加・通知の対象・レートアラート・検索で先に表示します。")
+            case .currency: sheet("基本通貨", Self.currencies, \.currency, footer: plan.priceFeaturesEnabled ? "この通貨を含む通貨ペアを、通貨ペアの追加・通知の対象・レートアラート・検索で先に表示します。" : "この通貨を含む通貨ペアを、通知の対象・検索で先に表示します。")
             case .weekStart: sheet("週の開始曜日", Self.weekStarts, \.weekStart)
             }
         }

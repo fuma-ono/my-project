@@ -35,7 +35,7 @@ struct PlanLimitPrompt: ViewModifier {
                 Text(plan.purchasesEnabled ? (message ?? "") : PlanNeutralText.sanitized(message))
             }
             .navigationDestination(isPresented: $showsPlans) {
-                SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection)
+                PurchaseFeatureGate { SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection) }
             }
     }
 }

@@ -23,11 +23,15 @@ final class PlanStore: ObservableObject {
 
     var isPro: Bool { plan == .pro }
 
+    /// `reset()`のたびに増やす。reset前に始まった`load`の結果を、reset後に書き込まないための世代。
+    private var generation = 0
+
     /// HQ指示(2026-11-05)「Splash先行通信」: `userID`を渡すと、Splash中に開始済みの
     /// `/entitlements`があればその結果を再利用する(二重取得にしない)。渡さない・
     /// 先行取得が無い場合は従来どおり新規に取得する(他の呼び出し元・既存の挙動は
     /// 変わらない)。
     func load(apiClient: APIClient, userID: UUID? = nil, prefetchCoordinator: HomePrefetchCoordinator = .shared) async {
+        let startedGeneration = generation
         do {
             let response: EntitlementsResponse
             if let userID, let prefetched = prefetchCoordinator.consumeEntitlements(for: userID) {
@@ -35,12 +39,14 @@ final class PlanStore: ObservableObject {
             } else {
                 response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
             }
+            guard startedGeneration == generation else { return }
             plan = response.plan ?? .free
             limits = response.limits ?? (plan == .pro ? .pro() : .free())
             priceFeaturesEnabled = response.priceFeaturesEnabled ?? false
             purchasesEnabled = response.purchasesEnabled ?? false
             isConfirmed = true
         } catch {
+            guard startedGeneration == generation else { return }
             // 取れないときは前回の値のまま(起動直後は無料プランの範囲)。
             // フラグだけは、取れないときはfalse(隠す側)に戻す(オーナー指示)。
             priceFeaturesEnabled = false
@@ -50,6 +56,7 @@ final class PlanStore: ObservableObject {
 
     /// ログアウト・セッション切れ: 前のユーザーのプランを残さず、無料プランの範囲に戻す。
     func reset() {
+        generation += 1
         plan = .free
         limits = .free()
         priceFeaturesEnabled = false
