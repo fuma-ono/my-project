@@ -54,7 +54,10 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     「JP_CPI の事前準備」。e-Stat の公表予定(コードの表)と、公表後の全国・総合の前年同月比(e-Stat API、
 #     Secret ESTAT_APP_ID。出力・ログには出さない)。dry-run は DB に書かない。定期実行には入れていない。
 #     HQ の承認の後に有効にする(このブランチは未統合)
-# 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
+#   - 日銀・ECB の金融政策会合の日程(手動実行のみ、target=boj-ecb-schedule-dry-run / boj-ecb-schedule): HQ指示 2026-11-25。人が確認した表
+#     (ingestion/mappings/centralBankSchedule.ts)から BOJ_RATE・EU_ECB_RATE の予定を economic_events に入れる(外部APIは呼ばない。値は入れない。
+#     発表時刻は公式ページに無いので DATE_ONLY)。dry-run は DB に書かない(ingestion_logs にも書かない)。migration 20261125000002(EU_ECB_RATE の指標)・20261125000003(会合の期間と出典の表)が前提。
+#     定期実行には入れていない# 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
   schedule:
@@ -64,7 +67,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule / official-bls-data-unavailable / official-bls-data-unavailable-dry-run / speech-bodies-dry-run / speech-bodies / speech-summaries-dry-run / speech-summaries / gb-au-ca-schedules-dry-run / gb-au-ca-schedules / official-values-dry-run / official-values / jp-cpi-schedule-dry-run / jp-cpi-schedule / jp-cpi-values-dry-run / jp-cpi-values'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule / official-bls-data-unavailable / official-bls-data-unavailable-dry-run / speech-bodies-dry-run / speech-bodies / speech-summaries-dry-run / speech-summaries / gb-au-ca-schedules-dry-run / gb-au-ca-schedules / official-values-dry-run / official-values / jp-cpi-schedule-dry-run / jp-cpi-schedule / jp-cpi-values-dry-run / jp-cpi-values / boj-ecb-schedule-dry-run / boj-ecb-schedule'
         default: both
       event_id:
         description: 'target=event-reactions のときだけ: この1件だけを計算する(UUID。空なら直近7日の発表。HQ指示 2026-11-10。政策金利が記録済みの FOMC も可)'
@@ -256,6 +259,12 @@ jobs:
       - name: JP CPI schedule (e-Stat release calendar table, manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'jp-cpi-schedule'
         run: npm run -s ingest:jp-cpi-schedule
+      - name: BOJ/ECB meeting schedule dry run, no DB writes (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'boj-ecb-schedule-dry-run'
+        run: npm run -s ingest:boj-ecb-schedule -- --dry-run
+      - name: BOJ/ECB meeting schedule (table in code, manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'boj-ecb-schedule'
+        run: npm run -s ingest:boj-ecb-schedule
       - name: JP CPI values dry run, no DB writes (manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'jp-cpi-values-dry-run'
         env:
