@@ -12,6 +12,7 @@
  *   連絡先(`address-box`)より後ろは入れない。
  * 取り出せなければ null(本文を作らない・推測で補わない)。
  */
+import { zonedWallTimeToUtcUnique } from './time.js';
 
 export type SpeechBodyProvider = 'frb_calendar' | 'ecb_press_rss';
 
@@ -174,6 +175,87 @@ export function frbSpeechJsonLinks(text: string): string[] {
     if (path) links.add(`https://www.federalreserve.gov${path}`);
   }
   return [...links];
+}
+
+export interface FrbSpeechTimedItem {
+  url: string;
+  /** URL の姓(小文字) */
+  surname: string;
+  /** 一覧の JSON の日時(東部時間)を UTC にした時刻(ミリ秒) */
+  instantMs: number;
+}
+
+/** 一覧の JSON の日時「M/D/YYYY h:mm:ss AM|PM」(東部時間)→ UTC。夏時間の境目で2通り・存在しない時刻は null。 */
+export function frbJsonDateToUtcMs(value: string): number | null {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/.exec(value.trim());
+  if (!m) return null;
+  const [, mo, d, y, h, mi, se, ap] = m;
+  const hour12 = Number(h);
+  if (hour12 < 1 || hour12 > 12) return null;
+  const hour = (hour12 % 12) + (ap === 'PM' ? 12 : 0);
+  const instant = zonedWallTimeToUtcUnique(
+    Number(y),
+    Number(mo),
+    Number(d),
+    hour,
+    Number(mi),
+    Number(se),
+    'America/New_York',
+  );
+  return instant ? instant.getTime() : null;
+}
+
+/**
+ * 一覧の JSON → 講演ページの URL・姓・時刻(UTC)。同じページ・同じ時刻が2回入っているものは1件にする(同じ時刻で違う
+ * ページは別の候補として残す)。形が違う・時刻が読めない項目は入れない。
+ */
+export function frbSpeechJsonTimedItems(text: string): FrbSpeechTimedItem[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(text.replace(/^\uFEFF/, ''));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(data)) return [];
+  const out = new Map<string, FrbSpeechTimedItem>();
+  for (const item of data as unknown[]) {
+    if (!item || typeof item !== 'object') continue;
+    const { l, stub, d } = item as { l?: unknown; stub?: unknown; d?: unknown };
+    const path = [l, stub].find((v): v is string => typeof v === 'string' && v.startsWith('/newsevents/speech/'));
+    if (!path || typeof d !== 'string') continue;
+    const parsed = frbSpeechRssItems([`https://www.federalreserve.gov${path}`])[0];
+    const instantMs = frbJsonDateToUtcMs(d);
+    if (!parsed || instantMs === null) continue;
+    out.set(`${parsed.url}|${instantMs}`, { url: parsed.url, surname: parsed.surname, instantMs });
+  }
+  return [...out.values()];
+}
+
+export interface FrbSpeechTimedRow {
+  id: string;
+  speakerNameEn: string | null;
+  /** speech_events.statement_datetime(UTC) */
+  statementIso: string;
+}
+
+/**
+ * 姓と日付で結べなかった行だけに使う(HQ承認 2026-11-11「FRB公式JSONの時刻照合」)。行ごとに、姓が同じで、一覧の時刻
+ * (東部時間 → UTC)が発言の時刻と**完全に一致**する講演が**ちょうど1件**のときだけ結ぶ(許容幅なし)。0件・2件以上は
+ * 結ばない(PENDING のまま)。同じページを複数の行が指すこと(同じ原稿を2回話した講演)は、行ごとに時刻が一致すれば認める。
+ */
+export function matchFrbSpeechUrlsByTime(
+  rows: readonly FrbSpeechTimedRow[],
+  items: readonly FrbSpeechTimedItem[],
+): Map<string, string> {
+  const matched = new Map<string, string>();
+  for (const row of rows) {
+    const surname = row.speakerNameEn ? frbSurnameKey(row.speakerNameEn) : null;
+    const at = Date.parse(row.statementIso);
+    if (!surname || Number.isNaN(at)) continue;
+    const hits = items.filter((item) => item.surname === surname && item.instantMs === at);
+    if (hits.length === 1) matched.set(row.id, hits[0]!.url);
+  }
+  return matched;
 }
 
 /** 発言者の英語名(例 "Christopher J. Waller"、"Michelle W. Bowman")→ URL に使われる姓(小文字・英字だけ)。 */

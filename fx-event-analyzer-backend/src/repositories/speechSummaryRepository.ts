@@ -22,8 +22,17 @@ export function createSpeechSummaryStore(supabase: SupabaseClient): SpeechSummar
     },
 
     async updateSpeechSummary(id, patch) {
-      const { error } = await supabase.from('speech_events').update(patch).eq('id', id);
+      // 要約も理由も無い行だけ(既存の要約・失敗の理由を上書きしない。二重の実行で二重に書かない)
+      const { data, error } = await supabase
+        .from('speech_events')
+        .update(patch)
+        .eq('id', id)
+        .eq('body_status', 'FETCHED')
+        .is('summary', null)
+        .is('summary_error', null)
+        .select('id');
       if (error) throw error;
+      return (data ?? []).length === 1;
     },
   };
 }

@@ -1777,8 +1777,42 @@ function speechesFixture() {
       speech_id: '77777777-7777-7777-7777-777777777775',
       speaker: SPEAKERS.powell,
       title: 'FOMC後の記者会見',
-      summary: '政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。',
+      // HQレビュー結果(2026-11-12「要人発言詳細 追加改善」): DEVの実データでは
+      // FRB等の英語ソースの`summary`はEXTRACTIVE_EN(英語の原文をそのまま抜粋)
+      // であることが多いため、このフィクスチャも日本語ではなく英語にした
+      // (「原文抜粋」ラベルが実際のデータ形と合うことを確認するため)。
+      summary: 'The Committee decided to keep the target range for the federal funds rate unchanged at this meeting.',
       statement_datetime: isoSecondsPlusMinutes(-9 * 24 * 60),
+      importance: 'HIGH',
+      status: 'DELIVERED',
+    },
+    // HQ指示(2026-11-11「要人発言 実機スクリーンショット検証」): 発言済みなのに要約が
+    // まだ無い状態(「要約はまだ用意されていません。」、SpeechDetailCards.statementCard)は、
+    // このフィクスチャに1件も無く、UIスクリーンショットで一度も確認されていなかった。
+    // FRB(パウエル)の発言で追加する。
+    {
+      speech_id: '77777777-7777-7777-7777-777777777777',
+      speaker: SPEAKERS.powell,
+      title: '地区連銀総裁との意見交換会',
+      summary: null,
+      statement_datetime: isoSecondsPlusMinutes(-3 * 24 * 60),
+      importance: 'MEDIUM',
+      status: 'DELIVERED',
+    },
+    // 長い原文抜粋でもカードのレイアウトが崩れないこと・折りたたみ表示(HQレビュー結果
+    // 2026-11-12)の確認用。FRB(パウエル)、英語の原文抜粋(EXTRACTIVE_EN相当)。
+    {
+      speech_id: '77777777-7777-7777-7777-777777777778',
+      speaker: SPEAKERS.powell,
+      title: '上下両院合同経済委員会での半期議会証言',
+      summary:
+        'The labor market remains resilient, though job gains and hiring have slowed somewhat over the past ' +
+        'several months, consistent with a gradual rebalancing of labor supply and demand. Inflation has eased ' +
+        'from its peak but the Committee does not yet have the confidence that it is moving sustainably toward ' +
+        'the two percent objective. Future policy decisions will depend on the cumulative assessment of incoming ' +
+        'data, including upcoming employment and price reports, across every meeting, and the Committee is not ' +
+        'on a preset course with respect to the timing or size of any future rate adjustments.',
+      statement_datetime: isoSecondsPlusMinutes(-14 * 24 * 60),
       importance: 'HIGH',
       status: 'DELIVERED',
     },

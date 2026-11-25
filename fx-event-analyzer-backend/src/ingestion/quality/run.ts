@@ -13,6 +13,7 @@ import {
   type SpeechFreshness,
 } from './metrics.js';
 import type { QualityReader } from './reader.js';
+import { renderSpeechPipelineMarkdown } from './speechPipeline.js';
 import {
   PROVISIONAL_LIST_DAYS,
   renderDataQualityMarkdown,
@@ -99,5 +100,7 @@ export async function buildQualityReportMarkdown(
   // 第10章(HQ判断 2026-10-27 案B): 暫定のまま発表が近い予定。これも末尾に足すだけ。
   const provisionalUntil = new Date(now.getTime() + PROVISIONAL_LIST_DAYS * 86_400_000).toISOString();
   markdown += `\n${renderProvisionalEventsMarkdown(await reader.listProvisionalEvents(nowIso, provisionalUntil), now)}`;
+  // 第11章(HQ承認 2026-11-11): 要人発言の本文と要約。これも末尾に足すだけ。
+  markdown += `\n${renderSpeechPipelineMarkdown(await reader.speechPipelineStatus(nowIso), now)}`;
   return markdown;
 }

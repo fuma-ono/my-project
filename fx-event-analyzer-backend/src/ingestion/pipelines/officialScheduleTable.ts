@@ -33,20 +33,39 @@ export function officialScheduleUtc(entry: OfficialScheduleEntry): Date | null {
   return zonedWallTimeToUtc(year, month, day, hour, minute, entry.timeZone);
 }
 
+export type OfficialSchedulePlanAction = 'INSERT' | 'UPDATE' | 'UNCHANGED';
+
+export interface OfficialSchedulePlanItem {
+  provider_event_id: string;
+  indicator: string;
+  action: OfficialSchedulePlanAction;
+  release_datetime: string;
+  /** UPDATE のとき: 今の値 → 新しい値 */
+  from?: string;
+}
+
 export interface OfficialScheduleResult {
   inserted: number;
   updated: number;
   unchanged: number;
   past: number;
   removed: string[];
+  /** 各エントリで何をする(した)か。dry-run では、これだけを返して何も書かない */
+  plan: OfficialSchedulePlanItem[];
 }
 
 export async function ingestOfficialScheduleTables(
-  deps: { store: IngestionStore; tables: readonly OfficialScheduleTable[]; now?: () => Date },
+  deps: {
+    store: IngestionStore;
+    tables: readonly OfficialScheduleTable[];
+    now?: () => Date;
+    /** true = dry-run(HQ指示 2026-11-13): DB に書かない。plan と件数だけ返す */
+    dryRun?: boolean;
+  },
   counters: JobCounters,
 ): Promise<OfficialScheduleResult> {
   const now = (deps.now?.() ?? new Date()).getTime();
-  const result: OfficialScheduleResult = { inserted: 0, updated: 0, unchanged: 0, past: 0, removed: [] };
+  const result: OfficialScheduleResult = { inserted: 0, updated: 0, unchanged: 0, past: 0, removed: [], plan: [] };
 
   for (const table of deps.tables) {
     counters.fetched += table.entries.length;
@@ -88,16 +107,24 @@ export async function ingestOfficialScheduleTables(
       const indicator = indicators.get(entry.indicatorCode)!;
       try {
         if (!row) {
-          await deps.store.insertEvent({
-            indicator_id: indicator.id,
-            provider: table.provider,
+          result.plan.push({
             provider_event_id: providerEventId,
+            indicator: entry.indicatorCode,
+            action: 'INSERT',
             release_datetime: releaseAt.toISOString(),
-            release_datetime_precision: 'EXACT',
-            importance: indicator.importance,
-            status: 'SCHEDULED',
-            data_status: 'PENDING',
           });
+          if (!deps.dryRun) {
+            await deps.store.insertEvent({
+              indicator_id: indicator.id,
+              provider: table.provider,
+              provider_event_id: providerEventId,
+              release_datetime: releaseAt.toISOString(),
+              release_datetime_precision: 'EXACT',
+              importance: indicator.importance,
+              status: 'SCHEDULED',
+              data_status: 'PENDING',
+            });
+          }
           result.inserted += 1;
           counters.success += 1;
           continue;
@@ -108,8 +135,21 @@ export async function ingestOfficialScheduleTables(
         if (row.status === 'CANCELLED') patch.status = 'SCHEDULED';
         if (Object.keys(patch).length === 0) {
           result.unchanged += 1;
+          result.plan.push({
+            provider_event_id: providerEventId,
+            indicator: entry.indicatorCode,
+            action: 'UNCHANGED',
+            release_datetime: row.release_datetime,
+          });
         } else {
-          await deps.store.updateEvent(row.id, patch);
+          result.plan.push({
+            provider_event_id: providerEventId,
+            indicator: entry.indicatorCode,
+            action: 'UPDATE',
+            release_datetime: releaseAt.toISOString(),
+            from: row.release_datetime,
+          });
+          if (!deps.dryRun) await deps.store.updateEvent(row.id, patch);
           result.updated += 1;
           if (patch.release_datetime) {
             counters.note('rescheduled', {

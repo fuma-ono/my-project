@@ -28,6 +28,7 @@ export function fakeSupabaseClient(tableData: Record<string, unknown[]>): Supaba
   const builder = (table: string) => {
     let rows = tableData[table] ?? [];
     let single = false;
+    const orderKeys: { column: string; direction: number }[] = [];
 
     const applyEq = (column: string, value: unknown) => {
       rows = rows.filter((row) => (row as Record<string, unknown>)[column] === value);
@@ -75,11 +76,15 @@ export function fakeSupabaseClient(tableData: Record<string, unknown[]>): Supaba
         return chain;
       },
       order: (column: string, options: { ascending?: boolean } = {}) => {
-        const direction = options.ascending === false ? -1 : 1;
+        // 複数回の .order は SQL と同じく、先のキーが優先で、後のキーは同値の並びを決める(第2キー)。
+        orderKeys.push({ column, direction: options.ascending === false ? -1 : 1 });
         rows = [...rows].sort((a, b) => {
-          const left = String(field(a, column));
-          const right = String(field(b, column));
-          return left === right ? 0 : left < right ? -direction : direction;
+          for (const key of orderKeys) {
+            const left = String(field(a, key.column));
+            const right = String(field(b, key.column));
+            if (left !== right) return left < right ? -key.direction : key.direction;
+          }
+          return 0;
         });
         return chain;
       },

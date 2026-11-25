@@ -606,6 +606,86 @@ final class ScreenshotTests: XCTestCase {
         capture("07b-EventStrategyAnalysis-Standalone-Bottom")
     }
 
+    /// HQ指示(2026-11-11「要人発言 実機スクリーンショット検証」、2026-11-12「追加改善」承認分):
+    /// 要人発言詳細(SCR-013)が、本文・要約が取得できた発言(FRB)・原稿のない発言(FRB)・発言前の
+    /// 発言のそれぞれで正しく表示されること、長い原文抜粋でもレイアウトが崩れないこと(折りたたみ/
+    /// 展開を含む)、FREE/PROで表示内容が一致することを確かめる。フィクスチャ
+    /// (`ui-screenshot-mock-server.mjs`の`speechesFixture`)に、この検証のため「発言済みだが
+    /// 要約が無い」FRBの発言(従来0件だった状態)と、長い原文抜粋のFRBの発言を追加した。
+    /// DEVの実データ(EXTRACTIVE_EN)に合わせ、FRBの原文抜粋は英語にしてある(HQ指示)。
+    func testCaptureSpeechDetailDisplayStates() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+
+        XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load major FX data from the mock Backend")
+
+        tapIdentifier("homeSpeechesSeeAll")
+        XCTAssertTrue(waitForAnyElement(containing: "金融経済懇談会での講演", timeout: 15), "Speech list did not load")
+        capture("12b-SpeechList-Standalone")
+
+        // ① FRBの本文・要約が取得できた発言(短い英語の原文抜粋) — 折りたたみボタンは出ない。
+        tap(containing: "FOMC後の記者会見")
+        XCTAssertTrue(waitForAnyElement(containing: "原文抜粋", timeout: 15), "The original-excerpt caption did not render")
+        XCTAssertTrue(
+            waitForAnyElement(containing: "The Committee decided to keep the target range", timeout: 5),
+            "FRB speech with a short summary did not render the English excerpt"
+        )
+        XCTAssertFalse(
+            app.buttons.matching(identifier: "speechDetailExcerptToggle").firstMatch.exists,
+            "A short excerpt must not show the 続きを読む／閉じる toggle"
+        )
+        capture("13d-SpeechDetail-FRB-SummaryPresent")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from FRB summary speech")
+
+        // ② FRBの本文・要約が取得できた発言(長い英語の原文抜粋) — 初期状態で折りたたみ、
+        // 「続きを読む」で展開・「閉じる」で再び折りたたみできることを確かめる。
+        tap(containing: "上下両院合同経済委員会での半期議会証言")
+        XCTAssertTrue(waitForAnyElement(containing: "labor market remains resilient", timeout: 15), "FRB speech with a long summary did not render")
+        let excerptToggle = app.buttons.matching(identifier: "speechDetailExcerptToggle").firstMatch
+        XCTAssertTrue(excerptToggle.waitForExistence(timeout: 5), "A long excerpt must show the 続きを読む toggle")
+        XCTAssertTrue(excerptToggle.label.contains("続きを読む"), "The toggle must start collapsed (続きを読む)")
+        capture("13e-SpeechDetail-FRB-SummaryLong-Collapsed")
+        excerptToggle.tap()
+        // 注: SwiftUIの`Text`は`lineLimit`で折りたたんでいても、accessibilityの文字列自体は
+        // 常に全文のまま(ScrollViewの中身が`.exists`なのと同じ理由)なので、ここで確かめられる
+        // のは「ボタンの状態(続きを読む⇄閉じる)が実際に切り替わること」まで。見た目の行数が
+        // 変わったこと自体はXCUITestの文字列一致では確認できないため、スクリーンショットで
+        // 目視確認する。
+        XCTAssertTrue(waitForAnyElement(containing: "閉じる", timeout: 5), "Tapping 続きを読む did not switch the toggle to 閉じる")
+        capture("13e-SpeechDetail-FRB-SummaryLong-Expanded")
+        excerptToggle.tap()
+        XCTAssertTrue(waitForAnyElement(containing: "続きを読む", timeout: 5), "Tapping 閉じる did not switch the toggle back to 続きを読む")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from the long-summary FRB speech")
+
+        // ③ FRBの発言済みだが原稿(要約)のない発言 — 「要約はまだ用意されていません。」。
+        tap(containing: "地区連銀総裁との意見交換会")
+        XCTAssertTrue(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 15), "FRB speech without a summary did not show the no-summary message")
+        capture("13f-SpeechDetail-FRB-NoSummary")
+
+        // ③': 同じ画面をFREEプランでも確認する(要人発言はプラン制限の対象ではないため、
+        // 表示内容が一致するはず — HQ指示「FREE/PROで表示内容が一致すること」)。
+        XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not switch the mock Backend to the FREE plan")
+        resumeAppToRefreshPlanStore()
+        XCTAssertTrue(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 15), "FRB no-summary speech did not render identically on the FREE plan")
+        capture("13f-SpeechDetail-FRB-NoSummary-FREE")
+        XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not restore the mock Backend to the PRO plan")
+        resumeAppToRefreshPlanStore()
+
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from the no-summary FRB speech")
+
+        // ④ 発言前(まだ行われていない)FRBの発言。
+        tap(containing: "経済見通しに関する講演")
+        XCTAssertTrue(waitForAnyElement(containing: "この発言はまだ行われていません", timeout: 15), "Upcoming FRB speech did not show the not-yet-delivered message")
+        capture("13g-SpeechDetail-FRB-BeforeStatement")
+    }
+
     /// HQ承認(2026-11-04「Home Cache更新中表示のUIテスト追加」、案A): ログインしたまま設定で文字サイズを変えると
     /// RootView の `.id(textSize)` で全画面が作り直され、新しい HomeViewModel ができる。その間だけモックの /home を
     /// 遅らせ、前回のデータ(キャッシュ)を出したまま「前回の情報を表示しています・更新中…」が出ること、応答の後に

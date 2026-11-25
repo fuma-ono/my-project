@@ -11,10 +11,15 @@ const CODES = [
   'GB_CPI',
   'GB_CORE_CPI',
   'GB_UNEMPLOYMENT_RATE',
+  'GB_GDP_MOM',
+  'GB_RETAIL_SALES_MOM',
   'AU_CPI',
   'AU_UNEMPLOYMENT_RATE',
+  'AU_WPI_QOQ',
   'CA_CPI',
   'CA_UNEMPLOYMENT_RATE',
+  'CA_CPI_TRIM',
+  'CA_CPI_MEDIAN',
 ];
 
 /**
@@ -36,7 +41,7 @@ describe.skipIf(!integration)('GB/AU/CA indicators: migration + schedule table i
     await ctx.app.close();
   });
 
-  it('the migration adds the 7 indicators (GB / AU / CA, display names, currencies) with their FX pairs', async () => {
+  it('the migrations add the 12 indicators (GB / AU / CA, display names, currencies) with their FX pairs', async () => {
     const { data, error } = await ctx.serviceClient
       .from('economic_indicators')
       .select(
@@ -64,10 +69,15 @@ describe.skipIf(!integration)('GB/AU/CA indicators: migration + schedule table i
     expect(pairs).toEqual({
       AU_CPI: ['AUDUSD', 'AUDJPY'],
       AU_UNEMPLOYMENT_RATE: ['AUDUSD', 'AUDJPY'],
+      AU_WPI_QOQ: ['AUDUSD', 'AUDJPY'],
       CA_CPI: ['CADJPY'],
+      CA_CPI_MEDIAN: ['CADJPY'],
+      CA_CPI_TRIM: ['CADJPY'],
       CA_UNEMPLOYMENT_RATE: ['CADJPY'],
       GB_CORE_CPI: ['GBPUSD', 'GBPJPY'],
       GB_CPI: ['GBPUSD', 'GBPJPY'],
+      GB_GDP_MOM: ['GBPUSD', 'GBPJPY'],
+      GB_RETAIL_SALES_MOM: ['GBPUSD', 'GBPJPY'],
       GB_UNEMPLOYMENT_RATE: ['GBPUSD', 'GBPJPY'],
     });
     const gb = rows.find((r) => r.code === 'GB_CPI')!;

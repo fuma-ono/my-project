@@ -20,15 +20,18 @@
  *     requires explicit prior written authorisation of the ECB or the authors」とあり、発言(発言者の名前の付いた文書)が
  *     この例外に当たるかを確認できていないため。ECB が認めたら storeBodyFor に足す。
  */
-import { SPEAKER_ALIASES } from '../mappings/speakers.js';
+import { SPEAKER_ALIASES, SPEECH_KIND_LABEL_JA } from '../mappings/speakers.js';
 import type { JobCounters } from '../runner.js';
 import { wallClockParts } from '../time.js';
 import {
   extractSpeechBody,
   frbSpeechJsonLinks,
+  frbSpeechJsonTimedItems,
   frbSpeechRssItems,
+  frbSurnameKey,
   isOfficialSpeechUrl,
   matchFrbSpeechUrls,
+  matchFrbSpeechUrlsByTime,
   type FrbSpeechRowForMatch,
 } from '../speechBody.js';
 
@@ -36,6 +39,18 @@ export const FRB_SPEECHES_RSS_URL = 'https://www.federalreserve.gov/feeds/speech
 /** 講演の一覧(2017年以降のすべて)。RSS(直近の分だけ)で結べなかった、古い発言の URL を探すときだけ読む。 */
 export const FRB_SPEECHES_JSON_URL = 'https://www.federalreserve.gov/json/ne-speeches.json';
 const BODY_PROVIDERS = ['frb_calendar', 'ecb_press_rss'] as const;
+
+/**
+ * 発言の題名(speech_events.title = '<種類の日本語>: <題>')の種類が、FRB の講演の一覧に原稿が載らないものか。
+ * 観測で確かめた種類だけ(2026-11-13 の DEV: URL が無く PENDING のまま残る行はすべて「討論」「記者会見」)。推測で増やさない。
+ */
+const TRANSCRIPT_UNEXPECTED_KINDS: readonly string[] = [
+  SPEECH_KIND_LABEL_JA.DISCUSSION,
+  SPEECH_KIND_LABEL_JA.PRESS_CONFERENCE,
+];
+export function isTranscriptUnexpectedKind(title: string): boolean {
+  return TRANSCRIPT_UNEXPECTED_KINDS.some((label) => title.startsWith(`${label}:`) || title.startsWith(`${label}：`));
+}
 
 export interface SpeechForBody {
   id: string;
@@ -46,6 +61,8 @@ export interface SpeechForBody {
   status: string;
   source_url: string | null;
   body_status: string;
+  /** 本文の取得を試みた回数(migration 20261112000001。発言の行ごと)。 */
+  body_attempts: number;
   /** speakers.name(日本語)。 */
   speaker_name: string;
   speaker_organization: string;
@@ -59,10 +76,38 @@ export interface SpeechBodyPatch {
   body_error?: string | null;
 }
 
+/** URL の照らし合わせに使う FRB の行(本文の有無・状態に関係なく、すべて)。 */
+export interface FrbRowForMatching {
+  id: string;
+  statement_datetime: string;
+  source_url: string | null;
+  speaker_name: string;
+  speaker_organization: string;
+}
+
 export interface SpeechBodyStore {
-  /** DELIVERED で body_status が PENDING / FAILED の、providers の発言(statement_datetime >= sinceIso、古い順)。 */
-  listSpeechesNeedingBody(providers: readonly string[], sinceIso: string): Promise<SpeechForBody[]>;
-  updateSpeechBody(id: string, patch: SpeechBodyPatch): Promise<void>;
+  /**
+   * provider = frb_calendar のすべての行(状態・本文の有無に関係なく)。URL の照らし合わせの「その日のその発言者の行が
+   * ちょうど1件か」と「その URL を別の行が使っていないか」に使う(HQ承認 2026-11-12「誤紐付けの修正」)。読むだけ。
+   */
+  listFrbRowsForMatching(): Promise<FrbRowForMatching[]>;
+  /**
+   * providers の発言済み(DELIVERED。発言前の SCHEDULED は入れない)で、statement_datetime >= sinceIso の行のうち、
+   * body_status が PENDING または FAILED で、body_attempts < maxAttempts のもの(古い順)。PENDING も回数で止める
+   * (HQレビュー 2026-11-12: 回数を増やした後に異常終了して PENDING のまま残った行を、無限に取り直さない)。
+   */
+  listSpeechesNeedingBody(
+    providers: readonly string[],
+    sinceIso: string,
+    maxAttempts: number,
+  ): Promise<SpeechForBody[]>;
+  /**
+   * 本文のページを読む直前に、試行回数を1つ増やす(状態が PENDING / FAILED で、回数が expectedAttempts のままで、
+   * かつ maxAttempts 未満の行だけ)。増やせなかった(ほかの実行が先に扱った・状態が変わった・上限)ら false。
+   */
+  claimBodyAttempt(id: string, expectedAttempts: number, attemptedAtIso: string, maxAttempts: number): Promise<boolean>;
+  /** 状態が PENDING / FAILED で、回数が expectedAttempts のままの行だけを書き換える。書き換えなかったら false。 */
+  updateSpeechBody(id: string, patch: SpeechBodyPatch, expectedAttempts: number): Promise<boolean>;
 }
 
 export interface SpeechBodyFetcher {
@@ -82,12 +127,18 @@ export interface SpeechBodySettings {
    * FRB の講演の RSS・一覧の JSON(公開のページ)だけ読み、各発言で何をするはずかを返す。
    */
   dryRun?: boolean;
+  /** FAILED の行を自動で取り直す上限(発言の行ごとの試行回数。省略時は MAX_BODY_ATTEMPTS)。 */
+  maxAttempts?: number;
 }
+
+/** FAILED の本文を自動で取り直すのは、発言の行ごとに3回まで(HQ承認 2026-11-11)。 */
+export const MAX_BODY_ATTEMPTS = 3;
 
 /** 1件ごとに、この実行で何をするか(dry-run の出力。本番の実行でも同じ判定)。処理の順は statement_datetime の古い順。 */
 export type SpeechBodyAction =
   | 'FETCH' // 本文のページを読む(結果は FETCHED か FAILED)
   | 'NO_SOURCE_URL' // URL が見つからない → PENDING のまま
+  | 'NO_TRANSCRIPT_EXPECTED' // URL が見つからず、公式の講演の一覧に載らない種類(討論・記者会見) → PENDING のまま(書かない)
   | 'NOT_OFFICIAL_URL' // 公式サイトの URL でない → FAILED
   | 'RIGHTS_UNCONFIRMED' // 権利が未確認の発言元(ECB) → URL だけ残して NOT_APPLICABLE
   | 'RUN_CAP'; // この実行の上限(maxFetches)を超えた → 次の実行で読む
@@ -99,7 +150,7 @@ export interface SpeechBodyPlanItem {
   action: SpeechBodyAction;
   source_url: string | null;
   /** URL をどこから得たか(stored = 既に DB にある)。 */
-  url_from: 'stored' | 'rss' | 'json' | null;
+  url_from: 'stored' | 'rss' | 'json' | 'json_time' | null;
 }
 
 /** 本文の再掲の権利を確認できた発言元(上の説明)。今は FRB だけ。 */
@@ -132,44 +183,101 @@ export async function ingestSpeechBodies(
   counters: JobCounters,
 ): Promise<{ plan: SpeechBodyPlanItem[] }> {
   const plan: SpeechBodyPlanItem[] = [];
-  const urlFrom = new Map<string, 'rss' | 'json'>();
+  const urlFrom = new Map<string, 'rss' | 'json' | 'json_time'>();
   const sinceIso =
     settings.pastDays === null
       ? '1970-01-01T00:00:00.000Z'
       : new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
-  const speeches = await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso);
+  const maxAttempts = settings.maxAttempts ?? MAX_BODY_ATTEMPTS;
+  // ストアの条件に加えて、ここでも発言前・期間外・上限に達した行(PENDING も FAILED も)を外す(ストアが条件を落としても対象にしない)
+  const speeches = (await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso, maxAttempts)).filter(
+    (s) =>
+      s.status === 'DELIVERED' &&
+      Date.parse(s.statement_datetime) >= Date.parse(sinceIso) &&
+      (s.body_status === 'PENDING' || s.body_status === 'FAILED') &&
+      s.body_attempts < maxAttempts,
+  );
   counters.fetched += speeches.length;
 
   // 1. FRB の URL(まだ無い行だけ)。講演の RSS は、必要なときに1回だけ読む。
   const frbWithoutUrl = speeches.filter((s) => s.provider === 'frb_calendar' && !s.source_url);
   const urlById = new Map<string, string>();
   if (frbWithoutUrl.length > 0) {
-    const rows: FrbSpeechRowForMatch[] = frbWithoutUrl.map((s) => ({
+    // 照らし合わせの母集団: 本文の有無・状態に関係なく、FRB のすべての行(HQ承認 2026-11-12)。本文を取った行が候補から
+    // 外れても、同じ日の同じ発言者の別の行を「ちょうど1件」と見誤らない(10/14 のボウマンの「討論」と「講演」)。
+    const allFrb = new Map<string, FrbRowForMatching>();
+    for (const r of await store.listFrbRowsForMatching()) allFrb.set(r.id, r);
+    for (const s of frbWithoutUrl) if (!allFrb.has(s.id)) allFrb.set(s.id, { ...s });
+    const rows: FrbSpeechRowForMatch[] = [...allFrb.values()].map((s) => ({
       id: s.id,
       speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
       date: localDay(s.statement_datetime, 'America/New_York'),
     }));
+    const candidateIds = new Set(frbWithoutUrl.map((s) => s.id));
+    /** URL → その URL を source_url に持つ行(この実行で結んだ行も足していく) */
+    const usersOf = new Map<string, Set<string>>();
+    const addUser = (url: string, id: string) => usersOf.set(url, new Set([...(usersOf.get(url) ?? []), id]));
+    for (const r of allFrb.values()) if (r.source_url) addUser(r.source_url, r.id);
+    const otherUsers = (url: string, id: string) => [...(usersOf.get(url) ?? [])].filter((u) => u !== id);
+    /** 日付で結べた候補の行: 別の行が使っている URL は再利用しない */
+    const acceptByDate = (matches: Map<string, string>, from: 'rss' | 'json') => {
+      for (const [id, url] of matches) {
+        if (!candidateIds.has(id) || urlById.has(id)) continue;
+        if (otherUsers(url, id).length > 0) {
+          counters.skip('URL_IN_USE');
+          continue;
+        }
+        urlById.set(id, url);
+        urlFrom.set(id, from);
+        addUser(url, id);
+      }
+    };
     try {
       const xml = await fetchers.frb.getText(FRB_SPEECHES_RSS_URL);
       const links = [...xml.matchAll(/<link>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)\s*(?:\]\]>)?\s*<\/link>/g)].map(
         (m) => m[1]!,
       );
-      for (const [id, url] of matchFrbSpeechUrls(rows, frbSpeechRssItems(links))) {
-        urlById.set(id, url);
-        urlFrom.set(id, 'rss');
-      }
+      acceptByDate(matchFrbSpeechUrls(rows, frbSpeechRssItems(links)), 'rss');
     } catch (error) {
       counters.error(`frb speeches rss: ${error instanceof Error ? error.message : String(error)}`);
     }
     // RSS は直近の講演だけなので、結べなかった行(古い発言など)は講演の一覧の JSON で探す(同じ決まり: 姓と日付がちょうど1件)。
-    const stillMissing = rows.filter((r) => !urlById.has(r.id));
+    const stillMissing = frbWithoutUrl.filter((s) => !urlById.has(s.id));
     if (stillMissing.length > 0) {
       try {
         const text = await fetchers.frb.getText(FRB_SPEECHES_JSON_URL);
         const items = frbSpeechRssItems(frbSpeechJsonLinks(text));
-        for (const [id, url] of matchFrbSpeechUrls(stillMissing, items)) {
-          urlById.set(id, url);
-          urlFrom.set(id, 'json');
+        acceptByDate(matchFrbSpeechUrls(rows, items), 'json');
+        // 姓と日付で一意に決まらなかった行だけ: 一覧の時刻(東部時間 → UTC)と発言の時刻が完全に一致する講演が
+        // ちょうど1件なら結ぶ(HQ承認 2026-11-11。許容幅なし・推測なし。既に結んだ行は変えない)
+        const timeRows = frbWithoutUrl
+          .filter((s) => !urlById.has(s.id))
+          .map((s) => ({
+            id: s.id,
+            speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
+            statementIso: s.statement_datetime,
+          }));
+        if (timeRows.length > 0) {
+          const timed = frbSpeechJsonTimedItems(text);
+          /** その行の時刻と完全に一致する、同じページの講演が一覧にあるか(同じ原稿を2回話した講演なら、どちらの行も一致する) */
+          const exactFor = (rowId: string, url: string): boolean => {
+            const r = allFrb.get(rowId);
+            if (!r) return false;
+            const name = englishNameOf(r.speaker_organization, r.speaker_name);
+            const surname = name ? frbSurnameKey(name) : null;
+            const at = Date.parse(r.statement_datetime);
+            return surname !== null && timed.some((i) => i.url === url && i.surname === surname && i.instantMs === at);
+          };
+          for (const [id, url] of matchFrbSpeechUrlsByTime(timeRows, timed)) {
+            // URL の競合: 別の行がこの URL を使っていて、その行が時刻の完全一致で説明できなければ、安全側で結ばない
+            if (otherUsers(url, id).some((u) => !exactFor(u, url))) {
+              counters.skip('URL_CONFLICT');
+              continue;
+            }
+            urlById.set(id, url);
+            urlFrom.set(id, 'json_time');
+            addUser(url, id);
+          }
         }
       } catch (error) {
         counters.error(`frb speeches json: ${error instanceof Error ? error.message : String(error)}`);
@@ -181,6 +289,12 @@ export async function ingestSpeechBodies(
   let fetches = 0;
   for (const speech of speeches) {
     const url = speech.source_url ?? urlById.get(speech.id) ?? null;
+    /** 状態と回数の条件つきで書く。書けなかった(ほかの実行が先に書いた)ら数えるだけで、上書きしない。 */
+    const write = async (expectedAttempts: number, patch: SpeechBodyPatch): Promise<boolean> => {
+      const ok = await store.updateSpeechBody(speech.id, patch, expectedAttempts);
+      if (!ok) counters.skip('CONCURRENT_UPDATE');
+      return ok;
+    };
     const record = (action: SpeechBodyAction) =>
       plan.push({
         speech_id: speech.id,
@@ -191,6 +305,13 @@ export async function ingestSpeechBodies(
         url_from: speech.source_url ? 'stored' : (urlFrom.get(speech.id) ?? null),
       });
     if (!url) {
+      if (isTranscriptUnexpectedKind(speech.title)) {
+        // 2026-11-13 の DEV の確認: URL が無いまま PENDING の行は、すべて「討論」「記者会見」だった(FRB の講演の一覧に原稿が載らない種類)。
+        // 取得の不具合ではないので、講演の行の取得漏れ(NO_SOURCE_URL)と数え分ける。状態は変えない・書かない(次の実行でまた探す)。
+        counters.skip('NO_TRANSCRIPT_EXPECTED');
+        record('NO_TRANSCRIPT_EXPECTED');
+        continue;
+      }
       counters.skip('NO_SOURCE_URL'); // PENDING のまま(次の実行でまた探す)
       record('NO_SOURCE_URL');
       continue;
@@ -199,7 +320,7 @@ export async function ingestSpeechBodies(
       counters.skip('NOT_OFFICIAL_URL');
       record('NOT_OFFICIAL_URL');
       if (settings.dryRun) continue;
-      await store.updateSpeechBody(speech.id, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
+      await write(speech.body_attempts, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
       continue;
     }
     if (!(settings.storeBodyFor ?? STORE_BODY_FOR).includes(speech.provider)) {
@@ -207,7 +328,7 @@ export async function ingestSpeechBodies(
       counters.skip('RIGHTS_UNCONFIRMED');
       record('RIGHTS_UNCONFIRMED');
       if (settings.dryRun) continue;
-      await store.updateSpeechBody(speech.id, {
+      await write(speech.body_attempts, {
         source_url: url,
         speech_body: null,
         body_fetched_at: null,
@@ -220,39 +341,45 @@ export async function ingestSpeechBodies(
       counters.skip('RUN_CAP'); // 次の実行で読む
       record('RUN_CAP');
       if (settings.dryRun) continue;
-      if (!speech.source_url) await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'PENDING' });
+      if (!speech.source_url)
+        await write(speech.body_attempts, { source_url: url, body_status: speech.body_status as 'PENDING' | 'FAILED' });
       continue;
     }
     fetches += 1;
     record('FETCH');
-    if (settings.dryRun) continue;
+    if (settings.dryRun) continue; // dry-run は回数も含めて何も書かない
+    // 本文のページを読む直前に、この発言の行の試行回数を1回だけ増やす(楽観的な条件。増やせなければ、ほかの実行が扱った)
+    if (!(await store.claimBodyAttempt(speech.id, speech.body_attempts, now.toISOString(), maxAttempts))) {
+      counters.skip('CONCURRENT_UPDATE');
+      continue;
+    }
+    const attempts = speech.body_attempts + 1;
     const fetcher = speech.provider === 'frb_calendar' ? fetchers.frb : fetchers.ecb;
     try {
       const html = await fetcher.getText(url);
       const body = extractSpeechBody(speech.provider, html);
       if (!body) {
         counters.skip('NO_BODY_FOUND');
-        await store.updateSpeechBody(speech.id, {
-          source_url: url,
-          body_status: 'FAILED',
-          body_error: 'NO_BODY_FOUND',
-        });
+        await write(attempts, { source_url: url, body_status: 'FAILED', body_error: 'NO_BODY_FOUND' });
         continue;
       }
-      await store.updateSpeechBody(speech.id, {
-        source_url: url,
-        speech_body: body,
-        body_fetched_at: now.toISOString(),
-        body_status: 'FETCHED',
-        body_error: null,
-      });
-      counters.success += 1;
-      counters.note('fetched', { speech_id: speech.id, provider: speech.provider, url, characters: body.length });
+      if (
+        await write(attempts, {
+          source_url: url,
+          speech_body: body,
+          body_fetched_at: now.toISOString(),
+          body_status: 'FETCHED',
+          body_error: null,
+        })
+      ) {
+        counters.success += 1;
+        counters.note('fetched', { speech_id: speech.id, provider: speech.provider, url, characters: body.length });
+      }
     } catch (error) {
       const code = errorCode(error);
       counters.skip('FETCH_FAILED');
-      counters.note('failed', { speech_id: speech.id, url, error: code });
-      await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'FAILED', body_error: code });
+      counters.note('failed', { speech_id: speech.id, url, error: code, attempts });
+      await write(attempts, { source_url: url, body_status: 'FAILED', body_error: code });
     }
   }
   return { plan };

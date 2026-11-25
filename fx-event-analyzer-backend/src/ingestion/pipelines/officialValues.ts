@@ -43,9 +43,11 @@ import {
 } from '../adapters/gbCaOfficialValues.js';
 import type { OfficialScheduleEntry, OfficialScheduleTable } from '../mappings/gbAuCaSchedule.js';
 import { HttpError } from '../http.js';
+import { isFirstValueWindowExpired, validateFirstValueWindows, type FirstValueWindow } from '../firstValueWindow.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
 import { officialScheduleProviderEventId } from './officialScheduleTable.js';
+import { needsReleasedStateRepair } from './releaseRecovery.js';
 
 export interface OfficialValueSource {
   indicatorCode: string;
@@ -66,8 +68,11 @@ export interface OfficialValueSource {
    * GB_UNEMPLOYMENT_RATE だけ)。表に referencePeriod がある回は、これまでどおり表と照合する。
    */
   periodFromOfficialLabel?: boolean;
-  /** 初回値として保存してよいのは、公表からこの日数の間だけ(次の回の公表の後に、改定された値を初回値としない)。 */
-  maxDaysAfterRelease?: number;
+  /**
+   * 初回値として保存してよい期間(次の回の公表の後に、改定された値を初回値としない)。ABS は { days: 7, basis: 'ELAPSED' }。
+   * 設定が無い系列は、免除リスト(firstValueWindow.ts の FIRST_VALUE_WINDOW_EXEMPT)に無ければ起動時に止まる。
+   */
+  firstValueWindow?: FirstValueWindow;
   /** fullBody = request の応答(releaseRequest のある取得元で、単位・桁を読む)。 */
   parseForRelease(body: unknown, releaseDate: string, fullBody?: unknown): OfficialValue | null;
   valueForPeriod(body: unknown, period: string): number | null;
@@ -126,7 +131,7 @@ const abs = (indicatorCode: string): OfficialValueSource => {
       const url = absReleaseUrl(series, entry.releaseDate);
       return url ? { url, headers } : null;
     },
-    maxDaysAfterRelease: 7, // ABS の同じ指標の公表の間隔は3週間以上
+    firstValueWindow: { days: 7, basis: 'ELAPSED' }, // ABS の同じ指標の公表の間隔は3週間以上
     parseForRelease: (body, releaseDate, fullBody) => parseAbsValueForRelease(series, body, releaseDate, fullBody),
     valueForPeriod: (body, period) => absValueForPeriod(series, body, period),
   };
@@ -141,19 +146,38 @@ export const OFFICIAL_VALUE_SOURCES: readonly OfficialValueSource[] = [
   ons('GB_CPI'),
   ons('GB_CORE_CPI'),
   onsRolling('GB_UNEMPLOYMENT_RATE'),
+  ons('GB_GDP_MOM'),
+  ons('GB_RETAIL_SALES_MOM'),
   statcan('CA_UNEMPLOYMENT_RATE'),
   abs('AU_CPI'),
   abs('AU_UNEMPLOYMENT_RATE'),
+  abs('AU_WPI_QOQ'),
 ];
 
 export interface OfficialValueFetcher {
   getJson(url: string, init?: RequestInit): Promise<unknown>;
 }
 
+/** REPAIR = 初回値は保存済みだがイベントの状態が RELEASED・AVAILABLE になっていない回の、状態だけの修復(QA-1) */
+export type OfficialValuesPlanAction = 'PUBLISH' | 'REVISE' | 'UNCHANGED' | 'PENDING' | 'REPAIR';
+
+export interface OfficialValuesPlanItem {
+  provider_event_id: string;
+  indicator: string;
+  action: OfficialValuesPlanAction;
+  /** 取れた値(PUBLISH / REVISE のとき)。本文ではなく数値だけ */
+  period?: string;
+  value?: number;
+  /** PENDING の理由(コードの skip と同じ名前) */
+  reason?: string;
+}
+
 export interface OfficialValuesResult {
   published: number;
   revisions: number;
   pending: number;
+  /** 各イベントで何をする(した)か。dry-run では、これだけを返して何も書かない */
+  plan: OfficialValuesPlanItem[];
 }
 
 export async function ingestOfficialValues(
@@ -163,15 +187,24 @@ export async function ingestOfficialValues(
     sources?: readonly OfficialValueSource[];
     tables: readonly OfficialScheduleTable[];
     now?: () => Date;
-    /** 発表からこの日数までの回を見る(改定の確認も含む)。 */
+    /**
+     * 発表からこの日数までの回を見る(改定の確認・QA-1 の状態の修復も含む)。既定 45 日。これより古い回は、初回値の取り込みも
+     * 改定の確認も状態の修復もしない(古い stuck 行は人手の対応。pipelines/releaseRecovery.ts)。
+     */
     lookbackDays?: number;
+    /** true = dry-run(HQ指示 2026-11-13): 公式の API は読むが、DB に書かない。plan と件数だけ返す */
+    dryRun?: boolean;
   },
   counters: JobCounters,
 ): Promise<OfficialValuesResult> {
   const now = deps.now?.() ?? new Date();
+  // 見る範囲は公表から lookbackDays(既定 45 日)まで。これより古い stuck 行(QA-1)は自動では回復しない(人手の対応。
+  // 一度だけ lookbackDays を長くして実行する方法は pipelines/releaseRecovery.ts を参照)。
   const lookbackMs = (deps.lookbackDays ?? 45) * 86_400_000;
-  const result: OfficialValuesResult = { published: 0, revisions: 0, pending: 0 };
+  const result: OfficialValuesResult = { published: 0, revisions: 0, pending: 0, plan: [] };
+  const dryRun = deps.dryRun === true;
   const sources = deps.sources ?? OFFICIAL_VALUE_SOURCES;
+  validateFirstValueWindows(sources); // 設定漏れは、取得・書き込みの前に例外で止める
 
   const indicators = await deps.store.findIndicatorsByCode(sources.map((s) => s.indicatorCode));
   for (const source of sources) {
@@ -218,17 +251,49 @@ export async function ingestOfficialValues(
         error: error instanceof Error ? error.message : String(error),
       });
       result.pending += events.filter((e) => e.status !== 'RELEASED').length;
+      for (const e of events.filter((x) => x.status !== 'RELEASED')) {
+        result.plan.push({
+          provider_event_id: e.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'FETCH_FAILED',
+        });
+      }
       continue;
     }
 
     for (const event of events) {
       const entry = entryById.get(event.provider_event_id)!;
+      const snapshot = await deps.store.getReleaseSnapshot(event.id);
+      // QA-1: 初回値は保存済みなのに、前回の実行でイベントの状態更新が失敗していた回は、状態だけを直す(スナップショット・
+      // 改定の履歴には触れない)。この後は、これまでどおり改定の確認に進む。
+      if (needsReleasedStateRepair(event, snapshot)) {
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'REPAIR',
+        });
+        if (!dryRun) {
+          try {
+            await deps.store.updateEvent(event.id, { status: 'RELEASED', data_status: 'AVAILABLE' });
+            counters.note('repaired', { event_id: event.id, indicator: source.indicatorCode });
+          } catch (error) {
+            counters.error(`${event.provider_event_id}: ${error instanceof Error ? error.message : String(error)}`);
+            continue; // 直せなかった回は、次の実行でもう一度
+          }
+        }
+      }
       if (!entry.referencePeriod && !source.periodFromOfficialLabel) {
         counters.skip('NO_REFERENCE_PERIOD'); // 対象期間を照合できない回は保存しない
         if (event.status !== 'RELEASED') result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'NO_REFERENCE_PERIOD',
+        });
         continue;
       }
-      const snapshot = await deps.store.getReleaseSnapshot(event.id);
       if (event.status === 'RELEASED' || snapshot) {
         // 改定の確認だけ(初回値は変えない)
         if (!snapshot || snapshot.actual === null) continue;
@@ -240,27 +305,49 @@ export async function ingestOfficialValues(
         const latest = (await deps.store.latestRevisionValues(event.id)).ACTUAL ?? Number(snapshot.actual);
         if (current === latest) {
           counters.skip('UNCHANGED');
+          result.plan.push({
+            provider_event_id: event.provider_event_id,
+            indicator: source.indicatorCode,
+            action: 'UNCHANGED',
+            period: revisionPeriod,
+            value: current,
+          });
           continue;
         }
-        await deps.store.insertRevision({
-          event_id: event.id,
-          field_name: 'ACTUAL',
-          old_value: latest,
-          new_value: current,
-          effective_at: now.toISOString(),
-          source: source.sourceName,
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'REVISE',
+          period: revisionPeriod,
+          value: current,
         });
+        if (!dryRun) {
+          await deps.store.insertRevision({
+            event_id: event.id,
+            field_name: 'ACTUAL',
+            old_value: latest,
+            new_value: current,
+            effective_at: now.toISOString(),
+            source: source.sourceName,
+          });
+        }
         result.revisions += 1;
         counters.note('revised', { event_id: event.id, period: revisionPeriod, from: latest, to: current });
         continue;
       }
 
       if (
-        source.maxDaysAfterRelease !== undefined &&
-        now.getTime() - Date.parse(event.release_datetime) > source.maxDaysAfterRelease * 86_400_000
+        source.firstValueWindow !== undefined &&
+        isFirstValueWindowExpired(source.firstValueWindow, new Date(event.release_datetime), now)
       ) {
         counters.skip('TOO_LATE_FOR_FIRST_RELEASE'); // 改定後の値を初回値として保存しない
         result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'TOO_LATE_FOR_FIRST_RELEASE',
+        });
         continue;
       }
       let releaseBody: unknown = body;
@@ -269,6 +356,12 @@ export async function ingestOfficialValues(
         if (!req) {
           counters.skip('NOT_RELEASED_OR_DATE_MISMATCH');
           result.pending += 1;
+          result.plan.push({
+            provider_event_id: event.provider_event_id,
+            indicator: source.indicatorCode,
+            action: 'PENDING',
+            reason: 'NOT_RELEASED_OR_DATE_MISMATCH',
+          });
           continue;
         }
         try {
@@ -284,6 +377,12 @@ export async function ingestOfficialValues(
             });
           }
           result.pending += 1;
+          result.plan.push({
+            provider_event_id: event.provider_event_id,
+            indicator: source.indicatorCode,
+            action: 'PENDING',
+            reason: 'FETCH_FAILED_OR_NOT_UPDATED',
+          });
           continue;
         }
       }
@@ -291,12 +390,35 @@ export async function ingestOfficialValues(
       if (!value) {
         counters.skip('NOT_RELEASED_OR_DATE_MISMATCH'); // 公表日が一致しない(前の回の値を使わない)
         result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'NOT_RELEASED_OR_DATE_MISMATCH',
+        });
         continue;
       }
       if (entry.referencePeriod !== undefined && value.period !== entry.referencePeriod) {
         counters.skip('PERIOD_MISMATCH');
         counters.note('period_mismatch', { event_id: event.id, expected: entry.referencePeriod, got: value.period });
         result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'PERIOD_MISMATCH',
+        });
+        continue;
+      }
+      result.plan.push({
+        provider_event_id: event.provider_event_id,
+        indicator: source.indicatorCode,
+        action: 'PUBLISH',
+        period: value.period,
+        value: value.value,
+      });
+      if (dryRun) {
+        result.published += 1;
         continue;
       }
       const surprise = calculateSurprise(null, value.value, indicator.favorable_direction);

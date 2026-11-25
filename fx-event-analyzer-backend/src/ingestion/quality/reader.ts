@@ -16,6 +16,12 @@ import type {
   StagedSample,
 } from './metrics.js';
 import { getSpeechProviderDbStatus, listSpeechIngestionRuns } from '../../repositories/speechesRepository.js';
+import {
+  PENDING_STALE_HOURS,
+  SPEECH_PIPELINE_WINDOW_DAYS,
+  type SpeechPipelineJob,
+  type SpeechPipelineStatus,
+} from './speechPipeline.js';
 
 export const PAGE_SIZE = 1000;
 
@@ -63,6 +69,11 @@ export interface QualityReader {
   speechDbStatus(provider: string, nowIso: string): Promise<SpeechDbStatus>;
   /** 第10章: 暫定(is_provisional)のまま SCHEDULED の economic_events で、release_datetime が [from, to) のもの。 */
   listProvisionalEvents(fromIso: string, toIso: string): Promise<ProvisionalEventSample[]>;
+  /**
+   * 第11章(要人発言の本文と要約、HQ承認 2026-11-11): 最後の実行と、直近14日の発言済みの行の件数。READ-ONLY。
+   * 読めなければ(列が無い = migration 20261112000001 の前など)null。
+   */
+  speechPipelineStatus(nowIso: string): Promise<SpeechPipelineStatus | null>;
 }
 
 /** 第10章(HQ判断 2026-10-27 案B): 暫定の予定は通知しないため、確定の作業の漏れを見つける。 */
@@ -263,6 +274,56 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
 
     async listSpeechRuns(provider) {
       return listSpeechIngestionRuns(supabase, provider);
+    },
+
+    async speechPipelineStatus(nowIso) {
+      const nowMs = Date.parse(nowIso);
+      const sinceIso = new Date(nowMs - SPEECH_PIPELINE_WINDOW_DAYS * 86_400_000).toISOString();
+      const staleBeforeIso = new Date(nowMs - PENDING_STALE_HOURS * 3_600_000).toISOString();
+      const delivered = () =>
+        supabase
+          .from('speech_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'DELIVERED')
+          .gte('statement_datetime', sinceIso);
+      try {
+        const jobs: SpeechPipelineJob[] = ['ingest:speech-bodies', 'ingest:speech-summaries'];
+        const lastRuns = await Promise.all(
+          jobs.map(async (job) => {
+            const { data, error } = await supabase
+              .from('ingestion_logs')
+              .select('started_at, status')
+              .eq('job', job)
+              .order('started_at', { ascending: false })
+              .limit(1);
+            if (error) throw error;
+            const row = (data ?? [])[0] as { started_at: string; status: string } | undefined;
+            return { job, startedAt: row?.started_at ?? null, status: row?.status ?? null };
+          }),
+        );
+        const counts = await Promise.all([
+          delivered()
+            .eq('body_status', 'PENDING')
+            .not('source_url', 'is', null)
+            .lt('statement_datetime', staleBeforeIso),
+          delivered().eq('body_status', 'FAILED').lt('body_attempts', 3),
+          delivered().in('body_status', ['PENDING', 'FAILED']).gte('body_attempts', 3),
+          delivered().not('summary_error', 'is', null),
+          delivered().eq('body_status', 'FETCHED').is('summary', null).is('summary_error', null),
+        ]);
+        for (const c of counts) if (c.error) throw c.error;
+        const [stale, retrying, atCap, summaryFailed, withoutSummary] = counts.map((c) => c.count ?? 0);
+        return {
+          lastRuns,
+          pendingWithUrlStale: stale!,
+          bodyFailedRetrying: retrying!,
+          bodyAtCap: atCap!,
+          summaryFailed: summaryFailed!,
+          fetchedWithoutSummary: withoutSummary!,
+        };
+      } catch {
+        return null; // 第11章は「読めなかった」と出す(ほかの章は変えない)
+      }
     },
 
     async speechDbStatus(provider, nowIso) {

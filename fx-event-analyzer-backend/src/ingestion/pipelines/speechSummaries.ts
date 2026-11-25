@@ -29,7 +29,11 @@ export interface SpeechSummaryPatch {
 export interface SpeechSummaryStore {
   /** body_status = FETCHED・本文あり・summary が null・summary_error が null の発言(sinceIso が null なら全期間、古い順)。 */
   listSpeechesNeedingSummary(sinceIso: string | null, limit: number): Promise<SpeechForSummary[]>;
-  updateSpeechSummary(id: string, patch: SpeechSummaryPatch): Promise<void>;
+  /**
+   * 要約も理由も無い行だけを書き換える(HQ承認 2026-11-11: 既存の要約・失敗の理由を上書きしない。二重の実行の防止)。
+   * 書き換えなかったら false。
+   */
+  updateSpeechSummary(id: string, patch: SpeechSummaryPatch): Promise<boolean>;
 }
 
 export interface SpeechSummarySettings {
@@ -80,22 +84,22 @@ export async function ingestSpeechSummaries(
       else failed += 1;
       continue;
     }
+    const patch: SpeechSummaryPatch = result.ok
+      ? {
+          summary: result.summary,
+          summary_method: SUMMARY_METHOD_EXTRACTIVE_EN,
+          summary_generated_at: now.toISOString(),
+          summary_error: null,
+        }
+      : { summary: null, summary_method: null, summary_generated_at: null, summary_error: result.reason };
+    if (!(await store.updateSpeechSummary(speech.id, patch))) {
+      counters.skip('CONCURRENT_UPDATE'); // ほかの実行が先に書いた(上書きしない)
+      continue;
+    }
     if (result.ok) {
-      await store.updateSpeechSummary(speech.id, {
-        summary: result.summary,
-        summary_method: SUMMARY_METHOD_EXTRACTIVE_EN,
-        summary_generated_at: now.toISOString(),
-        summary_error: null,
-      });
       ready += 1;
       counters.success += 1;
     } else {
-      await store.updateSpeechSummary(speech.id, {
-        summary: null,
-        summary_method: null,
-        summary_generated_at: null,
-        summary_error: result.reason,
-      });
       failed += 1;
       counters.skip(result.reason);
     }

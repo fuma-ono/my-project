@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
+import { runIfPriceFeaturesEnabled } from '../config/priceFeatures.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { evaluateAllRateAlerts } from '../repositories/rateAlertsRepository.js';
 
@@ -19,6 +20,8 @@ import { evaluateAllRateAlerts } from '../repositories/rateAlertsRepository.js';
  * .env) like the server. Exit code 0 on success, 1 on failure — cron-friendly.
  */
 async function main(): Promise<void> {
+  // 価格由来の機能が無効(PRICE_FEATURES_ENABLED が 'true' でない。未設定を含む)なら、何も評価・書き込みをせず正常終了(exit 0)。
+  if (!runIfPriceFeaturesEnabled('evaluate-rate-alerts')) return;
   const env = loadEnv();
   const result = await evaluateAllRateAlerts(createSupabaseClient(env), new Date());
   console.log(JSON.stringify({ job: 'evaluate-rate-alerts', ...result, at: new Date().toISOString() }));

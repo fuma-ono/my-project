@@ -1,6 +1,6 @@
 /**
  * 英国・豪州・カナダの主要経済指標の公表予定 — HQ指示 2026-11-10「6地域の経済指標拡張・実装準備」。
- * CODE-REVIEWED CONFIG(mappings/retailSalesSchedule.ts と同じ): 人が公式ページを読んで書く表で、
+ * CODE-REVIEWED CONFIG(mappings/retailSalesSchedule.ts・mappings/jpCpiSchedule.ts と同じ): 人が公式ページを読んで書く表で、
  * 規則から推測して日付を作らない。ライブのページの取得・解析はしない。2026-11-10 に公式ページで確認した回だけを載せる。
  *
  * 英国 ONS(https://www.ons.gov.uk/releasecalendar、公表予定の各回の data-gtm-release-date / release-time):
@@ -18,7 +18,7 @@
  *   https://www150.statcan.gc.ca/n1/dai-quo/ssi/homepage/schedule-key_indicators-eng.json の title・description・date。
  *   時刻は「The Daily is released Monday to Friday at 8:30 a.m. Eastern time」https://www150.statcan.gc.ca/n1/dai-quo/index-eng.htm):
  *   - 「Consumer Price Index」October 2026 → 2026-11-16、November → 12-14、December → 2027-01-18、January 2027 → 02-16、
- *     February 2027 → 03-15
+ *     February 2027 → 03-15(CA_CPI_TRIM・CA_CPI_MEDIAN も同じ公表なので同じ日付・時刻)
  *   - 「Labour Force Survey」November 2026 → 2026-12-04、December → 2027-01-08、January 2027 → 02-05、February 2027 → 03-12
  *
  * 利用条件はどれも商用利用可・出典の表示が必要(migration 20261110000002 の説明)。
@@ -65,6 +65,7 @@ function rows(
   pairs: readonly (readonly [key: string, releaseDate: string])[],
   /** true = key は公式ページに書かれた対象月(referencePeriod にも入れる)。 */
   keyIsReferencePeriod = false,
+  checkedAt = CHECKED_AT,
 ): OfficialScheduleEntry[] {
   return pairs.map(([key, releaseDate]) => ({
     indicatorCode,
@@ -73,7 +74,7 @@ function rows(
     time,
     timeZone,
     sources: [source],
-    checkedAt: CHECKED_AT,
+    checkedAt,
     ...(keyIsReferencePeriod ? { referencePeriod: key } : {}),
   }));
 }
@@ -86,12 +87,57 @@ const ONS_LABOUR_MARKET: readonly (readonly [string, string])[] = [
   ['2027-02', '2027-02-16'],
 ];
 
+/**
+ * 「GDP monthly estimate, UK: <月> <年>」(2026-11-18 に各回の公式ページ https://www.ons.gov.uk/releases/gdpmonthlyestimateuk<月><年> の
+ * 「Release date」で確認。どれも 7:00am)。題名の月が値の対象月(2026-11-12 公表分は September 2026 = 対象 2026-09)。
+ * 2026-10 の回は系列 ECYX の API の nextRelease「11 December 2026」とも一致。
+ */
+const ONS_GDP_MONTHLY: readonly (readonly [string, string])[] = [
+  ['2026-10', '2026-12-11'],
+  ['2026-11', '2027-01-15'],
+  ['2026-12', '2027-02-12'],
+  ['2027-01', '2027-03-11'],
+  ['2027-02', '2027-04-14'],
+];
+
+/**
+ * 「Retail sales, Great Britain: <月> <年>」(2026-11-18 に各回の公式ページ https://www.ons.gov.uk/releases/retailsalesgreatbritain<月><年>
+ * の「Release date」で確認。どれも 7:00am)。題名の月が値の対象月(2026-10-23 公表分は September 2026)。
+ * 2026-10 の回は系列 J5EC の API の nextRelease「20 November 2026」とも一致。
+ */
+const ONS_RETAIL_SALES: readonly (readonly [string, string])[] = [
+  ['2026-10', '2026-11-20'],
+  ['2026-11', '2026-12-18'],
+  ['2026-12', '2027-01-22'],
+  ['2027-01', '2027-02-19'],
+  ['2027-02', '2027-03-25'],
+  ['2027-03', '2027-04-23'],
+];
+
 export const ONS_SCHEDULE: OfficialScheduleTable = {
   provider: 'ons_release_calendar',
   entries: [
     ...rows('GB_CPI', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_CPI, true),
     ...rows('GB_CORE_CPI', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_CPI, true),
     ...rows('GB_UNEMPLOYMENT_RATE', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_LABOUR_MARKET),
+    ...rows(
+      'GB_GDP_MOM',
+      '07:00',
+      'Europe/London',
+      'https://www.ons.gov.uk/releases/gdpmonthlyestimateuk',
+      ONS_GDP_MONTHLY,
+      true,
+      '2026-11-18',
+    ),
+    ...rows(
+      'GB_RETAIL_SALES_MOM',
+      '07:00',
+      'Europe/London',
+      'https://www.ons.gov.uk/releases/retailsalesgreatbritain',
+      ONS_RETAIL_SALES,
+      true,
+      '2026-11-18',
+    ),
   ],
 };
 
@@ -102,6 +148,8 @@ export const ABS_LATEST_RELEASE_URLS = {
     'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release',
   AU_UNEMPLOYMENT_RATE:
     'https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/latest-release',
+  AU_WPI_QOQ:
+    'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/latest-release',
 } as const;
 
 /** 公表日 → 対象月(latest-release ページの「Next Release」の題名の月。2026-11-10 確認)。 */
@@ -110,6 +158,9 @@ const ABS_REFERENCE_PERIODS: Record<string, Record<string, string>> = {
   AU_CPI: { '2026-11-25': '2026-10', '2027-01-06': '2026-11', '2027-01-27': '2026-12' },
   // 「Labour Force, Australia, October 2026」19/11/2026 ・ November 2026 17/12/2026 ・ December 2026 21/01/2027
   AU_UNEMPLOYMENT_RATE: { '2026-11-19': '2026-10', '2026-12-17': '2026-11', '2027-01-21': '2026-12' },
+  // 「Wage Price Index, Australia, December 2026」23/02/2027 ・ March 2027 19/05/2027 ・ June 2027 18/08/2027
+  // (2026-11-18 の latest-release ページ。四半期なので対象期間は 'YYYY-Qn': December = 2026-Q4, March = 2027-Q1, June = 2027-Q2)
+  AU_WPI_QOQ: { '2027-02-23': '2026-Q4', '2027-05-19': '2027-Q1', '2027-08-18': '2027-Q2' },
 };
 
 const withAbsPeriods = (entries: OfficialScheduleEntry[]): OfficialScheduleEntry[] =>
@@ -141,26 +192,38 @@ export const ABS_SCHEDULE: OfficialScheduleTable = {
       ABS_RELEASE_CALENDAR_URL,
       byDate(['2026-11-19', '2026-12-17', '2027-01-21', '2027-02-18', '2027-03-25', '2027-04-15']),
     ),
+    // WPI: 2026-11-18 の latest-release ページ「Release date and time 18/11/2026 11:30am AEDT」と「Next Release」の3回。
+    // 先の回の時刻は「Next Release」に書かれていないので、同じ ABS の時刻(11:30、シドニー)を使う。
+    ...rows(
+      'AU_WPI_QOQ',
+      '11:30',
+      'Australia/Sydney',
+      ABS_RELEASE_CALENDAR_URL,
+      byDate(['2027-02-23', '2027-05-19', '2027-08-18']),
+      false,
+      '2026-11-18',
+    ),
   ]),
 };
+
+/**
+ * 「Consumer Price Index」の公表(StatCan の schedule JSON。key は description の対象月)。ヘッドライン CA_CPI と、コア2指標
+ * (CA_CPI_TRIM・CA_CPI_MEDIAN。設計書 ca-cpi-detailed-design.md §3・§15.10)は同じ公表なので、同じ日付・時刻を使う。
+ */
+const STATCAN_CPI: readonly (readonly [string, string])[] = [
+  ['2026-10', '2026-11-16'],
+  ['2026-11', '2026-12-14'],
+  ['2026-12', '2027-01-18'],
+  ['2027-01', '2027-02-16'],
+  ['2027-02', '2027-03-15'],
+];
 
 export const STATCAN_SCHEDULE: OfficialScheduleTable = {
   provider: 'statcan_release_schedule',
   entries: [
-    ...rows(
-      'CA_CPI',
-      '08:30',
-      'America/Toronto',
-      STATCAN_SCHEDULE_URL,
-      [
-        ['2026-10', '2026-11-16'],
-        ['2026-11', '2026-12-14'],
-        ['2026-12', '2027-01-18'],
-        ['2027-01', '2027-02-16'],
-        ['2027-02', '2027-03-15'],
-      ],
-      true,
-    ),
+    ...rows('CA_CPI', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, STATCAN_CPI, true),
+    ...rows('CA_CPI_TRIM', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, STATCAN_CPI, true),
+    ...rows('CA_CPI_MEDIAN', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, STATCAN_CPI, true),
     ...rows(
       'CA_UNEMPLOYMENT_RATE',
       '08:30',

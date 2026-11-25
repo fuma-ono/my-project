@@ -11,13 +11,13 @@ import {
   redactRelease,
 } from '../domain/pastReleaseAccess.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
+import { priceFeaturesEnabled, requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import {
   listAvailableReactionsForComparison,
   listCoReleasedEvents,
   listMinuteCandleCompleteness,
-  listMinuteCandleSeries,
   listRecentReleasedEventIds,
   listReleasedEventsForIndicator,
   getStrategyPair,
@@ -91,6 +91,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     // ひとつ前の発表がロックされていれば、「前回」と解説を隠す(GET /events/{id} と同じ)。
     const { previousLocked } = await requireUnlockedEventForPlan(app.supabase, plan, event);
 
+    const withPrices = priceFeaturesEnabled(app);
     const [rawSnapshot, explanation, relatedFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
       previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
@@ -102,7 +103,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
 
     const reactionsByPair = await Promise.all(
       relatedFxPairs.map(async (pair) => {
-        const reactions = await listReactionsForPair(app.supabase, eventId, pair.fx_pair_id);
+        // 価格由来の機能が無効なら、通貨ペアの識別・名前だけ(reactions は [])。価格反応の行は読まない。
+        const reactions = withPrices ? await listReactionsForPair(app.supabase, eventId, pair.fx_pair_id) : [];
         return {
           fx_pair_id: pair.fx_pair_id,
           symbol: pair.symbol,
@@ -150,6 +152,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
   // STRATEGY_SAMPLE_WINDOW 回の保存済みの値動き・スナップショットから傾向を数える(domain/eventStrategyAnalysis.ts)。
   // Pro の機能(VIEW_ADVANCED_STATS)。持っていない利用者には 403 にせず available: false(高度な統計と同じ段階的な開示)。
   app.get<{ Params: { event_id: string } }>('/events/:event_id/strategy-analysis', async (request) => {
+    requirePriceFeatures(app);
     const userId = request.user!.id;
     const features = await listActiveFeatureCodes(app.supabase, userId);
     assertEntitlement(features, FEATURE_CODES.VIEW_BASIC_EVENT);
@@ -239,8 +242,6 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     );
     // HQ指示(2026-11-07「1分足欠損への対応」): 15分・60分のブレイク判定だけに使う、1分足の欠損確認(1分・5分判定には使わない)。
     const completeness = await listMinuteCandleCompleteness(app.supabase, releases, pair.fx_pair_id);
-    // 値動きの分類(crossed_pre_price_after_initial)は、2分目以降の1分足の系列から直接判定する(domain/eventStrategyAnalysis.ts)。
-    const minuteSeries = await listMinuteCandleSeries(app.supabase, releases, pair.fx_pair_id);
     const analysis = buildStrategyAnalysis(
       releases.map((release) => ({
         event_id: release.event_id,
@@ -253,7 +254,6 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         reactions: reactions.filter((r) => r.event_id === release.event_id),
         minuteCompleteness15m: completeness.get(release.event_id)?.complete15m ?? false,
         minuteCompleteness60m: completeness.get(release.event_id)?.complete60m ?? false,
-        minuteCandles: minuteSeries.get(release.event_id) ?? [],
       })),
       pair.symbol,
       event.currency_code,
@@ -282,6 +282,11 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     }
 
     const query = comparisonQuerySchema.parse(request.query);
+    const withPrices = priceFeaturesEnabled(app);
+    // 価格由来の機能が有効のときだけ fx_pair_id が必須(従来どおり 422)。無効なら渡されても無視する(値のみのモード)。
+    if (withPrices && query.fx_pair_id === undefined) {
+      throw ApiError.validation('fx_pair_id is required.');
+    }
     const pagination = parsePagination(query);
     const hasAdvanced = features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS);
     const plan = planFromFeatures(features);
@@ -309,13 +314,40 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         ? new Set<string>()
         : new Set(events.map((event) => event.event_id).filter((id) => !unlockedIds.has(id)));
 
+    // 値のみのモード(価格由来の機能が無効): 各発表の日時・結果・予想・前回・サプライズだけ。価格反応の行は読まず、
+    // stats / advanced_statistics / stats_by_timeframe / analyzable_events / fx_pair_id と、events[].pips_by_timeframe は出さない。
+    // 件数の制限(history_limit・FREE のロック)は、価格ありの応答と同じ。
+    if (!withPrices) {
+      return {
+        indicator: {
+          id: indicator.id,
+          code: indicator.code,
+          name: indicator.name,
+          display_name: indicator.display_name,
+          country_code: indicator.country_code,
+          currency_code: indicator.currency_code,
+          unit: indicator.unit,
+          value_decimals: valueDecimalsForIndicator(indicator.code),
+        },
+        timeframe: query.timeframe,
+        total_events: statsEventIds.length,
+        events: events.map((event) =>
+          redactRelease(event, rowLockedIds.has(event.event_id), previousLockedIds.has(event.event_id)),
+        ),
+        meta: buildMeta(pagination.page, pagination.limit, total),
+        history_limit: historyLimit,
+        past_release_limit: pastReleaseLimitFor(plan),
+      };
+    }
+    const fxPairId = query.fx_pair_id!;
+
     const timeframes = query.timeframe === 'all' ? [...ALL_TIMEFRAMES] : [query.timeframe];
     // 統計は選んだ時間足だけ。表の1分・5分・15分のために、その3つも一緒に読む。
     const fetchTimeframes = [...new Set<string>([...timeframes, ...TABLE_TIMEFRAMES])];
     const fetchedRows = await listAvailableReactionsForComparison(
       app.supabase,
       statsEventIds,
-      query.fx_pair_id,
+      fxPairId,
       fetchTimeframes,
     );
     const reactionRows = fetchedRows.filter((row) => (timeframes as string[]).includes(row.timeframe));
@@ -339,7 +371,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
           // v1.46: events の値を表示する小数の桁数(domain/valueDecimals.ts)
           value_decimals: valueDecimalsForIndicator(indicator.code),
         },
-        fx_pair_id: query.fx_pair_id,
+        fx_pair_id: fxPairId,
         timeframe: query.timeframe,
         total_events: statsEventIds.length,
         analyzable_events: analyzableEventIds.size,
@@ -383,7 +415,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         // v1.46: events の値を表示する小数の桁数(domain/valueDecimals.ts)
         value_decimals: valueDecimalsForIndicator(indicator.code),
       },
-      fx_pair_id: query.fx_pair_id,
+      fx_pair_id: fxPairId,
       total_events: statsEventIds.length,
       analyzable_events: analyzableEventIds.size,
       stats_by_timeframe: statsByTimeframe,

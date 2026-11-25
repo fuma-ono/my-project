@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { loadEnv } from '../config/env.js';
+import { runIfPriceFeaturesEnabled } from '../config/priceFeatures.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { PolygonAdapter } from '../ingestion/adapters/polygon.js';
 import { TWELVE_DATA_PROVIDER, TwelveDataAdapter } from '../ingestion/adapters/twelveData.js';
@@ -42,6 +43,8 @@ function arg(name: string): string | undefined {
 }
 
 async function main(): Promise<void> {
+  // 価格由来の機能が無効(PRICE_FEATURES_ENABLED が 'true' でない。未設定を含む)なら、何も取得・書き込みをせず正常終了(exit 0)。
+  if (!runIfPriceFeaturesEnabled('ingest:fx-prices')) return;
   const keys = loadIngestionEnv();
   if (!keys.TWELVE_DATA_API_KEY) {
     console.log(JSON.stringify({ job: 'ingest:fx-prices', skipped: 'TWELVE_DATA_API_KEY not set' }));

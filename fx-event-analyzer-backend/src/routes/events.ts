@@ -1,23 +1,25 @@
 import type { FastifyInstance } from 'fastify';
-import { attributionForIndicator, nyFedAttribution } from '../domain/attribution.js';
+import {
+  attributionForIndicator,
+  isCaCoreCpiIndicator,
+  nyFedAttribution,
+  type Attribution,
+} from '../domain/attribution.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
-import {
-  CHART_MAX_AFTER_MINUTES,
-  CHART_MAX_BEFORE_MINUTES,
-  chartCandleCoverage,
-  parseChartMinutes,
-  resolveChartWindow,
-} from '../domain/chartWindow.js';
+import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES } from '../authorization/entitlements.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
+import { priceFeaturesEnabled, requirePriceFeatures } from '../authorization/priceFeatures.js';
+import { isPolicyRateLockedForPlan } from '../authorization/policyRateAccess.js';
 import {
   countRevisions,
   getEventById,
   getLatestExplanation,
   getFomcPolicyDecision,
   getReleaseSnapshot,
+  getSnapshotVerificationSource,
   listRevisions,
   type EventRow,
 } from '../repositories/eventsRepository.js';
@@ -41,7 +43,6 @@ import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import {
   getFxPairById,
   getReaction,
-  getPreReleasePrice,
   listChartPrices,
   listReactionsForPair,
   listReactionsForPairsAndTimeframes,
@@ -83,11 +84,30 @@ function isValidTimeframe(value: unknown): value is ValidTimeframe {
 /** v1.47: FOMC の会合(US_FOMC)の政策決定。fomc_policy_decisions に行がある会合だけ(ほかの指標は読まない)。 */
 const POLICY_RATE_INDICATOR_CODE = 'US_FOMC';
 
+/**
+ * 出典。カナダのコアCPIだけ、対象月(キー = provider_event_id の最後の部分。スナップショットの verification_source があれば一致を
+ * 確認)を notice に入れる(設計書 ca-cpi-detailed-design.md §16.5)。ロック中でも出す(値ではない)。不正なら月なしの基本形で、
+ * ATTRIBUTION_REFERENCE_PERIOD_INVALID をログに残す(値は出さない)。ほかの指標は従来どおり。
+ */
+export async function eventAttribution(app: FastifyInstance, event: EventRow): Promise<Attribution | null> {
+  if (!isCaCoreCpiIndicator(event.indicator_code)) return attributionForIndicator(event.indicator_code);
+  const snapshotVerificationSource = await getSnapshotVerificationSource(app.supabase, event.id);
+  return attributionForIndicator(event.indicator_code, {
+    providerEventId: event.provider_event_id,
+    snapshotVerificationSource,
+    releaseDatetime: event.release_datetime,
+    onInvalidReferencePeriod: (info) =>
+      app.log.error({ ...info, event_id: event.id, indicator: event.indicator_code }, info.code),
+  });
+}
+
 async function lockedEventDetail(app: FastifyInstance, event: EventRow, precision: ReleaseDatetimePrecision) {
+  const withPrices = priceFeaturesEnabled(app);
   const [snapshot, relatedFxPairs, activeFxPairs] = await Promise.all([
     getReleaseSnapshot(app.supabase, event.id),
     listRelatedFxPairs(app.supabase, event.indicator_id),
-    listActiveFxPairs(app.supabase),
+    // 価格由来の機能が無効なら、主要ペアの反応は返さないので、通貨ペアの一覧も読まない。
+    withPrices ? listActiveFxPairs(app.supabase) : Promise.resolve([]),
   ]);
   const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
 
@@ -108,10 +128,11 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       // v1.32 is_provisional: ロックされるのは過去の RELEASED だけなので常に false(応答の形を揃える)。
       is_provisional: false,
       // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。ロックしても出典は隠さない。
-      attribution: attributionForIndicator(event.indicator_code),
+      attribution: await eventAttribution(app, event),
       // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
       value_decimals: valueDecimalsForIndicator(event.indicator_code),
-      // v1.47: 値なので、ロックしたら隠す(FOMC の会合は RELEASED にならないので、実際にはロックされない)。
+      // v1.47: 値なので、ロックしたら隠す。FOMC の会合は RELEASED にならないので、RELEASED のロックでは起きないが、
+      // 過去の会合の政策金利は FREE には直近 3 回だけ(authorization/policyRateAccess.ts。HQ 指示 2026-11-19)で、その外の会合がここに来る。
       policy_rate: null,
       ...LOCKED,
     },
@@ -122,12 +143,17 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       fx_pair_id: pair.fx_pair_id,
       symbol: pair.symbol,
       priority: pair.priority,
-      reaction: {
-        timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
-        pips: null,
-        change_percent: null,
-        analysis_status: LOCKED_ANALYSIS_STATUS,
-      },
+      // 価格由来の機能が無効なら reaction キーごと外す(通貨ペアの識別・名前だけ)。
+      ...(withPrices
+        ? {
+            reaction: {
+              timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+              pips: null,
+              change_percent: null,
+              analysis_status: LOCKED_ANALYSIS_STATUS,
+            },
+          }
+        : {}),
     })),
     major_fx_reactions: majorFxPairs.map((pair) => ({
       fx_pair_id: pair.fx_pair_id,
@@ -163,16 +189,22 @@ export function registerEventRoutes(app: FastifyInstance): void {
     if (lockedIds.has(event.id)) {
       return lockedEventDetail(app, event, precision);
     }
+    // HQ 指示 2026-11-19: FOMC の会合は RELEASED にならず、上の RELEASED のロックの対象外。過去の会合の政策金利を、FREE には直近 3 回だけ見せる
+    // (authorization/policyRateAccess.ts)。ロックなら、同じ形(locked: true、値は null)で返す。
+    if (await isPolicyRateLockedForPlan(app.supabase, plan, event)) {
+      return lockedEventDetail(app, event, precision);
+    }
     // HQ指示 2026-10-22: ひとつ前の発表がロックされていれば(FREE で見られる一番古い
     // 発表)、その結果にあたる「前回」と、前回の改定・解説(前回を書いていることがある)を隠す。
     const previousLocked = previousLockedIds.has(event.id);
 
+    const withPrices = priceFeaturesEnabled(app);
     const [rawSnapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs, policyRate] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
       previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
       countRevisions(app.supabase, eventId, previousLocked ? { excludeField: PREVIOUS_REVISION_FIELD } : {}),
       listRelatedFxPairs(app.supabase, event.indicator_id),
-      listActiveFxPairs(app.supabase),
+      withPrices ? listActiveFxPairs(app.supabase) : Promise.resolve([]),
       event.indicator_code === POLICY_RATE_INDICATOR_CODE
         ? getFomcPolicyDecision(app.supabase, eventId)
         : Promise.resolve(null),
@@ -180,20 +212,23 @@ export function registerEventRoutes(app: FastifyInstance): void {
 
     const snapshot = rawSnapshot && previousLocked ? nullFields(rawSnapshot, PREVIOUS_VALUE_FIELDS) : rawSnapshot;
     const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
-    const [reactions, majorReactionRows] = await Promise.all([
-      listReactionsForTimeframe(
-        app.supabase,
-        eventId,
-        relatedFxPairs.map((pair) => pair.fx_pair_id),
-        RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
-      ),
-      listReactionsForPairsAndTimeframes(
-        app.supabase,
-        eventId,
-        majorFxPairs.map((pair) => pair.fx_pair_id),
-        MAJOR_FX_REACTION_TIMEFRAMES,
-      ),
-    ]);
+    // 価格由来の機能が無効なら、価格反応の行は読まない(応答にも出さない)。
+    const [reactions, majorReactionRows] = withPrices
+      ? await Promise.all([
+          listReactionsForTimeframe(
+            app.supabase,
+            eventId,
+            relatedFxPairs.map((pair) => pair.fx_pair_id),
+            RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+          ),
+          listReactionsForPairsAndTimeframes(
+            app.supabase,
+            eventId,
+            majorFxPairs.map((pair) => pair.fx_pair_id),
+            MAJOR_FX_REACTION_TIMEFRAMES,
+          ),
+        ])
+      : [[], []];
     const reactionByFxPairId = new Map(reactions.map((reaction) => [reaction.fx_pair_id, reaction]));
     // v1.44 reaction_state: 行が無い理由を事実で言える範囲だけ(domain/reactionState.ts)。analysis_status は変えない。
     const reactionStateContext = {
@@ -220,7 +255,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
         // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。v1.47: 政策決定があれば NY連銀。
-        attribution: policyRate ? nyFedAttribution() : attributionForIndicator(event.indicator_code),
+        attribution: policyRate ? nyFedAttribution() : await eventAttribution(app, event),
         // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
         value_decimals: valueDecimalsForIndicator(event.indicator_code),
         // v1.47: FOMC の誘導目標レンジ(下限・上限は別々の値)。まだ記録が無い会合・ほかの指標は null。
@@ -234,6 +269,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
       },
       explanation: explanation ?? null,
       related_fx_pairs: relatedFxPairs.map((pair) => {
+        if (!withPrices) {
+          return { fx_pair_id: pair.fx_pair_id, symbol: pair.symbol, priority: pair.priority };
+        }
         const reaction = reactionByFxPairId.get(pair.fx_pair_id);
         return {
           fx_pair_id: pair.fx_pair_id,
@@ -256,7 +294,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
           },
         };
       }),
-      major_fx_reactions: buildMajorFxReactions(majorFxPairs, majorReactionRows, precision, reactionStateContext),
+      major_fx_reactions: withPrices
+        ? buildMajorFxReactions(majorFxPairs, majorReactionRows, precision, reactionStateContext)
+        : [],
       available_timeframes: availableTimeframes(precision),
     };
   });
@@ -297,6 +337,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{ Params: { event_id: string }; Querystring: { fx_pair_id?: string; timeframe?: string } }>(
     '/events/:event_id/reaction',
     async (request) => {
+      requirePriceFeatures(app);
       const userId = request.user!.id;
       const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 
@@ -389,81 +430,42 @@ export function registerEventRoutes(app: FastifyInstance): void {
     },
   );
 
-  app.get<{
-    Params: { event_id: string };
-    Querystring: { fx_pair_id?: string; timeframe?: string; before_minutes?: string; after_minutes?: string };
-  }>('/events/:event_id/reaction/chart', async (request) => {
-    const userId = request.user!.id;
-    const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
+  app.get<{ Params: { event_id: string }; Querystring: { fx_pair_id?: string; timeframe?: string } }>(
+    '/events/:event_id/reaction/chart',
+    async (request) => {
+      requirePriceFeatures(app);
+      const userId = request.user!.id;
+      const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 
-    const { event_id: eventId } = request.params;
-    const { fx_pair_id: fxPairId, timeframe } = request.query;
-    if (!fxPairId || !isValidTimeframe(timeframe)) {
-      throw ApiError.validation('fx_pair_id and a valid timeframe are required.');
-    }
-    // 第1段階の拡張: 表示範囲の指定(任意。無ければ時間足ごとの既定の範囲のまま)。
-    const beforeMinutes = parseChartMinutes(request.query.before_minutes, CHART_MAX_BEFORE_MINUTES);
-    const afterMinutes = parseChartMinutes(request.query.after_minutes, CHART_MAX_AFTER_MINUTES);
-    if (beforeMinutes === null) {
-      throw ApiError.validation(`before_minutes must be an integer from 0 to ${CHART_MAX_BEFORE_MINUTES}.`);
-    }
-    if (afterMinutes === null) {
-      throw ApiError.validation(`after_minutes must be an integer from 0 to ${CHART_MAX_AFTER_MINUTES}.`);
-    }
+      const { event_id: eventId } = request.params;
+      const { fx_pair_id: fxPairId, timeframe } = request.query;
+      if (!fxPairId || !isValidTimeframe(timeframe)) {
+        throw ApiError.validation('fx_pair_id and a valid timeframe are required.');
+      }
 
-    const event = await getEventById(app.supabase, eventId);
-    if (!event) {
-      throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
-    }
-    await requireUnlockedEventForPlan(app.supabase, plan, event);
+      const event = await getEventById(app.supabase, eventId);
+      if (!event) {
+        throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
+      }
+      await requireUnlockedEventForPlan(app.supabase, plan, event);
 
-    // MVP Chart Window: release -30min to +60min (api-design.md §19).
-    // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。before_minutes / after_minutes で指定もできる。
-    const window = resolveChartWindow(event.release_datetime, timeframe, {
-      beforeMinutes,
-      afterMinutes,
-    });
-    const { from, to } = window;
+      // MVP Chart Window: release -30min to +60min (api-design.md §19).
+      // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。
+      const { from, to } = chartWindow(event.release_datetime, timeframe);
 
-    // 表示範囲は半開区間 [from, to)。取得の境界と欠損の集計の境界を同じにする(returned_candles = prices.length)。
-    const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to, { toExclusive: true });
-    const coverage = chartCandleCoverage(
-      from,
-      to,
-      timeframe,
-      prices.map((price) => price.timestamp),
-      Date.now(),
-    );
-    const preReleasePrice = await getPreReleasePrice(app.supabase, eventId, fxPairId);
+      const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to);
 
-    return {
-      event_id: eventId,
-      fx_pair_id: fxPairId,
-      timeframe,
-      release_datetime: event.release_datetime,
-      // v1.45: release_datetime の精度。APPROXIMATE なら発表の印は概算の時刻(端末は「約」を付ける)。
-      release_datetime_precision: event.release_datetime_precision,
-      window_from: from,
-      window_to: to,
-      // 第1段階の拡張(追加のみ): 表示範囲・上限・欠損の状態・発表直前の価格。足は補わない。
-      window: {
-        before_minutes: window.before_minutes,
-        after_minutes: window.after_minutes,
-        source: window.source,
-      },
-      limits: {
-        max_before_minutes: CHART_MAX_BEFORE_MINUTES,
-        max_after_minutes: CHART_MAX_AFTER_MINUTES,
-      },
-      window_complete: coverage.window_complete,
-      data_status: coverage.data_status,
-      expected_candles: coverage.expected_candles,
-      returned_candles: coverage.returned_candles,
-      missing_candles: coverage.missing_candles,
-      has_gaps: coverage.has_gaps,
-      pre_release_price: preReleasePrice.price,
-      pre_release_price_status: preReleasePrice.status,
-      prices,
-    };
-  });
+      return {
+        event_id: eventId,
+        fx_pair_id: fxPairId,
+        timeframe,
+        release_datetime: event.release_datetime,
+        // v1.45: release_datetime の精度。APPROXIMATE なら発表の印は概算の時刻(端末は「約」を付ける)。
+        release_datetime_precision: event.release_datetime_precision,
+        window_from: from,
+        window_to: to,
+        prices,
+      };
+    },
+  );
 }

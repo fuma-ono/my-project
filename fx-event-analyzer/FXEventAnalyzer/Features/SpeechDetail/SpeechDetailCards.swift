@@ -24,6 +24,10 @@ import SwiftUI
 struct SpeechDetailCards: View {
     let response: SpeechDetailResponse
 
+    /// HQレビュー結果(2026-11-12「要人発言詳細 追加改善」承認分): 長い原文抜粋を初期状態で
+    /// 折りたたむ(「続きを読む／閉じる」)。既定は折りたたみ(false)。
+    @State private var isExcerptExpanded = false
+
     var body: some View {
         // HQ指示(2026-10-12、2回目)「発言部分の枠もまだ上に上げて」:
         // header→statementCardだけ詰め、それ以降は通常の間隔(8)のまま。
@@ -129,6 +133,17 @@ struct SpeechDetailCards: View {
     /// 画像どおり「」で囲んだ発言として表示する(`summary`は出典に基づく
     /// 要約であり一字一句そのままの引用ではないが、見た目は参考画像に
     /// 合わせる)。発言前・中止・要約未整備はラベルなしの状態文のみ。
+    ///
+    /// HQレビュー結果(2026-11-12「要人発言詳細 追加改善」承認分):
+    /// 1. `summary`(DEVの実データではFRB等の英語ソースをそのまま抜粋した
+    ///    英語の原文であることが多い、EXTRACTIVE_EN)に「原文抜粋」の
+    ///    小さなキャプションを添え、将来の日本語要約(今回は実装しない)
+    ///    と見た目で区別できるようにする。
+    /// 2. 長い原文抜粋は初期状態で3行に折りたたみ、「続きを読む／閉じる」
+    ///    で切り替える(短い原文抜粋はそのまま全文表示、トグルは出さない)。
+    /// 3. イベント詳細画面とのY座標の一致はもう優先しない方針になった
+    ///    ため、`EventDetailCards.summaryCardMinHeight`への強制(旧実装)
+    ///    を外し、折りたたみ時はカードが自然な高さまで縮むようにした。
     @ViewBuilder private var statementCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             if response.status == .scheduled {
@@ -136,9 +151,22 @@ struct SpeechDetailCards: View {
             } else if response.status == .cancelled {
                 NotoText.text("この発言は中止されました。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if let summary = response.summary {
+                NotoText.text("原文抜粋", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
                 // HQ指示(2026-10-13、2回目)「発言の文字サイズは通貨ペアの
                 // 値動き表記(pipsText、10)より0.5大きくして」: 10→10.5。
-                NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
+                NotoText.text("「\(summary)」", size: 10.5)
+                    .foregroundStyle(.white)
+                    .lineLimit(isLongExcerpt && !isExcerptExpanded ? 3 : nil)
+                if isLongExcerpt {
+                    Button {
+                        isExcerptExpanded.toggle()
+                    } label: {
+                        NotoText.text(isExcerptExpanded ? "閉じる" : "続きを読む", size: 8.5)
+                            .foregroundStyle(V5P.cyan)
+                    }
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("speechDetailExcerptToggle")
+                }
             } else {
                 NotoText.text("要約はまだ用意されていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -146,25 +174,17 @@ struct SpeechDetailCards: View {
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
         // パディングを10→14に広げた。
         // HQ指示(2026-10-13、2回目)「発言の枠がまだ大きいから縦幅を
-        // 小さくして。枠は2行入る想定の高さにして」: 14→10に縮め、
-        // `summaryCardMinHeight`を2行分の高さを想定した値に下げた
-        // (`results`側の縦パディングも合わせて詰め、両カードが同じ
-        // 高さになるようにしている)。
+        // 小さくして。枠は2行入る想定の高さにして」: 14→10に縮めた。
         .padding(10)
-        // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
-        // 同じ位置にして」: この`statementCard`(発言内容、特に「この発言は
-        // まだ行われていません。」のような1行の状態文)は`EventDetailCards.
-        // results`(結果/予想/前回カード)より内容が短く縦幅が小さいため、
-        // 値動き表の開始位置が画面間でずれていた。`EventDetailCards.
-        // summaryCardMinHeight`と同じ最低高さを与えて揃えた。
-        // `width:`(固定)と`minHeight:`(可変)は`frame`の別のオーバーロード
-        // であり同じ呼び出しに混在できないため、`.frame`を2回に分けた。
-        // HQ指示(2026-10-14)「1行しかないときは上下の中心に、文字を大きくして余白を目立たせない」:
-        // 状態文を9→10.5(要約と同じ)にし、枠の中で上下の中心に置く。2行以上はそのまま枠いっぱいに並ぶ。
-        .frame(minHeight: EventDetailCards.summaryCardMinHeight, alignment: .leading)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
     }
+
+    /// 文字数のしきい値だけで判定する簡易な「長い」判定(正確な行数の計測は
+    /// しない)。短い原文抜粋(既存の「政策金利の据え置きを説明し…」程度)
+    /// では折りたたみボタンを出さず、長い原文抜粋(半期議会証言等)だけに
+    /// 限定するための目安。
+    private var isLongExcerpt: Bool { (response.summary?.count ?? 0) > 140 }
 
     /// HQ指示(2026-10-29)「出典・告知の表示」: APIのattributionを利用して
     /// 出典を表示する。告知文(`notice`)が存在する場合のみ適切な場所に表示

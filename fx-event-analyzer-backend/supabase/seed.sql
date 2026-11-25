@@ -116,10 +116,16 @@ from (values
   ('GB_CPI', 'GBPUSD', 1), ('GB_CPI', 'GBPJPY', 2),
   ('GB_CORE_CPI', 'GBPUSD', 1), ('GB_CORE_CPI', 'GBPJPY', 2),
   ('GB_UNEMPLOYMENT_RATE', 'GBPUSD', 1), ('GB_UNEMPLOYMENT_RATE', 'GBPJPY', 2),
+  ('GB_GDP_MOM', 'GBPUSD', 1), ('GB_GDP_MOM', 'GBPJPY', 2),
+  ('GB_RETAIL_SALES_MOM', 'GBPUSD', 1), ('GB_RETAIL_SALES_MOM', 'GBPJPY', 2),
   ('AU_CPI', 'AUDUSD', 1), ('AU_CPI', 'AUDJPY', 2),
   ('AU_UNEMPLOYMENT_RATE', 'AUDUSD', 1), ('AU_UNEMPLOYMENT_RATE', 'AUDJPY', 2),
+  ('AU_WPI_QOQ', 'AUDUSD', 1), ('AU_WPI_QOQ', 'AUDJPY', 2),
   ('CA_CPI', 'CADJPY', 1),
-  ('CA_UNEMPLOYMENT_RATE', 'CADJPY', 1)
+  ('CA_UNEMPLOYMENT_RATE', 'CADJPY', 1),
+  -- カナダのコアCPI(migration 20261124000001。設計書 §15.6)
+  ('CA_CPI_TRIM', 'CADJPY', 1),
+  ('CA_CPI_MEDIAN', 'CADJPY', 1)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol

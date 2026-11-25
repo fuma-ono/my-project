@@ -10,6 +10,13 @@
  *     TSEST 20「Seasonally Adjusted」・Australia・月次)。単位 PCT。値は丸める前の数(4.71834873)で、観測の属性 DECIMALS(1)の
  *     桁に丸めると公式ページの「the unemployment rate increased 0.1ppt to 4.7%」と一致。
  *
+ *   - AU_WPI_QOQ = dataflow WPI 1.2.0、キー 2.THRPEB.7.TOT.20.AUS.Q(MEASURE 2「Percentage change from previous quarter」・
+ *     INDEX THRPEB「Total hourly rates of pay excluding bonuses」・SECTOR 7「Private and Public」・INDUSTRY TOT「All Industries」・
+ *     TSEST 20「Seasonally Adjusted」・Australia・四半期)。単位 PCT。**四半期の系列**で、対象期間は 'YYYY-Qn'(SDMX の
+ *     TIME_PERIOD そのまま)。2026-11-18 に確認: 2026-Q3 = 1.1 は「Wage Price Index, Australia, September 2026」(2026-11-18
+ *     11:30am AEDT)の「The seasonally adjusted Wage Price Index (WPI) rose 1.1% in the September quarter 2026」と一致。
+ *     この系列の観測には DECIMALS の属性が無く、値は公表の桁(小数1桁)で返る。時間の並びは新しい順。
+ *
  * 公表日の照合: SDMX の値には公表日が無い。代わりに `updatedAfter=<公表日の 00:00(シドニー)>` で問い合わせ、**その時刻より
  * 後に更新された系列だけ**を受け取る(公表の前は 404 NoRecordsFound)。2026-11-10 に確認: CPI は updatedAfter=2026-10-28 で
  * 返り(10/28 公表)・11-05 では 404、LF は 2026-10-15 で返り(10/15 公表)・10-16 では 404。
@@ -26,11 +33,14 @@ export interface AbsSeries {
   indicatorCode: string;
   dataflow: string;
   key: string;
+  /** true = 四半期の系列(対象期間は 'YYYY-Qn')。省略 = 月次('YYYY-MM')。形の違う期間は読まない。 */
+  quarterly?: boolean;
 }
 
 export const ABS_SERIES: readonly AbsSeries[] = [
   { indicatorCode: 'AU_CPI', dataflow: 'ABS,CPI,2.0.0', key: '3.10001.10.50.M' },
   { indicatorCode: 'AU_UNEMPLOYMENT_RATE', dataflow: 'ABS,LF,1.0.0', key: 'M13.3.1599.20.AUS.M' },
+  { indicatorCode: 'AU_WPI_QOQ', dataflow: 'ABS,WPI,1.2.0', key: '2.THRPEB.7.TOT.20.AUS.Q', quarterly: true },
 ];
 
 export const ABS_SDMX_ACCEPT = 'application/vnd.sdmx.data+json';
@@ -68,7 +78,10 @@ interface RawObservation {
  * 系列1本の観測(月 → 丸める前の値と DECIMALS)。action が Delete の dataSet は読まない(updatedAfter の応答は差分で、
  * 消えた観測の Delete と、更新された観測の Replace に分かれて返る)。unit = 系列の UNIT_MEASURE(差分の応答では空のことがある)。
  */
-function readSeries(body: unknown): { unit: string | null; observations: Map<string, RawObservation> } | null {
+function readSeries(
+  body: unknown,
+  quarterly = false,
+): { unit: string | null; observations: Map<string, RawObservation> } | null {
   const data = (body as { data?: { dataSets?: SdmxDataSet[]; structures?: SdmxStructure[] } } | null)?.data;
   const structure = data?.structures?.[0];
   const times = structure?.dimensions?.observation?.find((d) => d.id === 'TIME_PERIOD')?.values;
@@ -88,7 +101,13 @@ function readSeries(body: unknown): { unit: string | null; observations: Map<str
   for (const [index, obs] of Object.entries(series.observations ?? {})) {
     const period = times[Number(index)]?.id;
     const raw = obs[0];
-    if (!period || !/^\d{4}-\d{2}$/.test(period) || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    if (
+      !period ||
+      !(quarterly ? /^\d{4}-Q[1-4]$/ : /^\d{4}-\d{2}$/).test(period) ||
+      typeof raw !== 'number' ||
+      !Number.isFinite(raw)
+    )
+      continue;
     const decPos = decIdx < 0 ? null : (obs[decIdx + 1] as number | null | undefined);
     const decId = decPos === null || decPos === undefined ? undefined : obsAttrs[decIdx]!.values?.[decPos]?.id;
     const decimals = decId === undefined ? null : Number(decId);
@@ -101,8 +120,7 @@ const rounded = (o: RawObservation) => (o.decimals === null ? o.raw : Number(o.r
 
 /** 系列全体の応答(absSeriesUrl)から、単位が PCT のときだけ、その月の公表の桁の値。 */
 export function absValueForPeriod(series: AbsSeries, body: unknown, period: string): number | null {
-  void series;
-  const read = readSeries(body);
+  const read = readSeries(body, series.quarterly);
   if (!read || read.unit !== 'PCT') return null; // 単位が明確でないものは使わない
   const o = read.observations.get(period);
   return o ? rounded(o) : null;
@@ -121,8 +139,8 @@ export function parseAbsValueForRelease(
   releaseDate: string,
   fullBody: unknown,
 ): OfficialValue | null {
-  const updated = readSeries(releaseBody);
-  const full = readSeries(fullBody);
+  const updated = readSeries(releaseBody, series.quarterly);
+  const full = readSeries(fullBody, series.quarterly);
   if (!updated || updated.observations.size === 0 || !full || full.unit !== 'PCT') return null;
   const period = [...updated.observations.keys()].sort().at(-1)!;
   const inFull = full.observations.get(period);

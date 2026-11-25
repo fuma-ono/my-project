@@ -10,6 +10,7 @@ import {
   listSpeeches,
   type SpeechSummary,
 } from '../repositories/speechesRepository.js';
+import { priceFeaturesEnabled, requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import { getFxPairById, listChartPrices } from '../repositories/reactionsRepository.js';
 import {
@@ -121,7 +122,8 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       pips: Record<string, number | null>;
     }[] = [];
     // 公開の時刻しか無い発言(ポッドキャスト等)は相場反応を出さない(HQ判断 2026-10-28)
-    if (speech.status === 'DELIVERED' && speech.statement_time_precision === 'EXACT') {
+    // 価格由来の機能が無効なら reactions は常に [](価格も通貨ペアも読まない)。
+    if (priceFeaturesEnabled(app) && speech.status === 'DELIVERED' && speech.statement_time_precision === 'EXACT') {
       const pairs = selectSpeechFxPairs(await listActiveFxPairs(app.supabase), speech.speaker.currency_code);
       reactions = await Promise.all(
         pairs.map(async (pair) => {
@@ -144,6 +146,7 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
 
   // Same shape as GET /events/{id}/reaction (§18.1): event_id = the speech id.
   app.get('/speeches/:speech_id/reaction', async (request) => {
+    requirePriceFeatures(app);
     await requireEntitlement(app.supabase, request.user!.id, FEATURE_CODES.VIEW_MARKET_REACTION);
 
     const query = speechReactionQuerySchema.parse(request.query);
@@ -175,6 +178,7 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
 
   // Same shape and window rule as GET /events/{id}/reaction/chart (§19); release_datetime = statement_datetime.
   app.get('/speeches/:speech_id/reaction/chart', async (request) => {
+    requirePriceFeatures(app);
     await requireEntitlement(app.supabase, request.user!.id, FEATURE_CODES.VIEW_MARKET_REACTION);
 
     const query = speechChartQuerySchema.parse(request.query);
@@ -207,8 +211,13 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       throw new ApiError('SPEAKER_NOT_FOUND', 'Speaker not found.');
     }
 
+    // 値のみのモード(価格由来の機能が無効): fx_pair_id が渡されても無視し、通貨ペアも価格も読まない。
+    // events[] から pips_by_timeframe を外す。fx_pair_id / symbol は null(従来も null になりうるキー)。
+    const withPrices = priceFeaturesEnabled(app);
     let pair: { fx_pair_id: string; symbol: string } | null;
-    if (query.fx_pair_id) {
+    if (!withPrices) {
+      pair = null;
+    } else if (query.fx_pair_id) {
       const fxPair = await getFxPairById(app.supabase, query.fx_pair_id);
       if (!fxPair) {
         throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
@@ -225,16 +234,17 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
 
     const events = await Promise.all(
       speeches.map(async (speech) => {
-        const pips = pair
-          ? pipsByTimeframe(await speechPairReaction(app.supabase, speech, pair, SPEECH_SUMMARY_TIMEFRAMES))
-          : Object.fromEntries(SPEECH_SUMMARY_TIMEFRAMES.map((timeframe) => [timeframe, null]));
-        return {
+        const base = {
           speech_id: speech.speech_id,
           title: speech.title,
           statement_datetime: speech.statement_datetime,
           importance: speech.importance,
-          pips_by_timeframe: pips,
         };
+        if (!withPrices) return base;
+        const pips = pair
+          ? pipsByTimeframe(await speechPairReaction(app.supabase, speech, pair, SPEECH_SUMMARY_TIMEFRAMES))
+          : Object.fromEntries(SPEECH_SUMMARY_TIMEFRAMES.map((timeframe) => [timeframe, null]));
+        return { ...base, pips_by_timeframe: pips };
       }),
     );
 

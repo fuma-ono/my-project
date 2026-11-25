@@ -19,6 +19,7 @@ const EMPTY_READER: QualityReader = {
   listSpeechRuns: () => Promise.resolve([]),
   speechDbStatus: () => Promise.resolve({ latestAt: null, futureScheduled: 0, overdueScheduled: 0 }),
   listProvisionalEvents: () => Promise.resolve([]),
+  speechPipelineStatus: () => Promise.resolve(null),
 };
 
 function buildTestApp(envOverrides: Record<string, string> = {}): FastifyInstance {

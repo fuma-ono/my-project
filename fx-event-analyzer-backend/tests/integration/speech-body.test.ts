@@ -107,7 +107,7 @@ describe.skipIf(!integration)('speech bodies: migration, store and GET /speeches
 
   it('the store lists the speech, writes the body; the API returns the URL and status but never the body', async () => {
     const store = createSpeechBodyStore(ctx.serviceClient);
-    const listed = await store.listSpeechesNeedingBody(['frb_calendar'], '2026-11-01T00:00:00Z');
+    const listed = await store.listSpeechesNeedingBody(['frb_calendar'], '2026-11-01T00:00:00Z', 3);
     const mine = listed.find((row) => row.id === speechId);
     expect(mine).toMatchObject({
       provider: 'frb_calendar',
@@ -116,16 +116,22 @@ describe.skipIf(!integration)('speech bodies: migration, store and GET /speeches
       speaker_organization: 'FRB',
     });
 
-    await store.updateSpeechBody(speechId, {
-      source_url: URL_OK,
-      speech_body: 'Thank you for having me.',
-      body_fetched_at: '2026-11-10T06:00:00Z',
-      body_status: 'FETCHED',
-      body_error: null,
-    });
+    expect(
+      await store.updateSpeechBody(
+        speechId,
+        {
+          source_url: URL_OK,
+          speech_body: 'Thank you for having me.',
+          body_fetched_at: '2026-11-10T06:00:00Z',
+          body_status: 'FETCHED',
+          body_error: null,
+        },
+        0,
+      ),
+    ).toBe(true);
     // FETCHED になった行は、もう候補に入らない
     expect(
-      (await store.listSpeechesNeedingBody(['frb_calendar'], '2026-11-01T00:00:00Z')).some((r) => r.id === speechId),
+      (await store.listSpeechesNeedingBody(['frb_calendar'], '2026-11-01T00:00:00Z', 3)).some((r) => r.id === speechId),
     ).toBe(false);
 
     const { status, body } = await getSpeech();
@@ -157,24 +163,34 @@ describe.skipIf(!integration)('speech bodies: migration, store and GET /speeches
       speech_body: 'Thank you for having me.',
     });
 
-    await store.updateSpeechSummary(speechId, {
-      summary: null,
-      summary_method: null,
-      summary_generated_at: null,
-      summary_error: 'BODY_TOO_SHORT',
-    });
+    expect(
+      await store.updateSpeechSummary(speechId, {
+        summary: null,
+        summary_method: null,
+        summary_generated_at: null,
+        summary_error: 'BODY_TOO_SHORT',
+      }),
+    ).toBe(true);
     // 理由が残った行は、もう候補に入らない(同じ本文で何度も作り直さない)
     expect((await store.listSpeechesNeedingSummary(null, 500)).some((r) => r.id === speechId)).toBe(false);
     let got = await getSpeech();
     expect(got.body).toMatchObject({ summary: null, summary_status: 'FAILED', summary_method: null });
     expect(got.body).not.toHaveProperty('summary_error');
 
-    await store.updateSpeechSummary(speechId, {
+    // HQ承認 2026-11-11: 失敗の理由がある行は、ストアからは上書きしない(何も変えず false)
+    const readyPatch = {
       summary: 'Inflation remains above our 2 percent objective.',
       summary_method: 'EXTRACTIVE_EN',
       summary_generated_at: '2026-11-11T06:00:00Z',
       summary_error: null,
-    });
+    };
+    expect(await store.updateSpeechSummary(speechId, readyPatch)).toBe(false);
+    expect((await getSpeech()).body).toMatchObject({ summary: null, summary_status: 'FAILED' });
+    // 人が理由を消す(手順書 5節の戻し方)と、また書ける。書いた後は、同じ書き込みをもう一度しても上書きしない
+    const reset = await ctx.serviceClient.from('speech_events').update({ summary_error: null }).eq('id', speechId);
+    if (reset.error) throw reset.error;
+    expect(await store.updateSpeechSummary(speechId, readyPatch)).toBe(true);
+    expect(await store.updateSpeechSummary(speechId, { ...readyPatch, summary: 'Overwritten.' })).toBe(false);
     got = await getSpeech();
     expect(got.body).toMatchObject({
       summary: 'Inflation remains above our 2 percent objective.',

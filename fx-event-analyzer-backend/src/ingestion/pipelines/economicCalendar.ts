@@ -40,6 +40,7 @@ import {
   type ResolvedOfficialValue,
 } from '../verification/official.js';
 import { displayUnit, roundTo } from '../values.js';
+import { needsReleasedStateRepair } from './releaseRecovery.js';
 
 export interface CalendarPipelineDeps {
   store: IngestionStore;
@@ -267,6 +268,11 @@ async function processActual(
 
   const snapshot = await store.getReleaseSnapshot(event.id);
   if (snapshot) {
+    // QA-1: 初回値は保存済みなのにイベントの状態が RELEASED・AVAILABLE になっていない(前回の状態更新の失敗)なら、状態だけ直す
+    if (needsReleasedStateRepair(event, snapshot)) {
+      await store.updateEvent(event.id, { status: 'RELEASED', data_status: 'AVAILABLE' });
+      counters.note('repaired', { event_id: event.id, indicator: indicator.code });
+    }
     await processRevisions(deps, { ...input, snapshot }, counters);
     counters.success += 1;
     return;
@@ -541,7 +547,27 @@ export async function reverifyAwaitingOfficial(deps: CalendarPipelineDeps, count
         continue;
       }
       if (item.kind === 'RELEASE') {
-        if (await store.getReleaseSnapshot(item.event_id)) {
+        const existingSnapshot = await store.getReleaseSnapshot(item.event_id);
+        if (existingSnapshot) {
+          // QA-1: 前回、スナップショットの保存の後でイベントの状態更新だけが失敗した回。保存済みの値がこの値と同じなら、
+          // 状態だけ直して確認済みにする(違う値なら、これまでどおり人の確認へ)。
+          const stuck = await store.findEventByProviderId(item.provider, item.provider_event_id);
+          if (
+            stuck &&
+            needsReleasedStateRepair(stuck, existingSnapshot) &&
+            existingSnapshot.actual !== null &&
+            roundTo(existingSnapshot.actual, 4) === roundTo(value, 4)
+          ) {
+            await store.updateEvent(stuck.id, { status: 'RELEASED', data_status: 'AVAILABLE' });
+            await store.updateStagedValue(item.id, {
+              ...officialFields,
+              verification_status: 'VERIFIED',
+              resolved_at: now().toISOString(),
+            });
+            counters.success += 1;
+            counters.note('repaired', { event_id: item.event_id, indicator: item.indicator_code });
+            continue;
+          }
           await store.updateStagedValue(item.id, {
             ...officialFields,
             verification_status: 'PENDING_REVIEW',
