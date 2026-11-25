@@ -208,16 +208,24 @@ final class PriceFeatureFlagsTests: XCTestCase {
         XCTAssertEqual(SettingsView.group1RowCount(purchasesEnabled: true, priceFeaturesEnabled: false), 5)
         XCTAssertEqual(SettingsView.group1RowCount(purchasesEnabled: true, priceFeaturesEnabled: true), 6)
         // 6行(従来)のときは、従来の位置(54.5 + 6×31 + 8)のまま。
-        XCTAssertEqual(SettingsView.group2Top(group1Rows: 6), 54.5 + 6 * 31 + 8)
-        XCTAssertEqual(SettingsView.logoutTop(group1Rows: 6), 54.5 + 6 * 31 + 8 + 4 * 31 + 8)
+        let expectedGroup2Top: CGFloat = 54.5 + 6 * 31 + 8
+        XCTAssertEqual(SettingsView.group2Top(group1Rows: 6), expectedGroup2Top)
+        let expectedLogoutTop: CGFloat = expectedGroup2Top + 4 * 31 + 8
+        XCTAssertEqual(SettingsView.logoutTop(group1Rows: 6), expectedLogoutTop)
         // 4行のときは、2行ぶん(62)上に詰まる。
-        XCTAssertEqual(SettingsView.group2Top(group1Rows: 4), SettingsView.group2Top(group1Rows: 6) - 62)
+        let top4: CGFloat = SettingsView.group2Top(group1Rows: 4)
+        let top6: CGFloat = SettingsView.group2Top(group1Rows: 6)
+        XCTAssertEqual(top4, top6 - 62)
     }
 
     func testHistoricalValueColumnsFitTheTableWithoutPips() {
         // pipsの列が無いとき、日時(40)+区切り線+数値の列が表の幅(214)にちょうど収まる。
-        XCTAssertEqual(40 + 0.5 + HistoricalComparisonView.valueColumnWidthWithoutPips(showSecondary: false) * 3, 214, accuracy: 0.001)
-        XCTAssertEqual(40 + 1.0 + HistoricalComparisonView.valueColumnWidthWithoutPips(showSecondary: true) * 6, 214, accuracy: 0.001)
+        let widthPrimary: CGFloat = HistoricalComparisonView.valueColumnWidthWithoutPips(showSecondary: false)
+        let totalPrimary: CGFloat = 40 + 0.5 + widthPrimary * 3
+        XCTAssertEqual(totalPrimary, 214, accuracy: 0.001)
+        let widthSecondary: CGFloat = HistoricalComparisonView.valueColumnWidthWithoutPips(showSecondary: true)
+        let totalSecondary: CGFloat = 40 + 1.0 + widthSecondary * 6
+        XCTAssertEqual(totalSecondary, 214, accuracy: 0.001)
     }
 
     func testIndicatorDetailOpensComparisonWithoutAPairWhenPriceFeaturesAreOff() {
