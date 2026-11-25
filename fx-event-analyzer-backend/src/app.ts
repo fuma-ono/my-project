@@ -21,6 +21,9 @@ export interface BuildAppOptions {
   /** fetch used for GitHub Issue creation (SCR-020 bug reports). Defaults
    * to the global fetch; tests pass a fake so nothing reaches GitHub. */
   githubFetch?: typeof fetch;
+  /** fetch used for Sign in with Apple token revocation. Defaults to the
+   * global fetch; tests pass a fake so nothing reaches Apple. */
+  appleFetch?: typeof fetch;
   /** GET /api/v1/quality-report (HQ判断 2026-10-17). Defaults to a real
    * QualityReader over `supabase`; tests pass a fake so no DB is needed. */
   qualityReader?: QualityReader;
@@ -33,6 +36,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
 
   app.decorate('supabase', options.supabase);
   app.decorate('env', options.env);
+  app.decorate('appleFetch', options.appleFetch);
   app.decorate('signedDataVerifier', options.signedDataVerifier ?? createSignedDataVerifier(APPLE_ROOT_CA_G3_PEM));
   app.decorate(
     'bugIssueCreator',
@@ -67,6 +71,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     supabase: SupabaseClient;
     env: Env;
+    appleFetch: typeof fetch | undefined;
     signedDataVerifier: SignedDataVerifier;
     /** Resolves null when GITHUB_ISSUES_TOKEN / GITHUB_ISSUES_REPO are unset. */
     bugIssueCreator: BugIssueCreator;
