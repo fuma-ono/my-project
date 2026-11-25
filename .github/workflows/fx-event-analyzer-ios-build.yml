@@ -116,6 +116,9 @@ jobs:
           GOOGLE_SIGNIN_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_CLIENT_ID }}
           GOOGLE_SIGNIN_REVERSED_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID }}
         run: |
+          set -o pipefail
+          # 失敗の原因を annotation に残す(ログを開けなくても分かるように)。error 行と失敗したテストだけを出す。
+          trap 'grep -E "error:|Test Case .* failed|✘" xcodebuild-test.log | sort -u | head -30 | while IFS= read -r l; do echo "::error::${l:0:400}"; done' ERR
           xcodebuild test \
             -project FXEventAnalyzer.xcodeproj \
             -scheme FXEventAnalyzer \
@@ -126,4 +129,4 @@ jobs:
             SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             API_BASE_URL="$API_BASE_URL" \
             GOOGLE_SIGNIN_CLIENT_ID="$GOOGLE_SIGNIN_CLIENT_ID" \
-            GOOGLE_SIGNIN_REVERSED_CLIENT_ID="$GOOGLE_SIGNIN_REVERSED_CLIENT_ID"
+            GOOGLE_SIGNIN_REVERSED_CLIENT_ID="$GOOGLE_SIGNIN_REVERSED_CLIENT_ID" 2>&1 | tee xcodebuild-test.log
