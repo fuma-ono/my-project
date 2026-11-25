@@ -40,6 +40,26 @@ export async function deleteUserAccount(supabase: SupabaseClient, userId: string
   if (error) throw error;
 }
 
+/** The auth providers linked to a user (identities / app_metadata), or null
+ * when they cannot be determined. Call before the user is deleted. */
+export async function getAuthProviders(supabase: SupabaseClient, userId: string): Promise<string[] | null> {
+  try {
+    const { data, error } = await supabase.auth.admin.getUserById(userId);
+    if (error || !data?.user) return null;
+    const providers = new Set<string>();
+    for (const identity of data.user.identities ?? []) providers.add(identity.provider);
+    const fromMeta: unknown = data.user.app_metadata?.providers;
+    if (Array.isArray(fromMeta)) {
+      for (const p of fromMeta) if (typeof p === 'string') providers.add(p);
+    }
+    const single: unknown = data.user.app_metadata?.provider;
+    if (typeof single === 'string') providers.add(single);
+    return [...providers];
+  } catch {
+    return null;
+  }
+}
+
 export async function updateProfile(
   supabase: SupabaseClient,
   userId: string,

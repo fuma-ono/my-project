@@ -36,6 +36,13 @@ const envSchema = z.object({
   // 見られるようにする)。未設定ならルートは404(既定で無効)。設定したら
   // ?token=<この値> を付けてスマホのブラウザで開く。社内限定・READ-ONLY。
   INTERNAL_REPORT_TOKEN: optionalString(z.string().min(1)),
+  // Sign in with Apple トークン失効(アカウント削除時、App Store Review 5.1.1(v))。4 つとも任意で、
+  // 1 つでも未設定なら失効はスキップされ、削除は従来どおり行われる。Render の Environment にのみ設定する
+  // (リポジトリ・ログ・チャットに出さない)。APPLE_PRIVATE_KEY は .p8 の中身(改行は \n 表記でも可)。
+  APPLE_TEAM_ID: optionalString(z.string().min(1)),
+  APPLE_KEY_ID: optionalString(z.string().min(1)),
+  APPLE_PRIVATE_KEY: optionalString(z.string().min(1)),
+  APPLE_CLIENT_ID: optionalString(z.string().min(1)),
   // 価格由来の機能(価格反応・チャート・pips・major_fx・レートアラート)。'true' のときだけ有効、既定 false
   // (オーナー決定 2026-11-24。config/priceFeatures.ts)。テストは Env のこの値を差し替える。
   PRICE_FEATURES_ENABLED: z.string().optional().transform(parsePriceFeaturesEnabled),
