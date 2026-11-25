@@ -29,6 +29,11 @@ final class ScreenshotTests: XCTestCase {
         // latency observed in real CI (~13s), so faster runs should still
         // catch Splash below.
         app.launchEnvironment["UI_SCREENSHOT_HOLD_SPLASH"] = "1"
+        // 案B(1.0はApple/Googleのみ、2026-11-24): 本番設定ではメール/パスワードの
+        // ログイン欄が出ないため、モックサーバーへメールでログインするこのテストだけ
+        // メール認証UIを出す(`AuthConfig.emailAuthEnabled`参照)。Apple/Googleの
+        // ログインはXCUITestで操作できないので、テスト用のメールログインを残している。
+        app.launchEnvironment["UI_SCREENSHOT_EMAIL_AUTH"] = "1"
         app.launch()
     }
 
