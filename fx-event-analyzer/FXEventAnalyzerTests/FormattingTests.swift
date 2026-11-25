@@ -69,6 +69,25 @@ final class ValueFormatTests: XCTestCase {
     func testSurpriseComparisonLabelForAZeroSurprise() {
         XCTAssertEqual(ValueFormat.surpriseComparisonLabel(0), "予想通りの結果")
     }
+
+    // MARK: - surpriseSummary (結果と予想の差、事実のみの表示)
+
+    func testSurpriseSummaryIsNilWithoutSurprise() {
+        XCTAssertNil(ValueFormat.surpriseSummary(surprise: nil, decimals: 1))
+    }
+
+    func testSurpriseSummaryAbove() {
+        XCTAssertEqual(ValueFormat.surpriseSummary(surprise: 0.2, decimals: 1), "予想より上振れ(+0.2)")
+    }
+
+    func testSurpriseSummaryBelow() {
+        XCTAssertEqual(ValueFormat.surpriseSummary(surprise: -0.1, decimals: 1), "予想より下振れ(−0.1)")
+    }
+
+    func testSurpriseSummaryZeroAndRoundedZeroAreAsExpected() {
+        XCTAssertEqual(ValueFormat.surpriseSummary(surprise: 0, decimals: 1), "予想どおり")
+        XCTAssertEqual(ValueFormat.surpriseSummary(surprise: 0.04, decimals: 1), "予想どおり")
+    }
 }
 
 final class CountryFlagTests: XCTestCase {
