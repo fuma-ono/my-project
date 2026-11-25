@@ -53,12 +53,19 @@ struct AccountView: View {
     private static let profileTop: CGFloat = 54.5
     private static let profileHeight: CGFloat = 56
     private static let group1Top: CGFloat = 120.7
-    /// プロフィール編集 / メールアドレス / パスワード変更
-    private static let group1Rows: [CGFloat] = [30.6, 41.3, 32.6]
-    private static let group2Top: CGFloat = 236.7
+    /// プロフィール編集 / メールアドレス / パスワード変更。案B(Apple/Googleのみ)では
+    /// メールアドレス・パスワード変更の2行を出さず、下のグループを詰める。
+    private static var group1Rows: [CGFloat] {
+        AuthConfig.emailAuthEnabled ? [30.6, 41.3, 32.6] : [30.6]
+    }
+    /// 非表示にした2行ぶん(41.3 + 32.6)の高さ。
+    private static var emailRowsShift: CGFloat {
+        AuthConfig.emailAuthEnabled ? 0 : 73.9
+    }
+    private static var group2Top: CGFloat { 236.7 - emailRowsShift }
     /// 生年月日 / 国・地域
     private static let group2Rows: [CGFloat] = [47.1, 48.4]
-    private static let deleteTop: CGFloat = 342.9
+    private static var deleteTop: CGFloat { 342.9 - emailRowsShift }
     private static let deleteHeight: CGFloat = 33.9
     /// カード左端→行の文字(参考画像11.75px)、シェブロンの右余白。
     private static let textLeading: CGFloat = 12
@@ -146,16 +153,18 @@ struct AccountView: View {
         }
         .buttonStyle(SettingsRowPressStyle())
         .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 0))
-        NavigationLink(value: AccountSubRoute.emailChange) {
-            rowLabel("メールアドレス", value: info.email ?? "—", valueStyle: .muted, height: Self.group1Rows[1])
+        if AuthConfig.emailAuthEnabled {
+            NavigationLink(value: AccountSubRoute.emailChange) {
+                rowLabel("メールアドレス", value: info.email ?? "—", valueStyle: .muted, height: Self.group1Rows[1])
+            }
+            .buttonStyle(SettingsRowPressStyle())
+            .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 1))
+            NavigationLink(value: AccountSubRoute.passwordChange) {
+                rowLabel("パスワード変更", height: Self.group1Rows[2])
+            }
+            .buttonStyle(SettingsRowPressStyle())
+            .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 2))
         }
-        .buttonStyle(SettingsRowPressStyle())
-        .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 1))
-        NavigationLink(value: AccountSubRoute.passwordChange) {
-            rowLabel("パスワード変更", height: Self.group1Rows[2])
-        }
-        .buttonStyle(SettingsRowPressStyle())
-        .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 2))
     }
 
     @ViewBuilder

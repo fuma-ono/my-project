@@ -19,8 +19,8 @@ enum HelpFAQ {
     static let categories: [HelpFAQCategory] = [
         HelpFAQCategory(id: "account", title: "アカウントについて", icon: "person.fill", items: [
             HelpFAQItem(question: "名前や生年月日を変更したい", answer: "設定 → アカウント情報 → プロフィール編集 から変更できます。名前は入力欄をタップし、生年月日は「生年月日」の項目をタップしてください。"),
-            HelpFAQItem(question: "メールアドレスを変更したい", answer: "設定 → アカウント情報 → メールアドレス から新しいアドレスを入力してください。届いた確認メールのリンクを開くと変更が完了します。"),
-            HelpFAQItem(question: "パスワードを変更したい", answer: "設定 → アカウント情報 → パスワード変更 から変更できます。パスワードを忘れてログインできない場合は、お手数ですがお問い合わせください。"),
+            HelpFAQItem(question: "ログインに使うアカウントを変えたい", answer: "このアプリは、AppleまたはGoogleのアカウントでログインします。メールアドレスなどアカウント自体の情報を変えたいときは、AppleまたはGoogleのアカウント設定から変更してください。"),
+            HelpFAQItem(question: "ログインできない", answer: "最初にログインしたときと同じ方法(AppleまたはGoogle)で、同じアカウントを選んでいるかご確認ください。それでもログインできない場合は、お手数ですがお問い合わせください。"),
             HelpFAQItem(question: "アカウントを削除したい", answer: "設定 → アカウント情報 → アカウント削除 から削除できます。削除すると、プロフィール・設定・お気に入りなどのデータは復元できません。App Storeのサブスクリプションは自動では解約されないため、先に解約してください。"),
         ]),
         HelpFAQCategory(id: "billing", title: "プラン・支払いについて", icon: "creditcard", items: [
