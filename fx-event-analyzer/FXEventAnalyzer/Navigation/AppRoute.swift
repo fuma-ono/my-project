@@ -94,4 +94,7 @@ enum AppRoute: Hashable {
     /// 番号を持つ製品画面ではなくエンジニアリング用の診断画面のため、
     /// 固定SCR番号を持つ`SettingsSubRoute`ではなくこちらに置いている。
     case launchDiagnostics
+    /// テクニカル分析チャート(ローソク足+指標)。`price_features_enabled`と`technical_analysis_enabled`が
+    /// 両方trueのときだけ開く(`TechnicalAnalysisGate`)。1.0ではどちらもfalseなので到達しない。
+    case technicalChart(fxPairId: String, symbol: String)
 }

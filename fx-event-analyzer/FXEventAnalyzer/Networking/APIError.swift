@@ -25,6 +25,8 @@ enum APIErrorCode: String, Decodable, Equatable {
     /// 無料プランの上限(api-design v1.15 §28)。v1.33からは、無料プランで隠された
     /// 過去の発表の`/revisions`・`/history`・`/reaction`・`/reaction/chart`もこれ。
     case planLimitExceeded = "PLAN_LIMIT_EXCEEDED"
+    /// `GET /fx-pairs/{id}/technical`: 価格データの権利が確認できていない(`error.missing`に不足の権利)。
+    case dataRightsUnconfirmed = "DATA_RIGHTS_UNCONFIRMED"
 }
 
 /// Decodes `docs/projects/fx-event-analyzer/api-design.md` §4's Error

@@ -92,6 +92,10 @@ struct AppRouteDestinationView: View {
             PriceFeatureGate { HomeCurrencyPairEditorView(apiClient: apiClient, tabSelection: $tabSelection) }
         case .launchDiagnostics:
             LaunchDiagnosticsView(tabSelection: $tabSelection)
+        case .technicalChart(let fxPairId, let symbol):
+            TechnicalAnalysisGate {
+                TechnicalChartView(apiClient: apiClient, fxPairId: fxPairId, symbol: symbol, tabSelection: $tabSelection)
+            }
         case .favoritesList:
             // HQ指示(2026-10-15): 仮画面から、指標一覧と同じデザインのお気に入り一覧へ。
             FavoritesListView(apiClient: apiClient, tabSelection: $tabSelection)
@@ -120,6 +124,26 @@ struct PurchaseFeatureGate<Content: View>: View {
 
     var body: some View {
         if plan.purchasesEnabled {
+            content()
+        } else {
+            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea().onAppear { dismiss() }
+        }
+    }
+}
+
+/// テクニカル分析の画面への入口。`price_features_enabled`と`technical_analysis_enabled`の両方がtrueのときだけ
+/// 画面を作る。どちらかがfalse(1.0の既定)なら画面を作らず、すぐ前の画面へ戻す(ディープリンク・古い通知対策)。
+struct TechnicalAnalysisGate<Content: View>: View {
+    @ObservedObject private var plan = PlanStore.shared
+    @Environment(\.dismiss) private var dismiss
+    private let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        if plan.technicalAnalysisVisible {
             content()
         } else {
             DesignTokens.Colors.backgroundPrimary.ignoresSafeArea().onAppear { dismiss() }

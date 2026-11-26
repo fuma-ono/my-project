@@ -18,6 +18,9 @@ struct EntitlementsResponse: Decodable, Equatable {
     var priceFeaturesEnabled: Bool? = nil
     /// 購入(PRO課金)の導線を見せてよいか。キーが無いときはnil=false扱い。
     var purchasesEnabled: Bool? = nil
+    /// テクニカル分析(チャート・指標)を見せてよいか。キーが無い(古いBackend)ときはnil=false扱い。
+    /// 画面は`price_features_enabled`と両方trueのときだけ出す。
+    var technicalAnalysisEnabled: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case features
@@ -25,5 +28,6 @@ struct EntitlementsResponse: Decodable, Equatable {
         case limits
         case priceFeaturesEnabled = "price_features_enabled"
         case purchasesEnabled = "purchases_enabled"
+        case technicalAnalysisEnabled = "technical_analysis_enabled"
     }
 }

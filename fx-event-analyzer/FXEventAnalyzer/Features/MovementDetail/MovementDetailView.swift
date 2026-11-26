@@ -75,6 +75,11 @@ struct MovementDetailView: View {
                     // 使った。
                     VStack(alignment: .leading, spacing: 3) {
                         priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
+                        // テクニカル分析チャートへの入口。価格由来の表示とテクニカル分析の両フラグがtrueのときだけ出す
+                        // (1.0はどちらもfalseなので何も出ない)。
+                        if plan.technicalAnalysisVisible {
+                            technicalChartLink
+                        }
                         approximateTimingNotice
                         analysisCard(reactions: reactions)
                         NotoText.text(StrategyAnalysisText.footerDisclaimer, size: 6)
@@ -93,6 +98,28 @@ struct MovementDetailView: View {
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
+    }
+
+    /// テクニカル分析チャートへの行(`TechnicalAnalysisGate`の入口。呼び出し側が両フラグを確かめる)。
+    private var technicalChartLink: some View {
+        NavigationLink(value: AppRoute.technicalChart(fxPairId: viewModel.fxPairId, symbol: viewModel.symbol)) {
+            HStack(spacing: 4) {
+                Image(systemName: "chart.xyaxis.line")
+                    .font(.system(size: 9))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text("テクニカル分析チャート", size: 8).foregroundStyle(.white)
+                Spacer(minLength: 2)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 7))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(width: 214, alignment: .leading)
+            .background(GradientCardBackground())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("movementDetailTechnicalChartLink")
     }
 
     /// api-design v1.45(HQ指示 2026-11-02): 発表の時刻が概算(APPROXIMATE、Eurostat等)のときだけ、

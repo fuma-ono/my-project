@@ -20,6 +20,12 @@ final class PlanStore: ObservableObject {
     @Published private(set) var priceFeaturesEnabled = false
     /// サーバー側フラグ(`purchases_enabled`)。購入(PRO課金)の導線を出してよいか。既定false(同上)。
     @Published private(set) var purchasesEnabled = false
+    /// サーバー側フラグ(`technical_analysis_enabled`)。テクニカル分析のチャートを出してよいか。既定false
+    /// (同上、隠す側)。画面を出すには`priceFeaturesEnabled`も必要(`technicalAnalysisVisible`)。
+    @Published private(set) var technicalAnalysisEnabled = false
+
+    /// テクニカル分析の画面・入口を出してよいか(価格由来の表示とテクニカル分析の両方がtrue)。
+    var technicalAnalysisVisible: Bool { priceFeaturesEnabled && technicalAnalysisEnabled }
 
     var isPro: Bool { plan == .pro }
 
@@ -44,6 +50,7 @@ final class PlanStore: ObservableObject {
             limits = response.limits ?? (plan == .pro ? .pro() : .free())
             priceFeaturesEnabled = response.priceFeaturesEnabled ?? false
             purchasesEnabled = response.purchasesEnabled ?? false
+            technicalAnalysisEnabled = response.technicalAnalysisEnabled ?? false
             isConfirmed = true
         } catch {
             guard startedGeneration == generation else { return }
@@ -51,6 +58,7 @@ final class PlanStore: ObservableObject {
             // フラグだけは、取れないときはfalse(隠す側)に戻す(オーナー指示)。
             priceFeaturesEnabled = false
             purchasesEnabled = false
+            technicalAnalysisEnabled = false
         }
     }
 
@@ -61,15 +69,17 @@ final class PlanStore: ObservableObject {
         limits = .free()
         priceFeaturesEnabled = false
         purchasesEnabled = false
+        technicalAnalysisEnabled = false
         isConfirmed = false
     }
 
     /// テスト用。
-    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true, priceFeaturesEnabled: Bool? = nil, purchasesEnabled: Bool? = nil) {
+    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true, priceFeaturesEnabled: Bool? = nil, purchasesEnabled: Bool? = nil, technicalAnalysisEnabled: Bool? = nil) {
         self.plan = plan
         self.limits = limits
         if let priceFeaturesEnabled { self.priceFeaturesEnabled = priceFeaturesEnabled }
         if let purchasesEnabled { self.purchasesEnabled = purchasesEnabled }
+        if let technicalAnalysisEnabled { self.technicalAnalysisEnabled = technicalAnalysisEnabled }
         isConfirmed = confirmed
     }
 
