@@ -66,9 +66,12 @@ export interface HomeSpeechItem {
   attribution: Attribution | null;
 }
 
-/** headline = summary when present (non-blank), else title. */
-export function toHomeSpeechItem(speech: HomeSpeechSource, baseUrl: string): HomeSpeechItem {
-  const summary = speech.summary?.trim();
+/**
+ * headline = 英語の原題(title)。SPEECH_TEXT_EXPOSED が有効のときだけ、要約があればそれ(非空白)。
+ * 無効(既定)のとき要約は headline に入れない(オーナー決定 2026-11-25)。
+ */
+export function toHomeSpeechItem(speech: HomeSpeechSource, baseUrl: string, textExposed = false): HomeSpeechItem {
+  const summary = textExposed ? speech.summary?.trim() : undefined;
   return {
     speech_id: speech.speech_id,
     country_code: speech.speaker.country_code,

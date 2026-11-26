@@ -10,6 +10,7 @@ import {
   listSpeeches,
   type SpeechSummary,
 } from '../repositories/speechesRepository.js';
+import { applySpeechTextPolicy } from '../domain/speechTextPolicy.js';
 import { priceFeaturesEnabled, requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import { getFxPairById, listChartPrices } from '../repositories/reactionsRepository.js';
@@ -103,7 +104,7 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
 
       const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
       return {
-        data: rows.map((row) => withResolvedSpeakerPhoto(row, baseUrl)),
+        data: rows.map((row) => withResolvedSpeakerPhoto(applySpeechTextPolicy(row, app.env.SPEECH_TEXT_EXPOSED), baseUrl)),
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
     }),
@@ -139,7 +140,10 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
     }
 
     return {
-      ...withResolvedSpeakerPhoto(speech, resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request)),
+      ...withResolvedSpeakerPhoto(
+        applySpeechTextPolicy(speech, app.env.SPEECH_TEXT_EXPOSED),
+        resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request),
+      ),
       reactions,
     };
   });
