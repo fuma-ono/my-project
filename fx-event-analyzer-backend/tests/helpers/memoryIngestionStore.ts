@@ -8,6 +8,7 @@ import type {
   IndicatorRef,
   IngestionLogRow,
   IngestionStore,
+  NewEventMeeting,
   NewReleaseSnapshot,
   NewRevision,
   NewStagedValue,
@@ -110,6 +111,15 @@ export class MemoryIngestionStore implements IngestionStore {
     const row = { id: this.nextId('event'), ...event };
     this.events.push(row);
     return Promise.resolve(row);
+  }
+
+  eventMeetings: NewEventMeeting[] = [];
+
+  upsertEventMeeting(meeting: NewEventMeeting): Promise<void> {
+    const i = this.eventMeetings.findIndex((x) => x.event_id === meeting.event_id);
+    if (i >= 0) this.eventMeetings[i] = meeting;
+    else this.eventMeetings.push(meeting);
+    return Promise.resolve();
   }
 
   updateEvent(eventId: string, patch: Parameters<IngestionStore['updateEvent']>[1]): Promise<void> {

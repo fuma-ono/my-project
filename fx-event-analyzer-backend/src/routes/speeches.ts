@@ -10,6 +10,7 @@ import {
   listSpeeches,
   type SpeechSummary,
 } from '../repositories/speechesRepository.js';
+import { applySpeechTextPolicy } from '../domain/speechTextPolicy.js';
 import { priceFeaturesEnabled, requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import { getFxPairById, listChartPrices } from '../repositories/reactionsRepository.js';
@@ -21,11 +22,11 @@ import {
   speechParamsSchema,
   speechReactionQuerySchema,
 } from '../schemas/speeches.js';
-import { buildMeta, parsePagination } from '../utils/pagination.js';
+import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 import { resolvePublicBaseUrl, resolveSpeakerPhotoUrl, withResolvedSpeakerPhoto } from '../domain/speakerPhotos.js';
 import { withTiming } from '../utils/requestTiming.js';
 import { chartWindow } from '../domain/chartWindow.js';
-import { historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
+import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
 import {
   computeSpeechPairReaction,
   pipsByTimeframe,
@@ -103,7 +104,9 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
 
       const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
       return {
-        data: rows.map((row) => withResolvedSpeakerPhoto(row, baseUrl)),
+        data: rows.map((row) =>
+          withResolvedSpeakerPhoto(applySpeechTextPolicy(row, app.env.SPEECH_TEXT_EXPOSED), baseUrl),
+        ),
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
     }),
@@ -139,7 +142,10 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
     }
 
     return {
-      ...withResolvedSpeakerPhoto(speech, resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request)),
+      ...withResolvedSpeakerPhoto(
+        applySpeechTextPolicy(speech, app.env.SPEECH_TEXT_EXPOSED),
+        resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request),
+      ),
       reactions,
     };
   });
@@ -230,7 +236,14 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
     const features = await listActiveFeatureCodes(app.supabase, userId);
     const plan = planFromFeatures(features);
     const historyMax = planLimitsFor(plan).history_events_max;
-    const speeches = await listDeliveredSpeechesForSpeaker(app.supabase, speakerId, historyMax);
+    // 固定の上限が無いとき(1.0 の FREE)は、ページ(page / limit、最大 100)で全件に届く。上限があるプラン(1.1 の FREE・PRO)はその件数まで。
+    const pagination = parsePagination(query);
+    const pageRange = rangeFor(pagination.page, pagination.limit);
+    const cappedRange = historyMax === null ? pageRange : capRowRange(pageRange, historyMax);
+    const { rows: speeches, total: deliveredTotal } = cappedRange
+      ? await listDeliveredSpeechesForSpeaker(app.supabase, speakerId, cappedRange)
+      : { rows: [], total: 0 };
+    const total = historyMax === null ? deliveredTotal : Math.min(deliveredTotal, historyMax);
 
     const events = await Promise.all(
       speeches.map(async (speech) => {
@@ -258,7 +271,8 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       /** 出典と告知(api-design v1.39)。要人の機関から(ECB: 告知つき、FRB: 出典だけ、他: null)。 */
       attribution: attributionForOrganization(speaker.organization),
       events,
-      history_limit: historyLimitFor(plan, speeches.length),
+      meta: buildMeta(pagination.page, pagination.limit, total),
+      history_limit: historyLimitFor(plan, total),
     };
   });
 }

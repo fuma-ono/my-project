@@ -23,6 +23,9 @@ struct SpeechDetailResponse: Decodable, Equatable {
     /// 実際の発言時刻そのものではないため、画面はそれを発言時刻として断定表示しない。
     /// 古いBackendでは項目自体が無いので`.exact`として扱う。
     var statementTimePrecision: StatementTimePrecision = .exact
+    /// 公式の発言ページのURL(api-design v1.52、FRB・ECBのhttpsのみ)。無ければnil(古いBackend・取得元不明)。
+    /// 1.0の最小表示(オーナー決定 2026-11-25)では、英語の原題・発言者・肩書き・日時と、この出典リンクだけを出す。
+    var sourceUrl: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case reactions
@@ -35,6 +38,7 @@ struct SpeechDetailResponse: Decodable, Equatable {
         case status
         case attribution
         case statementTimePrecision = "statement_time_precision"
+        case sourceUrl = "source_url"
     }
 
     // 合成される`init(from:)`は非Optionalの`statementTimePrecision`について、デフォルト値
@@ -52,6 +56,7 @@ struct SpeechDetailResponse: Decodable, Equatable {
         reactions = try container.decodeIfPresent([SpeechReaction].self, forKey: .reactions)
         attribution = try container.decodeIfPresent(SpeechAttribution.self, forKey: .attribution)
         statementTimePrecision = try container.decodeIfPresent(StatementTimePrecision.self, forKey: .statementTimePrecision) ?? .exact
+        sourceUrl = try container.decodeIfPresent(String.self, forKey: .sourceUrl)
     }
 }
 

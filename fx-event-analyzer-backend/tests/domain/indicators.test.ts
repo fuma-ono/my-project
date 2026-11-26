@@ -40,6 +40,8 @@ describe('buildReleaseSummaries (SCR-005 次回発表, v1.20)', () => {
       next_release_datetime: '2026-10-15T12:30:00Z',
       next_event_id: 'e-next',
       latest_release_datetime: '2026-09-10T12:30:00Z',
+      next_release_precision: null,
+      latest_release_precision: null,
     });
   });
 
@@ -77,16 +79,22 @@ describe('buildReleaseSummaries (SCR-005 次回発表, v1.20)', () => {
       next_release_datetime: '2026-10-15T12:30:00Z',
       next_event_id: 'e1',
       latest_release_datetime: null,
+      next_release_precision: null,
+      latest_release_precision: null,
     });
     expect(summaries.get('i2')).toEqual({
       next_release_datetime: null,
       next_event_id: null,
       latest_release_datetime: '2026-09-01T00:00:00Z',
+      next_release_precision: null,
+      latest_release_precision: null,
     });
     expect(summaries.get('i3')).toEqual({
       next_release_datetime: null,
       next_event_id: null,
       latest_release_datetime: null,
+      next_release_precision: null,
+      latest_release_precision: null,
     });
   });
 });
@@ -101,5 +109,37 @@ describe('compareByNextRelease (sort=next_release)', () => {
       { id: 'e', name: 'A指標', next_release_datetime: '2026-10-20T00:00:00+00:00' },
     ];
     expect([...rows].sort(compareByNextRelease).map((row) => row.id)).toEqual(['d', 'e', 'b', 'c', 'a']);
+  });
+});
+
+describe('buildReleaseSummaries precision (日付だけの予定は時刻を出さない)', () => {
+  it('carries the precision of the next and latest events; absent precision gives null', () => {
+    const now = new Date('2026-12-01T00:00:00Z');
+    const summaries = buildReleaseSummaries(
+      ['boj', 'old'],
+      [
+        {
+          id: 'e1',
+          indicator_id: 'boj',
+          release_datetime: '2026-12-18T03:00:00Z',
+          release_datetime_precision: 'DATE_ONLY',
+        },
+        { id: 'e2', indicator_id: 'old', release_datetime: '2026-12-10T13:30:00Z' },
+      ],
+      [
+        {
+          id: 'e0',
+          indicator_id: 'boj',
+          release_datetime: '2026-10-30T03:00:00Z',
+          release_datetime_precision: 'EXACT',
+        },
+      ],
+      now,
+    );
+    expect(summaries.get('boj')).toMatchObject({
+      next_release_precision: 'DATE_ONLY',
+      latest_release_precision: 'EXACT',
+    });
+    expect(summaries.get('old')).toMatchObject({ next_release_precision: null, latest_release_precision: null });
   });
 });

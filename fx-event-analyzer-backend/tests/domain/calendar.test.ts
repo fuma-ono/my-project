@@ -174,6 +174,23 @@ describe('buildCalendarItems', () => {
 });
 
 describe('result_type / data_status (schedule-only design 2章、HQ指示 2026-10-27)', () => {
+  it('BOJ_RATE and EU_ECB_RATE are NONE in the calendar; US_CPI stays VALUE', () => {
+    const items = buildCalendarItems(
+      [
+        event({ id: 'boj', indicator_code: 'BOJ_RATE', data_status: 'PENDING' }),
+        event({ id: 'ecb', indicator_code: 'EU_ECB_RATE', data_status: 'PENDING' }),
+        event({ id: 'cpi', indicator_code: 'US_CPI', data_status: 'PENDING' }),
+      ],
+      [],
+      {},
+    );
+    expect(Object.fromEntries(items.map((item) => [item.id, item.result_type]))).toEqual({
+      boj: 'NONE',
+      ecb: 'NONE',
+      cpi: 'VALUE',
+    });
+  });
+
   it('FOMC議事要旨 is NONE (no result value), other indicators VALUE; data_status uses the detail API vocabulary', () => {
     const items = buildCalendarItems(
       [

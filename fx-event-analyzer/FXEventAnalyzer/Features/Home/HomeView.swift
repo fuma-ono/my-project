@@ -89,7 +89,7 @@ struct HomeView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            loadingScaffold { LoadingView(caption: "読み込み中...") }
+            loadingScaffold { SlowLoadHintLoadingView() }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。実装が完了次第、ここに表示されます。") }
         // 価格フラグがfalseのときは、通貨ペアが空でも空状態にせず、他のカードを出し続ける。
@@ -573,6 +573,7 @@ struct HomeView: View {
                     // 0件でもセクション自体を隠さず空状態を案内する
                     // (`speechesCard`が元から常時表示+空状態表示だったのに
                     // 合わせた)。
+                    nextReleaseRow
                     todayEventsCard(topEvents)
                     if !pairs.isEmpty {
                         pairsCard(pairs)
@@ -599,6 +600,25 @@ struct HomeView: View {
         }
         .onChange(of: viewModel.freshDataVersion) { _, _ in
             DiagnosticsStore.shared.recordHomeReadyToDisplay()
+        }
+    }
+
+    /// 「次の発表まで 2時間15分」の1行(価格フラグのOFF/ON共通)。次に来る時刻確定の予定が無ければ何も出さない。
+    /// 1分ごとに描き直すだけ(`TimelineView`)で、別のタイマーは持たない。流れるレイアウトの中の1行なので、
+    /// 絶対位置のものと重ならない。日時は設定のタイムゾーン(`AppPreferences`)で出す。
+    @ViewBuilder private var nextReleaseRow: some View {
+        TimelineView(.periodic(from: Date(), by: 60)) { context in
+            if let event = HomeNextRelease.pick(from: viewModel.upcomingEvents, now: context.date),
+               let countdown = HomeNextRelease.countdownText(to: event.releaseDatetime, now: context.date) {
+                let name = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
+                let line = "\(countdown)・\(name) \(AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision))"
+                V5JPFont.text(line, size: 7.5)
+                    .foregroundStyle(V5P.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: Self.cardWidth, alignment: .leading)
+                    .accessibilityIdentifier("homeNextRelease")
+            }
         }
     }
 
@@ -1487,7 +1507,7 @@ struct HomeView: View {
                     NotoText.text(speech.speakerName, size: 7)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    V5JPFont.text(speech.headline, size: 6, weight: .regular)
+                    NotoText.text(speech.headline, size: 6)
                         .tracking(-0.4)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)

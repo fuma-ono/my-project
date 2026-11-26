@@ -63,6 +63,7 @@ struct EventDetailCards: View {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
+                surpriseLine
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
@@ -226,6 +227,24 @@ struct EventDetailCards: View {
         } else {
             unlockedResults
         }
+    }
+
+    /// 結果と予想の差の一行(「予想より上振れ(+0.2)」など)。発表済みで結果と予想が両方あるときだけ。
+    /// 事実の表示のみ(良し悪し・値動きへの影響は言わない)。
+    @ViewBuilder private var surpriseLine: some View {
+        if let text = Self.surpriseText(response: response) {
+            NotoText.text(text, size: 7.5)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .frame(width: 214, alignment: .center)
+                .accessibilityIdentifier("eventDetailSurprise")
+        }
+    }
+
+    static func surpriseText(response: EventDetailResponse) -> String? {
+        guard !response.event.isLocked, response.event.policyRate == nil else { return nil }
+        guard response.event.status == .released else { return nil }
+        guard response.snapshot?.actual != nil, response.snapshot?.forecast != nil else { return nil }
+        return ValueFormat.surpriseSummary(surprise: response.analysis.surprise, decimals: response.event.valueDecimals)
     }
 
     /// FOMCの会合の政策決定(api-design v1.47、HQ承認 2026-11-05): 結果・予想・前回の代わりに、誘導目標レンジ

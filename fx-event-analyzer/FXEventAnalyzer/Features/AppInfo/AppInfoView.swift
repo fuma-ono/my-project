@@ -8,7 +8,6 @@ import SwiftUI
 struct AppInfoView: View {
     @Binding var tabSelection: Int
     @State private var page: Page?
-    @State private var showsWebsitePending = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -54,10 +53,11 @@ struct AppInfoView: View {
                 .background(AccountCardBackground())
 
                 VStack(spacing: 0) {
-                    linkRow("公式サイトを開く") {
-                        if let url = AppInfo.websiteURL { openURL(url) } else { showsWebsitePending = true }
+                    // 公式サイトのURLが決まる(`AppInfo.websiteURL`が非nil)までは行ごと出さない。
+                    if let url = AppInfo.websiteURL {
+                        linkRow("公式サイトを開く") { openURL(url) }
+                        SettingsListSeparator()
                     }
-                    SettingsListSeparator()
                     linkRow("アプリを評価する") { requestReview() }
                 }
                 .frame(width: 214)
@@ -74,9 +74,6 @@ struct AppInfoView: View {
             V5BottomBar(selected: $tabSelection)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .alert("公式サイトは準備中です", isPresented: $showsWebsitePending) {
-            Button("OK", role: .cancel) {}
-        }
         .navigationDestination(item: $page) { page in
             switch page {
             case .license: LegalDocumentView(document: AppInfo.licenseDocument, tabSelection: $tabSelection)

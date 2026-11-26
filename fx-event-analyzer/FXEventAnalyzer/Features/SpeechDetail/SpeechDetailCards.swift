@@ -36,7 +36,10 @@ struct SpeechDetailCards: View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                statementCard
+                if hasStatementCard {
+                    statementCard
+                }
+                sourceLink
                 attributionNotice
             }
             if plan.priceFeaturesEnabled {
@@ -148,6 +151,27 @@ struct SpeechDetailCards: View {
     /// 3. イベント詳細画面とのY座標の一致はもう優先しない方針になった
     ///    ため、`EventDetailCards.summaryCardMinHeight`への強制(旧実装)
     ///    を外し、折りたたみ時はカードが自然な高さまで縮むようにした。
+    /// オーナー決定(2026-11-25、1.0の最小表示): 要約・原文抜粋はBackendが返したときだけ出す。
+    /// 発言済みで`summary`が無いとき(1.0の既定)は空のカードも「要約準備中」のような文言も出さない。
+    /// 発言前・中止の状態文は残す。
+    private var hasStatementCard: Bool {
+        response.status == .scheduled || response.status == .cancelled || response.summary != nil
+    }
+
+    /// 公式の発言ページへのリンク(中立な文言)。httpsのURLだけ。
+    @ViewBuilder private var sourceLink: some View {
+        if let raw = response.sourceUrl, let url = URL(string: raw), url.scheme == "https" {
+            Link(destination: url) {
+                NotoText.text("公式サイトで原文を見る", size: 9)
+                    .foregroundStyle(V5P.cyan)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .frame(width: 214, alignment: .leading)
+            .accessibilityIdentifier("speechDetailSourceLink")
+        }
+    }
+
     @ViewBuilder private var statementCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             if response.status == .scheduled {
@@ -171,8 +195,6 @@ struct SpeechDetailCards: View {
                     .padding(.top, 2)
                     .accessibilityIdentifier("speechDetailExcerptToggle")
                 }
-            } else {
-                NotoText.text("要約はまだ用意されていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
