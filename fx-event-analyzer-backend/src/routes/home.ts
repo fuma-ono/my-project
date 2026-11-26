@@ -130,7 +130,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           }),
           past_release_limit: pastReleaseLimitFor(pastReleaseAccess.plan),
           major_fx: majorFx,
-          speeches: recentSpeeches.map((speech) => toHomeSpeechItem(speech, baseUrl)),
+          speeches: recentSpeeches.map((speech) => toHomeSpeechItem(speech, baseUrl, app.env.SPEECH_TEXT_EXPOSED)),
           speeches_status: toHomeSpeechesStatus(speechRuns, now),
         };
       },
