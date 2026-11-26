@@ -1487,7 +1487,7 @@ struct HomeView: View {
                     NotoText.text(speech.speakerName, size: 7)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    V5JPFont.text(speech.headline, size: 6, weight: .regular)
+                    NotoText.text(speech.headline, size: 6)
                         .tracking(-0.4)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
