@@ -270,20 +270,19 @@ export async function getSpeakerById(supabase: SupabaseClient, speakerId: string
 export async function listDeliveredSpeechesForSpeaker(
   supabase: SupabaseClient,
   speakerId: string,
-  limit: number,
-): Promise<SpeechSummary[]> {
-  if (limit <= 0) return [];
-  const { data, error } = await supabase
+  range: { from: number; to: number },
+): Promise<{ rows: SpeechSummary[]; total: number }> {
+  const { data, error, count } = await supabase
     .from('speech_events')
-    .select(SPEECH_COLUMNS)
+    .select(SPEECH_COLUMNS, { count: 'exact' })
     .eq('speaker_id', speakerId)
     .eq('status', 'DELIVERED')
     .eq('time_precision', 'EXACT') // 公開の時刻しか無い発言(ポッドキャスト等)は相場反応を比べない
     .order('statement_datetime', { ascending: false })
     .order('id', { ascending: true })
-    .limit(limit);
+    .range(range.from, range.to);
   if (error) throw error;
-  return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
+  return { rows: (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow)), total: count ?? 0 };
 }
 
 /** ingest:speeches の実行記録(ingestion_logs)の列。鮮度の判定(quality/metrics.ts judgeSpeechFetch)に使う。 */
