@@ -80,7 +80,8 @@ final class PlanStore: ObservableObject {
 /// `GET /entitlements`の`limits`。古いBackend(項目なし)では端末で同じ規則を計算する。
 struct PlanLimits: Decodable, Equatable {
     /// 経済カレンダーでさかのぼれる最初の日時(含む)。
-    let calendarEarliestFrom: Date
+    /// nilは制限なし(保存されているデータの範囲まで)。
+    let calendarEarliestFrom: Date?
     /// 経済カレンダーで見られる最後の日時(含まない)。
     let calendarLatestTo: Date
     /// お気に入りの上限。nilは無制限。
@@ -89,8 +90,8 @@ struct PlanLimits: Decodable, Equatable {
     let notificationImportances: [String]
     /// 通知の対象通貨ペアの上限。nilは無制限。
     let notificationFxPairsMax: Int?
-    /// 過去イベント比較に使う回数。
-    let historyEventsMax: Int
+    /// 過去イベント比較に使う回数。nilは固定の上限なし(ページで全件に届く)。
+    let historyEventsMax: Int?
     /// 指標ごとに値を見られる過去の発表の回数(api-design v1.33 §28.2)。nilは上限なし。
     /// 古いBackend(項目なし)ではnil。どの発表を隠すかは各Responseの`locked`で判断する。
     var pastReleasesMax: Int? = nil
@@ -105,16 +106,33 @@ struct PlanLimits: Decodable, Equatable {
         case pastReleasesMax = "past_releases_max"
     }
 
-    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は5回、
-    /// 過去の発表は指標ごとに直近3回。
+    /// 無料プラン(1.0): オーナー決定 2026-11-25 で、1.0 は無料のみ・購入なしのため、無料プランの上限をすべて外した
+    /// (過去の発表・過去イベント比較・通知の重要度と通貨ペア数・お気に入り・カレンダーをさかのぼる範囲)。Backendの
+    /// `FREE_LIMITS_LIFTED`(planLimits.ts)と同じ値。`GET /entitlements`が取れない・古いときも、鍵や
+    /// 「準備中」を出さないよう、この値を既定にする。カレンダーの先(2年)は無料・プレミアム共通なので変えない。
     static func free(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
+        PlanLimits(
+            calendarEarliestFrom: nil,
+            calendarLatestTo: yearStart(offset: 2, from: now, calendar: calendar),
+            favoritesMax: nil,
+            notificationImportances: ["HIGH", "MEDIUM", "LOW"],
+            notificationFxPairsMax: nil,
+            historyEventsMax: nil,
+            pastReleasesMax: nil
+        )
+    }
+
+    /// 無料プランの従来の上限(1.1で制限を戻すときの定義。Backendの`PLAN_LIMITS.FREE`と同じ値): お気に入り3件、
+    /// 通知はHIGHと通貨ペア1つ、比較は3回、過去の発表は指標ごとに直近3回。1.0では使わない(テストで制限側の
+    /// 画面の動きを確かめるために残す)。
+    static func freeRestricted(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
         PlanLimits(
             calendarEarliestFrom: monthStart(offset: -1, from: now, calendar: calendar),
             calendarLatestTo: yearStart(offset: 2, from: now, calendar: calendar),
             favoritesMax: 3,
             notificationImportances: ["HIGH"],
             notificationFxPairsMax: 1,
-            historyEventsMax: 3, // v1.37: FREE 5 → 3(Backend の planLimits.ts と同じ)
+            historyEventsMax: 3,
             pastReleasesMax: 3
         )
     }

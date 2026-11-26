@@ -71,10 +71,22 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedDate, date(2026, 11, 1))
     }
 
-    func testFreePlanCanGoBackOneMonthAndProFiveYears() {
+    /// 1.0(オーナー決定 2026-11-25): 無料プランはカレンダーをさかのぼる範囲に制限がない(保存されている範囲まで)。
+    func testFreePlanLiftedHasNoEarliestBound() {
         let today = date(2026, 10, 8)
         let free = PlanStore()
         free.set(plan: .free, limits: .free(now: today, calendar: calendar))
+        let viewModel = CalendarViewModel(apiClient: MockAPIClient(), today: today, calendar: calendar, plan: free)
+        XCTAssertNil(free.limits.calendarEarliestFrom)
+        XCTAssertEqual(viewModel.availability(of: date(2020, 12, 31)), .allowed)
+        XCTAssertEqual(viewModel.moveAvailability(by: -12), .allowed)
+        XCTAssertEqual(viewModel.availability(of: date(2028, 1, 1)), .unavailable, "先の範囲は無料・プレミアム共通")
+    }
+
+    func testFreePlanCanGoBackOneMonthAndProFiveYears() {
+        let today = date(2026, 10, 8)
+        let free = PlanStore()
+        free.set(plan: .free, limits: .freeRestricted(now: today, calendar: calendar))
         let viewModel = CalendarViewModel(apiClient: MockAPIClient(), today: today, calendar: calendar, plan: free)
         XCTAssertEqual(viewModel.moveAvailability(by: -1), .allowed, "9月は見られる")
         XCTAssertEqual(viewModel.availability(of: date(2026, 8, 31)), .needsPro)
@@ -93,7 +105,7 @@ final class CalendarViewModelTests: XCTestCase {
     func testLoadOnlyRequestsTheAllowedRange() async throws {
         let today = date(2026, 10, 8)
         let free = PlanStore()
-        free.set(plan: .free, limits: .free(now: today, calendar: calendar))
+        free.set(plan: .free, limits: .freeRestricted(now: today, calendar: calendar))
         let apiClient = MockAPIClient()
         apiClient.result = .success(CalendarResponse(items: []))
         let viewModel = CalendarViewModel(apiClient: apiClient, today: today, calendar: calendar, plan: free)

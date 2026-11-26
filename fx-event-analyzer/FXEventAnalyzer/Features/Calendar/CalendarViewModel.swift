@@ -100,7 +100,7 @@ final class CalendarViewModel: ObservableObject {
         guard let gridFirst = days.first, let last = days.last,
               let gridEnd = calendar.date(byAdding: .day, value: 1, to: last) else { return }
         // プランで見られる範囲の外(前後の月の日)はBackendが403を返すので、範囲内だけ取る。
-        let first = max(gridFirst, plan.limits.calendarEarliestFrom)
+        let first = plan.limits.calendarEarliestFrom.map { max(gridFirst, $0) } ?? gridFirst
         let end = min(gridEnd, plan.limits.calendarLatestTo)
         guard first < end else {
             itemsByDay = [:]
@@ -142,7 +142,7 @@ final class CalendarViewModel: ObservableObject {
             guard let targetMonth = calendar.date(byAdding: .month, value: offset, to: month),
                   !loadedMonths.contains(targetMonth),
                   let range = gridRange(forMonth: targetMonth) else { continue }
-            let first = max(range.first, plan.limits.calendarEarliestFrom)
+            let first = plan.limits.calendarEarliestFrom.map { max(range.first, $0) } ?? range.first
             let end = min(range.end, plan.limits.calendarLatestTo)
             guard first < end else { continue }
             loadedMonths.insert(targetMonth)
@@ -209,8 +209,10 @@ final class CalendarViewModel: ObservableObject {
     func availability(of day: Date) -> Availability {
         let limits = plan.limits
         if day >= limits.calendarLatestTo { return .unavailable }
-        if day >= limits.calendarEarliestFrom { return .allowed }
-        if !plan.isPro, day >= PlanLimits.pro(calendar: calendar).calendarEarliestFrom { return .needsPro }
+        // 制限なし(nil)は、保存されているデータの範囲まで見られる。
+        guard let earliest = limits.calendarEarliestFrom else { return .allowed }
+        if day >= earliest { return .allowed }
+        if !plan.isPro, let proEarliest = PlanLimits.pro(calendar: calendar).calendarEarliestFrom, day >= proEarliest { return .needsPro }
         return .unavailable
     }
 

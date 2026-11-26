@@ -58,6 +58,8 @@ final class SpeakerComparisonViewModel: ObservableObject {
         state = .loading
         var query: [URLQueryItem] = []
         if let fxPairId { query.append(URLQueryItem(name: "fx_pair_id", value: fxPairId)) }
+        // 固定の上限は無く、ページ(page / limit、最大100)で全件に届く。新しい方から最大100件を取る。
+        query.append(URLQueryItem(name: "limit", value: "100"))
         do {
             let response: SpeakerComparisonResponse = try await apiClient.send(Endpoint(path: "speakers/\(speakerId)/comparison", queryItems: query))
             state = .loaded(response)
