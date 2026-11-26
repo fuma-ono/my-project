@@ -37,6 +37,8 @@ export function loadIntegrationEnv(): IntegrationEnv | null {
       // 既存の結合テストは価格由来の機能を検証するので、既定で有効にする(無効の挙動は price-features-disabled.test.ts が
       // buildIntegrationContext の env で PRICE_FEATURES_ENABLED: false に差し替えて検証)。
       PRICE_FEATURES_ENABLED: 'true',
+      // 要約・本文を返す経路を検証するので、結合テストでは SPEECH_TEXT_EXPOSED を有効にする(既定は false。無効の挙動は単体テストが検証)。
+      SPEECH_TEXT_EXPOSED: 'true',
     }),
     anonKey: SUPABASE_ANON_KEY,
   };
