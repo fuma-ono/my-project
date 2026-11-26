@@ -31,7 +31,13 @@ import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domai
 import { gateAdvancedStatistics } from '../domain/advancedStatistics.js';
 import { resolveTimeframeAnalysisStatus, type ReleaseDatetimePrecision } from '../domain/dataQuality.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
-import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
+import {
+  capRowRange,
+  COMPARISON_TECHNICAL_MAX_EVENTS,
+  historyLimitFor,
+  planFromFeatures,
+  planLimitsFor,
+} from '../domain/planLimits.js';
 import { comparisonQuerySchema } from '../schemas/historical.js';
 import { z } from 'zod';
 import {
@@ -290,7 +296,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     const pagination = parsePagination(query);
     const hasAdvanced = features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS);
     const plan = planFromFeatures(features);
-    const historyMax = planLimitsFor(plan).history_events_max;
+    // 固定の上限が無いとき(1.0 の FREE)は、統計に使う発表の数だけ技術的な上限(負荷対策)。events は page / limit(最大 100)で全件たどれる。
+    const historyMax = planLimitsFor(plan).history_events_max ?? COMPARISON_TECHNICAL_MAX_EVENTS;
 
     const allEventIds = await listRecentReleasedEventIds(app.supabase, indicatorId, historyMax);
     const pageRange = capRowRange(rangeFor(pagination.page, pagination.limit), historyMax);

@@ -36,6 +36,8 @@ export function loadIntegrationEnv(): IntegrationEnv | null {
       // 既存の結合テストは価格由来の機能を検証するので、既定で有効にする(無効の挙動は price-features-disabled.test.ts が
       // buildIntegrationContext の env で PRICE_FEATURES_ENABLED: false に差し替えて検証)。
       PRICE_FEATURES_ENABLED: 'true',
+      // 既存の結合テストは FREE の上限(過去の発表・比較・通知の重要度・お気に入り)を検証するので、既定で適用する。
+      FREE_LIMITS_ENFORCED: 'true',
     }),
     anonKey: SUPABASE_ANON_KEY,
   };
