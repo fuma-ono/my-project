@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
@@ -112,7 +113,9 @@ async function createUserWithRetry(
  * signature/claims shape production tokens have. */
 export async function createTestUser(ctx: IntegrationContext): Promise<TestUser> {
   userCounter += 1;
-  const email = `fx-backend-test-${Date.now()}-${userCounter}@example.com`;
+  // 並列に動く別のテストファイルは、それぞれ userCounter が 0 から始まる。時刻(ミリ秒)と番号だけでは同じメールになりうる
+  // (CI で 'A user with this email address has already been registered' が出た)。UUID で重複を避ける。
+  const email = `fx-backend-test-${randomUUID()}-${userCounter}@example.com`;
   const password = 'Test-Password-1234!';
 
   const data = await createUserWithRetry(ctx, email, password);
