@@ -104,6 +104,21 @@ enum ValueFormat {
         return "\(minutes)分後"
     }
 
+    /// 発表までの残り時間の日本語(「2時間15分」「45分」「1分未満」、24時間以上は「1日3時間」)。
+    /// 時刻を過ぎていればnil。「後」は付けない(「次の発表まで ○○」の文に入れるため)。
+    static func remainingDurationText(to date: Date, from now: Date = Date()) -> String? {
+        let interval = date.timeIntervalSince(now)
+        guard interval > 0 else { return nil }
+        let totalMinutes = Int(interval) / 60
+        if totalMinutes < 1 { return "1分未満" }
+        let days = totalMinutes / (60 * 24)
+        let hours = (totalMinutes / 60) % 24
+        let minutes = totalMinutes % 60
+        if days > 0 { return "\(days)日\(hours)時間" }
+        if hours > 0 { return "\(hours)時間\(minutes)分" }
+        return "\(minutes)分"
+    }
+
     /// Phase 4.5 UX audit: the existing POSITIVE/NEGATIVE/NEUTRAL label is
     /// `favorable_direction`-adjusted and doesn't say which way the raw
     /// numbers moved. This reads only the sign of `surprise` (already

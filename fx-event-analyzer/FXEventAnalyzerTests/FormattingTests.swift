@@ -70,6 +70,48 @@ final class ValueFormatTests: XCTestCase {
         XCTAssertEqual(ValueFormat.surpriseComparisonLabel(0), "予想通りの結果")
     }
 
+    // MARK: - remainingDurationText / HomeNextRelease
+
+    func testRemainingDurationText() {
+        let now = Date()
+        XCTAssertEqual(ValueFormat.remainingDurationText(to: now.addingTimeInterval(135 * 60 + 5), from: now), "2時間15分")
+        XCTAssertEqual(ValueFormat.remainingDurationText(to: now.addingTimeInterval(45 * 60 + 5), from: now), "45分")
+        XCTAssertEqual(ValueFormat.remainingDurationText(to: now.addingTimeInterval(30), from: now), "1分未満")
+        XCTAssertEqual(ValueFormat.remainingDurationText(to: now.addingTimeInterval(27 * 3600 + 5), from: now), "1日3時間")
+        XCTAssertNil(ValueFormat.remainingDurationText(to: now.addingTimeInterval(-1), from: now))
+        XCTAssertNil(ValueFormat.remainingDurationText(to: now, from: now))
+    }
+
+    func testHomeNextReleaseCountdownText() {
+        let now = Date()
+        XCTAssertEqual(HomeNextRelease.countdownText(to: now.addingTimeInterval(135 * 60 + 5), now: now), "次の発表まで 2時間15分")
+        XCTAssertNil(HomeNextRelease.countdownText(to: now.addingTimeInterval(-60), now: now))
+    }
+
+    func testHomeNextReleasePicksEarliestExactScheduledFutureEvent() {
+        let now = Date()
+        let past = Self.homeEvent(id: "past", offset: -600, now: now)
+        let approx = Self.homeEvent(id: "approx", offset: 300, now: now, precision: .approximate)
+        let released = Self.homeEvent(id: "released", offset: 400, now: now, status: .released)
+        let later = Self.homeEvent(id: "later", offset: 7200, now: now)
+        let soon = Self.homeEvent(id: "soon", offset: 3600, now: now)
+        XCTAssertEqual(HomeNextRelease.pick(from: [past, approx, released, later, soon], now: now)?.id, "soon")
+        XCTAssertNil(HomeNextRelease.pick(from: [past, approx, released], now: now))
+        XCTAssertNil(HomeNextRelease.pick(from: [], now: now))
+    }
+
+    private static func homeEvent(
+        id: String, offset: TimeInterval, now: Date,
+        precision: ReleaseDatetimePrecision = .exact, status: EventStatus = .scheduled
+    ) -> HomeEventSummary {
+        HomeEventSummary(
+            id: id, indicatorId: "ind_1", indicatorName: "US CPI", countryCode: "US", currencyCode: "USD",
+            importance: .high, releaseDatetime: now.addingTimeInterval(offset), releaseDatetimePrecision: precision,
+            status: status, dataStatus: .ready, forecast: nil, actual: nil, previous: nil,
+            surprise: nil, surpriseDirection: nil, relatedFxPairs: []
+        )
+    }
+
     // MARK: - surpriseSummary (結果と予想の差、事実のみの表示)
 
     func testSurpriseSummaryIsNilWithoutSurprise() {
