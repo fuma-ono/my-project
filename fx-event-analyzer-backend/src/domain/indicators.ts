@@ -17,18 +17,24 @@ export interface IndicatorReleaseSummary {
   next_release_datetime: string | null;
   next_event_id: string | null;
   latest_release_datetime: string | null;
+  /** 次回・前回の発表時刻の精度(DATE_ONLY なら端末は時刻を出さない)。古い行・不明は null。追加の任意項目。 */
+  next_release_precision: string | null;
+  latest_release_precision: string | null;
 }
 
 export interface ReleaseEventRow {
   id: string;
   indicator_id: string;
   release_datetime: string;
+  release_datetime_precision?: string | null | undefined;
 }
 
 export const EMPTY_RELEASE_SUMMARY: IndicatorReleaseSummary = Object.freeze({
   next_release_datetime: null,
   next_event_id: null,
   latest_release_datetime: null,
+  next_release_precision: null,
+  latest_release_precision: null,
 });
 
 /**
@@ -76,6 +82,8 @@ export function buildReleaseSummaries(
       next_release_datetime: nextEvent?.release_datetime ?? null,
       next_event_id: nextEvent?.id ?? null,
       latest_release_datetime: latest.get(indicatorId)?.release_datetime ?? null,
+      next_release_precision: nextEvent?.release_datetime_precision ?? null,
+      latest_release_precision: latest.get(indicatorId)?.release_datetime_precision ?? null,
     });
   }
   return summaries;

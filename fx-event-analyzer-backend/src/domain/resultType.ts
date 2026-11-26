@@ -14,7 +14,12 @@
 export type ResultType = 'VALUE' | 'NONE';
 
 /** 結果の値が出ない指標(economic_indicators.code)。 */
-export const RESULT_TYPE_NONE_INDICATORS: ReadonlySet<string> = new Set(['US_FOMC_MINUTES']);
+export const RESULT_TYPE_NONE_INDICATORS: ReadonlySet<string> = new Set([
+  'US_FOMC_MINUTES',
+  // 日銀・ECB の会合の日程(HQ指示 2026-11-25/26): 日程だけで、政策金利の決定値・予想・結果は持たない。
+  'BOJ_RATE',
+  'EU_ECB_RATE',
+]);
 
 export function resultTypeForIndicator(code: string | null | undefined): ResultType {
   return code && RESULT_TYPE_NONE_INDICATORS.has(code) ? 'NONE' : 'VALUE';

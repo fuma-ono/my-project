@@ -90,8 +90,18 @@ jobs:
         # `supabase start` pulls ~10 container images the first time; give
         # it real headroom, but fail loudly (with logs we can read, unlike
         # a job that silently runs for hours) rather than hanging forever.
-        timeout-minutes: 12
-        run: supabase start
+        # コンテナ取得などの一時的な失敗に備え、最大 3 回まで試す(失敗した試行は警告に残る)。
+        timeout-minutes: 20
+        run: |
+          for attempt in 1 2 3; do
+            if supabase start; then
+              exit 0
+            fi
+            echo "::warning::supabase start failed (attempt ${attempt} of 3)"
+            supabase stop --no-backup || true
+            sleep 10
+          done
+          exit 1
 
       - name: Reset DB (re-applies every migration + seed.sql from scratch)
         timeout-minutes: 5

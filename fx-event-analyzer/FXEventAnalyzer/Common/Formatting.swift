@@ -104,6 +104,21 @@ enum ValueFormat {
         return "\(minutes)分後"
     }
 
+    /// 発表までの残り時間の日本語(「2時間15分」「45分」「1分未満」、24時間以上は「1日3時間」)。
+    /// 時刻を過ぎていればnil。「後」は付けない(「次の発表まで ○○」の文に入れるため)。
+    static func remainingDurationText(to date: Date, from now: Date = Date()) -> String? {
+        let interval = date.timeIntervalSince(now)
+        guard interval > 0 else { return nil }
+        let totalMinutes = Int(interval) / 60
+        if totalMinutes < 1 { return "1分未満" }
+        let days = totalMinutes / (60 * 24)
+        let hours = (totalMinutes / 60) % 24
+        let minutes = totalMinutes % 60
+        if days > 0 { return "\(days)日\(hours)時間" }
+        if hours > 0 { return "\(hours)時間\(minutes)分" }
+        return "\(minutes)分"
+    }
+
     /// Phase 4.5 UX audit: the existing POSITIVE/NEGATIVE/NEUTRAL label is
     /// `favorable_direction`-adjusted and doesn't say which way the raw
     /// numbers moved. This reads only the sign of `surprise` (already
@@ -114,6 +129,20 @@ enum ValueFormat {
         if surprise > 0 { return "予想を上回る結果" }
         if surprise < 0 { return "予想を下回る結果" }
         return "予想通りの結果"
+    }
+
+    /// 結果と予想の差(Backendの`surprise` = 結果 - 予想)を、事実だけの短い文にする。
+    /// 例: 「予想より上振れ(+0.2)」「予想どおり」「予想より下振れ(−0.1)」。
+    /// 良し悪し・売買・値動きへの影響は言わない。表示の桁(`decimals`、nilなら2桁)に
+    /// 丸めて0になる差は「予想どおり」。surpriseがnil・非有限なら nil(何も出さない)。
+    static func surpriseSummary(surprise: Double?, decimals: Int? = nil) -> String? {
+        guard let surprise, surprise.isFinite else { return nil }
+        let digits: Int = decimals ?? 2
+        let shown: Double = displayRounded(surprise, decimals: digits)
+        if shown == 0 { return "予想どおり" }
+        let amount: String = number(abs(shown), fractionDigits: digits, minimumFractionDigits: decimals == nil ? 0 : digits)
+        if shown > 0 { return "予想より上振れ(+\(amount))" }
+        return "予想より下振れ(−\(amount))"
     }
 }
 
