@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parsePriceFeaturesEnabled } from './priceFeatures.js';
+import { parseSpeechTextExposed } from './speechText.js';
 
 /** An optional variable, where an empty value (`NAME=` in .env) also counts as unset. */
 function optionalString(schema: z.ZodString) {
@@ -48,7 +49,13 @@ const envSchema = z.object({
   PRICE_FEATURES_ENABLED: z.string().optional().transform(parsePriceFeaturesEnabled),
   // 購入導線を出すか(iOS が見て、購入導線と「PRO で…」の文言を隠す)。'true' のときだけ有効、既定 false。バックエンドの挙動(locked / required_plan /
   // PLAN_LIMIT_EXCEEDED / POST /subscription/verify)は、この値で変えない(古いビルドとの互換)。GET /entitlements の purchases_enabled。
+  // 要人発言の本文由来のテキスト(要約・原文抜粋・body_status など)を返すか。'true' のときだけ有効、既定 false
+  // (オーナー決定 2026-11-25。config/speechText.ts)。
+  SPEECH_TEXT_EXPOSED: z.string().optional().transform(parseSpeechTextExposed),
   PURCHASES_ENABLED: z.string().optional().transform(parsePriceFeaturesEnabled),
+  // FREE の上限(過去の発表・過去イベント比較・通知の重要度・お気に入り)を適用するか。'true' のときだけ有効、既定 false
+  // (オーナー決定 2026-11-25: 1.0 は無料のみ・購入なしなので上限を外す。1.1 で戻すときに true にする。domain/planLimits.ts)。
+  FREE_LIMITS_ENFORCED: z.string().optional().transform(parsePriceFeaturesEnabled),
 });
 
 export type Env = z.infer<typeof envSchema>;

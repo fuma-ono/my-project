@@ -13,6 +13,7 @@ import {
 import { listIndicatorEventsQuerySchema, listIndicatorsQuerySchema } from '../schemas/indicators.js';
 import { buildMeta, parsePagination, resolveSort } from '../utils/pagination.js';
 import { EMPTY_RELEASE_SUMMARY } from '../domain/indicators.js';
+import { resultTypeForIndicator } from '../domain/resultType.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
 import { resolvePastReleaseAccess } from '../authorization/pastReleaseAccess.js';
 import { pastReleaseLimitFor, redactRelease } from '../domain/pastReleaseAccess.js';
@@ -55,7 +56,12 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
     ]);
 
     return {
-      indicator: { ...indicator, ...(releaseSummaries.get(indicatorId) ?? EMPTY_RELEASE_SUMMARY) },
+      indicator: {
+        ...indicator,
+        ...(releaseSummaries.get(indicatorId) ?? EMPTY_RELEASE_SUMMARY),
+        // 結果の値が出ない指標は NONE(日銀・ECBの会合など。端末は過去イベント比較を出さない)。
+        result_type: resultTypeForIndicator(indicator.code),
+      },
       // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。
       attribution: attributionForIndicator(indicator.code),
       favorable_direction: indicator.favorable_direction,

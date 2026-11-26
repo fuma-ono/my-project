@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   applyNotificationPlanLimits,
   calendarEarliestFrom,
@@ -6,14 +6,23 @@ import {
   capRowRange,
   checkCalendarRange,
   checkRateAlertCreate,
+  COMPARISON_TECHNICAL_MAX_EVENTS,
+  FREE_LIMITS_LIFTED,
   historyLimitFor,
+  isFreeLimitsEnforced,
   notificationPlanViolation,
   PLAN_LIMITS,
   planFromFeatures,
   planLimitsFor,
   rateAlertLimitFor,
+  setFreeLimitsEnforced,
   toEntitlementLimits,
 } from '../../src/domain/planLimits.js';
+
+// 1.0 は FREE の上限を外す(domain/planLimits.ts の FREE_LIMITS_LIFTED、既定)。このファイルは従来どおりの FREE の上限
+// (FREE_LIMITS_ENFORCED=true、1.1 で戻したときの動き)を確かめる。外した状態は planLimits.test.ts の別 describe で確かめる。
+beforeAll(() => setFreeLimitsEnforced(true));
+afterAll(() => setFreeLimitsEnforced(false));
 
 const NOW = new Date('2026-10-08T03:00:00Z');
 
@@ -67,38 +76,38 @@ describe('planFromFeatures', () => {
 
 describe('calendarEarliestFrom / calendarLatestTo', () => {
   it('FREE: 00:00 on the 1st of last month, in the given timezone', () => {
-    expect(calendarEarliestFrom('FREE', NOW, 'UTC').toISOString()).toBe('2026-09-01T00:00:00.000Z');
-    expect(calendarEarliestFrom('FREE', NOW, 'Asia/Tokyo').toISOString()).toBe('2026-08-31T15:00:00.000Z');
+    expect(calendarEarliestFrom('FREE', NOW, 'UTC')!.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+    expect(calendarEarliestFrom('FREE', NOW, 'Asia/Tokyo')!.toISOString()).toBe('2026-08-31T15:00:00.000Z');
     // EDT (UTC-4) on Sep 1st.
-    expect(calendarEarliestFrom('FREE', NOW, 'America/New_York').toISOString()).toBe('2026-09-01T04:00:00.000Z');
+    expect(calendarEarliestFrom('FREE', NOW, 'America/New_York')!.toISOString()).toBe('2026-09-01T04:00:00.000Z');
   });
 
   it('uses the month *in the timezone*, not in UTC', () => {
     // 2026-09-30T20:00Z is already October 1st in Tokyo → last month = September.
     const instant = new Date('2026-09-30T20:00:00Z');
-    expect(calendarEarliestFrom('FREE', instant, 'UTC').toISOString()).toBe('2026-08-01T00:00:00.000Z');
-    expect(calendarEarliestFrom('FREE', instant, 'Asia/Tokyo').toISOString()).toBe('2026-08-31T15:00:00.000Z');
+    expect(calendarEarliestFrom('FREE', instant, 'UTC')!.toISOString()).toBe('2026-08-01T00:00:00.000Z');
+    expect(calendarEarliestFrom('FREE', instant, 'Asia/Tokyo')!.toISOString()).toBe('2026-08-31T15:00:00.000Z');
   });
 
   it('FREE in January goes back to December 1st of the year before', () => {
-    expect(calendarEarliestFrom('FREE', new Date('2027-01-15T00:00:00Z'), 'UTC').toISOString()).toBe(
+    expect(calendarEarliestFrom('FREE', new Date('2027-01-15T00:00:00Z'), 'UTC')!.toISOString()).toBe(
       '2026-12-01T00:00:00.000Z',
     );
     // EST (UTC-5) in December.
-    expect(calendarEarliestFrom('FREE', new Date('2027-01-15T00:00:00Z'), 'America/New_York').toISOString()).toBe(
+    expect(calendarEarliestFrom('FREE', new Date('2027-01-15T00:00:00Z'), 'America/New_York')!.toISOString()).toBe(
       '2026-12-01T05:00:00.000Z',
     );
   });
 
   it('PRO: Jan 1st of (current year − 5)', () => {
-    expect(calendarEarliestFrom('PRO', NOW, 'UTC').toISOString()).toBe('2021-01-01T00:00:00.000Z');
-    expect(calendarEarliestFrom('PRO', NOW, 'Asia/Tokyo').toISOString()).toBe('2020-12-31T15:00:00.000Z');
+    expect(calendarEarliestFrom('PRO', NOW, 'UTC')!.toISOString()).toBe('2021-01-01T00:00:00.000Z');
+    expect(calendarEarliestFrom('PRO', NOW, 'Asia/Tokyo')!.toISOString()).toBe('2020-12-31T15:00:00.000Z');
   });
 
   it('PRO: the year is taken in the timezone (Dec 31st UTC is already Jan 1st in Tokyo)', () => {
     const instant = new Date('2026-12-31T16:00:00Z');
-    expect(calendarEarliestFrom('PRO', instant, 'UTC').toISOString()).toBe('2021-01-01T00:00:00.000Z');
-    expect(calendarEarliestFrom('PRO', instant, 'Asia/Tokyo').toISOString()).toBe('2021-12-31T15:00:00.000Z');
+    expect(calendarEarliestFrom('PRO', instant, 'UTC')!.toISOString()).toBe('2021-01-01T00:00:00.000Z');
+    expect(calendarEarliestFrom('PRO', instant, 'Asia/Tokyo')!.toISOString()).toBe('2021-12-31T15:00:00.000Z');
   });
 
   it('both plans: to may not exceed Jan 1st of (current year + 2)', () => {
@@ -265,5 +274,97 @@ describe('capRowRange', () => {
   it('is null for a page entirely past the cap', () => {
     expect(capRowRange({ from: 5, to: 9 }, 5)).toBeNull();
     expect(capRowRange({ from: 20, to: 39 }, 20)).toBeNull();
+  });
+});
+
+describe('FREE limits lifted (1.0 default, FREE_LIMITS_ENFORCED unset)', () => {
+  beforeAll(() => setFreeLimitsEnforced(false));
+  afterAll(() => setFreeLimitsEnforced(true));
+
+  it('FREE: every FREE limit is lifted (null = unbounded), only the unused rate-alert count and the future range remain', () => {
+    expect(planLimitsFor('FREE')).toEqual({
+      calendar_past: null,
+      calendar_future_years: 2,
+      favorites_max: null,
+      notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
+      notification_fx_pairs_max: null,
+      history_events_max: null,
+      rate_alerts_max: 1,
+      past_releases_max: null,
+    });
+  });
+
+  it('the restricted FREE definition (PLAN_LIMITS.FREE) is kept for 1.1, and PRO is unchanged', () => {
+    expect(PLAN_LIMITS.FREE).toMatchObject({
+      favorites_max: 3,
+      notification_importances: ['HIGH'],
+      notification_fx_pairs_max: 1,
+      history_events_max: 3,
+      past_releases_max: 3,
+      calendar_past: { unit: 'MONTHS', count: 1 },
+    });
+    expect(planLimitsFor('PRO')).toBe(PLAN_LIMITS.PRO);
+  });
+
+  it('the default (flag never set) is "lifted"', () => {
+    expect(isFreeLimitsEnforced()).toBe(false);
+  });
+
+  it('GET /entitlements limits for FREE: exact JSON', () => {
+    expect(toEntitlementLimits('FREE', NOW, 'UTC')).toEqual({
+      calendar_earliest_from: null,
+      calendar_latest_to: '2028-01-01T00:00:00Z',
+      favorites_max: null,
+      notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
+      notification_fx_pairs_max: null,
+      history_events_max: null,
+      past_releases_max: null,
+    });
+  });
+
+  it('calendar: FREE has no earliest bound; the future bound is unchanged', () => {
+    expect(calendarEarliestFrom('FREE', NOW, 'UTC')).toBeNull();
+    expect(
+      checkCalendarRange('FREE', new Date('2010-01-01T00:00:00Z'), new Date('2010-02-01T00:00:00Z'), NOW, 'UTC'),
+    ).toEqual({
+      kind: 'OK',
+    });
+    expect(
+      checkCalendarRange('FREE', new Date('2027-12-01T00:00:00Z'), new Date('2028-01-02T00:00:00Z'), NOW, 'UTC').kind,
+    ).toBe('OUT_OF_RANGE');
+  });
+
+  it('history_limit: FREE has no fixed cap (max_for_plan null)', () => {
+    expect(historyLimitFor('FREE', 150)).toEqual({ applied: 150, max_for_plan: null, pro_max: 20 });
+  });
+
+  it('PATCH /settings: FREE may pick all importances and all pairs (null) or many pairs', () => {
+    expect(notificationPlanViolation('FREE', { importances: ['HIGH', 'MEDIUM', 'LOW'] })).toBeNull();
+    expect(notificationPlanViolation('FREE', { fx_pairs: null })).toBeNull();
+    expect(notificationPlanViolation('FREE', { fx_pairs: ['USDJPY', 'EURJPY', 'GBPJPY'] })).toBeNull();
+  });
+
+  it('notifications/upcoming: stored importances and pairs are kept for FREE', () => {
+    expect(
+      applyNotificationPlanLimits('FREE', { importances: ['MEDIUM', 'LOW'], fxPairSymbols: ['USDJPY', 'EURJPY'] }),
+    ).toEqual({
+      importances: ['MEDIUM', 'LOW'],
+      fxPairSymbols: ['USDJPY', 'EURJPY'],
+    });
+    expect(applyNotificationPlanLimits('FREE', { importances: ['HIGH'], fxPairSymbols: null })).toEqual({
+      importances: ['HIGH'],
+      fxPairSymbols: null,
+    });
+  });
+
+  it('FREE_LIMITS_ENFORCED=true restores the restricted limits, false lifts them again', () => {
+    setFreeLimitsEnforced(true);
+    expect(planLimitsFor('FREE')).toBe(PLAN_LIMITS.FREE);
+    setFreeLimitsEnforced(false);
+    expect(planLimitsFor('FREE')).toBe(FREE_LIMITS_LIFTED);
+  });
+
+  it('the technical comparison window is finite', () => {
+    expect(COMPARISON_TECHNICAL_MAX_EVENTS).toBeGreaterThan(100);
   });
 });

@@ -198,3 +198,25 @@ enum HomeRefreshNoticeText {
         }
     }
 }
+
+/// ホームの「次の発表まで」の1行(価格フラグのOFF/ONどちらでも出す)。表示に使う値だけを決める純粋な処理。
+enum HomeNextRelease {
+    /// 次に来る発表。予定(SCHEDULED)で、時刻がちょうど分かり(EXACT)、`now`より後のうち一番早いもの。
+    /// 日付だけ・おおよその時刻の発表は、残り時間を言うと誤解を招くので選ばない。無ければnil。
+    static func pick(from events: [HomeEventSummary], now: Date) -> HomeEventSummary? {
+        var best: HomeEventSummary?
+        for event in events {
+            guard event.status == .scheduled, event.releaseDatetimePrecision == .exact else { continue }
+            guard event.releaseDatetime > now else { continue }
+            if let current = best, current.releaseDatetime <= event.releaseDatetime { continue }
+            best = event
+        }
+        return best
+    }
+
+    /// 「次の発表まで 2時間15分」。発表の時刻を過ぎていればnil(負の残り時間は出さない)。
+    static func countdownText(to date: Date, now: Date) -> String? {
+        guard let remaining = ValueFormat.remainingDurationText(to: date, from: now) else { return nil }
+        return "次の発表まで \(remaining)"
+    }
+}

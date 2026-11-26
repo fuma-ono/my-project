@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Env } from './config/env.js';
+import { setFreeLimitsEnforced } from './domain/planLimits.js';
 import { createGitHubBugIssueCreator, type BugIssueCreator } from './integrations/githubIssues.js';
 import { createQualityReader, type QualityReader } from './ingestion/quality/reader.js';
 import { registerErrorHandler } from './plugins/errorHandler.js';
@@ -36,6 +37,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
 
   app.decorate('supabase', options.supabase);
   app.decorate('env', options.env);
+  // FREE の上限を適用するか(既定 false = 1.0 は外す)。planLimitsFor が見る。
+  setFreeLimitsEnforced(options.env.FREE_LIMITS_ENFORCED);
   app.decorate('appleFetch', options.appleFetch);
   app.decorate('signedDataVerifier', options.signedDataVerifier ?? createSignedDataVerifier(APPLE_ROOT_CA_G3_PEM));
   app.decorate(

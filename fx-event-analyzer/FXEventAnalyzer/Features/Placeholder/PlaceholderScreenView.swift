@@ -14,6 +14,24 @@ struct PlaceholderScreenView: View {
     var detail: String?
 
     var body: some View {
+        #if DEBUG
+        debugBody
+        #else
+        // リリースでは「仮画面」の文言を出さない(到達できない想定の経路の保険)。
+        VStack(spacing: 14) {
+            Text("この画面は現在ご利用いただけません。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+        #endif
+    }
+
+    #if DEBUG
+    private var debugBody: some View {
         VStack(spacing: 14) {
             Spacer()
             Image(systemName: "hammer.fill")
@@ -43,6 +61,7 @@ struct PlaceholderScreenView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
     }
+    #endif
 }
 
 /// `SettingsSubRoute`(SCR-016〜024)を解決する。`AppRouteDestinationView`

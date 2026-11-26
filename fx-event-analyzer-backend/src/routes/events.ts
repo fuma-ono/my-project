@@ -16,6 +16,7 @@ import { isPolicyRateLockedForPlan } from '../authorization/policyRateAccess.js'
 import {
   countRevisions,
   getEventById,
+  getEventMeetingRow,
   getLatestExplanation,
   getFomcPolicyDecision,
   getReleaseSnapshot,
@@ -56,6 +57,7 @@ import {
   type EconomicEventDbStatus,
   type ReleaseDatetimePrecision,
 } from '../domain/dataQuality.js';
+import { buildEventMeeting, isMeetingProvider, type EventMeeting } from '../domain/meetingDisplay.js';
 import { effectiveIsProvisional } from '../domain/provisional.js';
 import { resolveRevisionStatus } from '../domain/revisionStatus.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
@@ -89,6 +91,25 @@ const POLICY_RATE_INDICATOR_CODE = 'US_FOMC';
  * 確認)を notice に入れる(設計書 ca-cpi-detailed-design.md §16.5)。ロック中でも出す(値ではない)。不正なら月なしの基本形で、
  * ATTRIBUTION_REFERENCE_PERIOD_INVALID をログに残す(値は出さない)。ほかの指標は従来どおり。
  */
+/**
+ * 日銀・ECB の会合の期間(event.meeting)。対象の provider だけ economic_event_meetings を読む。読めない・行が無い・不正なら
+ * null(キーごと外す。古い端末も新しい端末も、これが無くても詳細を開ける)。値ではないのでロックしても隠さない。
+ */
+export async function eventMeeting(app: FastifyInstance, event: EventRow): Promise<EventMeeting | null> {
+  if (!isMeetingProvider(event.provider)) return null;
+  try {
+    return buildEventMeeting(event.provider, await getEventMeetingRow(app.supabase, event.id));
+  } catch (error) {
+    app.log.warn({ err: error, event_id: event.id }, 'EVENT_MEETING_READ_FAILED');
+    return null;
+  }
+}
+
+async function eventMeetingField(app: FastifyInstance, event: EventRow): Promise<{ meeting?: EventMeeting }> {
+  const meeting = await eventMeeting(app, event);
+  return meeting ? { meeting } : {};
+}
+
 export async function eventAttribution(app: FastifyInstance, event: EventRow): Promise<Attribution | null> {
   if (!isCaCoreCpiIndicator(event.indicator_code)) return attributionForIndicator(event.indicator_code);
   const snapshotVerificationSource = await getSnapshotVerificationSource(app.supabase, event.id);
@@ -134,6 +155,7 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       // v1.47: 値なので、ロックしたら隠す。FOMC の会合は RELEASED にならないので、RELEASED のロックでは起きないが、
       // 過去の会合の政策金利は FREE には直近 3 回だけ(authorization/policyRateAccess.ts。HQ 指示 2026-11-19)で、その外の会合がここに来る。
       policy_rate: null,
+      ...(await eventMeetingField(app, event)),
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -260,6 +282,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         value_decimals: valueDecimalsForIndicator(event.indicator_code),
         // v1.47: FOMC の誘導目標レンジ(下限・上限は別々の値)。まだ記録が無い会合・ほかの指標は null。
         policy_rate: policyRate,
+        ...(await eventMeetingField(app, event)),
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,
