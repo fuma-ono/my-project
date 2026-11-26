@@ -104,7 +104,9 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
 
       const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
       return {
-        data: rows.map((row) => withResolvedSpeakerPhoto(applySpeechTextPolicy(row, app.env.SPEECH_TEXT_EXPOSED), baseUrl)),
+        data: rows.map((row) =>
+          withResolvedSpeakerPhoto(applySpeechTextPolicy(row, app.env.SPEECH_TEXT_EXPOSED), baseUrl),
+        ),
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
     }),
