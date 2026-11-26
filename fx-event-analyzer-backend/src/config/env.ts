@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parsePriceFeaturesEnabled } from './priceFeatures.js';
+import { parseTechnicalAnalysisEnabled } from './technicalAnalysis.js';
 import { parseSpeechTextExposed } from './speechText.js';
 
 /** An optional variable, where an empty value (`NAME=` in .env) also counts as unset. */
@@ -47,6 +48,9 @@ const envSchema = z.object({
   // 価格由来の機能(価格反応・チャート・pips・major_fx・レートアラート)。'true' のときだけ有効、既定 false
   // (オーナー決定 2026-11-24。config/priceFeatures.ts)。テストは Env のこの値を差し替える。
   PRICE_FEATURES_ENABLED: z.string().optional().transform(parsePriceFeaturesEnabled),
+  // テクニカル分析 API(GET /fx-pairs/{id}/technical)。'true' のときだけ有効、既定 false。PRICE_FEATURES_ENABLED も true が前提で、
+  // さらにデータ源の権利の台帳が確認済みでないと閉じたまま(config/technicalAnalysis.ts)。
+  TECHNICAL_ANALYSIS_ENABLED: z.string().optional().transform(parseTechnicalAnalysisEnabled),
   // 購入導線を出すか(iOS が見て、購入導線と「PRO で…」の文言を隠す)。'true' のときだけ有効、既定 false。バックエンドの挙動(locked / required_plan /
   // PLAN_LIMIT_EXCEEDED / POST /subscription/verify)は、この値で変えない(古いビルドとの互換)。GET /entitlements の purchases_enabled。
   // 要人発言の本文由来のテキスト(要約・原文抜粋・body_status など)を返すか。'true' のときだけ有効、既定 false

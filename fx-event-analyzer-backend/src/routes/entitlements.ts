@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { listActiveFeatureCodes } from '../authorization/entitlements.js';
 import { priceFeaturesEnabled } from '../authorization/priceFeatures.js';
+import { technicalAnalysisAvailable } from '../authorization/technicalAnalysis.js';
 import { planFromFeatures, toEntitlementLimits } from '../domain/planLimits.js';
 import { entitlementsQuerySchema } from '../schemas/entitlements.js';
 
@@ -24,6 +25,9 @@ export function registerEntitlementsRoutes(app: FastifyInstance): void {
       price_features_enabled: priceFeaturesEnabled(app),
       // purchases_enabled: 購入導線のフラグ(PURCHASES_ENABLED、既定 false)。表示の可否を iOS に伝えるだけで、API の挙動は変えない。
       purchases_enabled: app.env.PURCHASES_ENABLED,
+      // technical_analysis_enabled: GET /fx-pairs/{id}/technical が 200 を返せるか(TECHNICAL_ANALYSIS_ENABLED と PRICE_FEATURES_ENABLED が
+      // 両方 true で、データ源の権利の台帳が確認済み)。既定 false。プラン制限は付けない(1.0 は無料のみ)。
+      technical_analysis_enabled: technicalAnalysisAvailable(app),
     };
   });
 }

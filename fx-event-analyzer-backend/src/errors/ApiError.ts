@@ -20,7 +20,8 @@ export type ApiErrorCode =
   | 'SPEAKER_NOT_FOUND'
   | 'SUBSCRIPTION_REQUIRED'
   | 'FEATURE_NOT_ENTITLED'
-  | 'PLAN_LIMIT_EXCEEDED';
+  | 'PLAN_LIMIT_EXCEEDED'
+  | 'DATA_RIGHTS_UNCONFIRMED';
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   UNAUTHORIZED: 401,
@@ -39,6 +40,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   SUBSCRIPTION_REQUIRED: 403,
   FEATURE_NOT_ENTITLED: 403,
   PLAN_LIMIT_EXCEEDED: 403,
+  DATA_RIGHTS_UNCONFIRMED: 403,
 };
 
 /** Thrown anywhere in the request lifecycle; the global error handler

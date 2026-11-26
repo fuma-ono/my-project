@@ -4,6 +4,8 @@ import type { Env } from './config/env.js';
 import { setFreeLimitsEnforced } from './domain/planLimits.js';
 import { createGitHubBugIssueCreator, type BugIssueCreator } from './integrations/githubIssues.js';
 import { createQualityReader, type QualityReader } from './ingestion/quality/reader.js';
+import { TECHNICAL_RIGHTS_LEDGER } from './domain/technical/rightsRegistry.js';
+import type { RightsLedgerEntry } from './domain/technical/rightsLedger.js';
 import { registerErrorHandler } from './plugins/errorHandler.js';
 import { registerApiRoutes } from './routes/api.js';
 import { registerQualityReportRoutes } from './routes/qualityReport.js';
@@ -28,6 +30,9 @@ export interface BuildAppOptions {
   /** GET /api/v1/quality-report (HQ判断 2026-10-17). Defaults to a real
    * QualityReader over `supabase`; tests pass a fake so no DB is needed. */
   qualityReader?: QualityReader;
+  /** Data rights ledger for GET /fx-pairs/{id}/technical. Defaults to the real registry (all 'unconfirmed');
+   * tests pass a confirmed fake ledger. */
+  technicalRightsLedger?: readonly RightsLedgerEntry[];
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -37,6 +42,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
 
   app.decorate('supabase', options.supabase);
   app.decorate('env', options.env);
+  app.decorate('technicalRightsLedger', options.technicalRightsLedger ?? TECHNICAL_RIGHTS_LEDGER);
   // FREE の上限を適用するか(既定 false = 1.0 は外す)。planLimitsFor が見る。
   setFreeLimitsEnforced(options.env.FREE_LIMITS_ENFORCED);
   app.decorate('appleFetch', options.appleFetch);
@@ -74,6 +80,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     supabase: SupabaseClient;
     env: Env;
+    technicalRightsLedger: readonly RightsLedgerEntry[];
     appleFetch: typeof fetch | undefined;
     signedDataVerifier: SignedDataVerifier;
     /** Resolves null when GITHUB_ISSUES_TOKEN / GITHUB_ISSUES_REPO are unset. */

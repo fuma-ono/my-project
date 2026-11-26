@@ -108,12 +108,14 @@ describe('GET /entitlements', () => {
       const body = response.json<Record<string, unknown>>();
       expect(body.price_features_enabled).toBe(enabled);
       expect(body.purchases_enabled).toBe(false);
+      expect(body.technical_analysis_enabled).toBe(false);
       expect(Object.keys(body).sort()).toEqual([
         'features',
         'limits',
         'plan',
         'price_features_enabled',
         'purchases_enabled',
+        'technical_analysis_enabled',
       ]);
     },
   );
