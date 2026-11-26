@@ -140,7 +140,12 @@ struct SettingsView: View {
     /// 1グループ目の行数。常にある行(アカウント情報・通知設定・表示・地域設定・起動診断)の4行に、
     /// 「プラン・購読管理」(購入フラグ)と「ホーム通貨ペア編集」(価格フラグ)を、出すときだけ足す。
     static func group1RowCount(purchasesEnabled: Bool, priceFeaturesEnabled: Bool) -> Int {
-        4 + (purchasesEnabled ? 1 : 0) + (priceFeaturesEnabled ? 1 : 0)
+        #if DEBUG
+        let fixedRows = 4
+        #else
+        let fixedRows = 3 // リリースでは起動診断の行が無い
+        #endif
+        return fixedRows + (purchasesEnabled ? 1 : 0) + (priceFeaturesEnabled ? 1 : 0)
     }
 
     static func group2Top(group1Rows: Int) -> CGFloat {
@@ -190,9 +195,12 @@ struct SettingsView: View {
                 // には無い行だが、HQから直接「設定画面に『起動診断』という
                 // 項目を追加する」と明示指示されたため追加。既存のデザイン
                 // (カード・行の見た目)はそのまま踏襲する。
+                // 2026-11-25: 開発者向けの画面のため、リリースビルド(App Store/TestFlight)では出さない。
+                #if DEBUG
                 NavigationLink(value: AppRoute.launchDiagnostics) {
                     rowLabel("stethoscope", "起動診断")
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: diagnosticsIndex))
+                #endif
 
                 let g2 = Self.group2Top(group1Rows: group1Rows)
                 groupBackground(topY: g2, rowCount: 4)

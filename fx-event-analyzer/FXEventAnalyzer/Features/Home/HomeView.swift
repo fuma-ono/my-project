@@ -89,7 +89,7 @@ struct HomeView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            loadingScaffold { LoadingView(caption: "読み込み中...") }
+            loadingScaffold { SlowLoadHintLoadingView() }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。実装が完了次第、ここに表示されます。") }
         // 価格フラグがfalseのときは、通貨ペアが空でも空状態にせず、他のカードを出し続ける。
