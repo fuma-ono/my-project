@@ -40,6 +40,24 @@ export interface OfficialScheduleEntry {
   releaseDate: string;
   /** 'HH:MM' — 公式ページの公表時刻。 */
   time: string;
+  /**
+   * 発表時刻の確かさ(省略 = 'EXACT')。公式ページに時刻が無い回(日銀・ECB の会合日程、mappings/centralBankSchedule.ts)は
+   * 'DATE_ONLY'(time は代わりの基準時刻で、確認した時刻ではない)。
+   */
+  precision?: 'EXACT' | 'DATE_ONLY';
+  /**
+   * 会合(複数日)の期間(日銀・ECB、mappings/centralBankSchedule.ts)。決定の公表日(releaseDate)とは別に
+   * economic_event_meetings(migration 20261125000003)へ入れる。省略 = 会合ではない(従来の表)。
+   */
+  meeting?: { startDate: string; endDate: string };
+  /** 公式にまだ確定していない日程なら true(FOMC と同じ is_provisional)。省略 = false。 */
+  provisional?: boolean;
+  /**
+   * true = 公式に中止になった回。DB に行があれば status を CANCELLED にする(行は消さない)。DB に行が無ければ何もしない。
+   * 日程が移った場合は、key を変えずに releaseDate(と meeting)を書き換える(同じ行が更新され、DB のトリガーが
+   * RESCHEDULED を記録する。新しい行は作らない)。
+   */
+  cancelled?: boolean;
   timeZone: string;
   sources: readonly string[];
   /** 'YYYY-MM-DD' 人が最後にこの行を公式ページと比べて確認した日。 */

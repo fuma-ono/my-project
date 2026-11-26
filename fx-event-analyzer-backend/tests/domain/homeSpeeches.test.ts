@@ -51,8 +51,8 @@ describe('homeSpeechesRange', () => {
 });
 
 describe('toHomeSpeechItem', () => {
-  it('matches the mock item shape, with a resolved photo URL and null reactions', () => {
-    expect(toHomeSpeechItem(speech(), BASE_URL)).toEqual({
+  it('matches the mock item shape, with a resolved photo URL and null reactions (text exposed)', () => {
+    expect(toHomeSpeechItem(speech(), BASE_URL, true)).toEqual({
       speech_id: '50000000-0000-0000-0000-000000000001',
       country_code: 'US',
       speaker_name: 'パウエルFRB理事',
@@ -79,12 +79,17 @@ describe('toHomeSpeechItem', () => {
         photo_url: null,
       },
     });
-    expect(toHomeSpeechItem(noSummary, BASE_URL)).toMatchObject({
+    expect(toHomeSpeechItem(noSummary, BASE_URL, true)).toMatchObject({
       headline: 'FOMC後の記者会見',
       speaker_name: '植田和男日本銀行総裁',
       speaker_photo_url: null,
     });
-    expect(toHomeSpeechItem(speech({ summary: '  ' }), BASE_URL).headline).toBe('FOMC後の記者会見');
+    expect(toHomeSpeechItem(speech({ summary: '  ' }), BASE_URL, true).headline).toBe('FOMC後の記者会見');
+  });
+
+  it('never puts the summary in headline unless SPEECH_TEXT_EXPOSED (default off → title)', () => {
+    expect(toHomeSpeechItem(speech(), BASE_URL).headline).toBe('FOMC後の記者会見');
+    expect(toHomeSpeechItem(speech(), BASE_URL, false).headline).toBe('FOMC後の記者会見');
   });
 });
 
