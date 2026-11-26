@@ -36,7 +36,7 @@ struct IndicatorDetailCard: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(V5P.cyan)
                         VStack(alignment: .leading, spacing: 2) {
-                            NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
+                            NotoText.text(Self.releaseLabel(next.releaseDatetime, showsTime: next.showsTime && !indicator.isScheduleOnly), size: 9.5).foregroundStyle(.white)
                             NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
                                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                                 .lineLimit(1)
@@ -48,7 +48,8 @@ struct IndicatorDetailCard: View {
                     }
                 }
             }
-            if let pair = comparisonPair ?? Self.valueOnlyPair(priceFeaturesEnabled: plan.priceFeaturesEnabled) {
+            // 結果の値が出ない指標(日銀・ECBの会合など)には、過去イベント比較の入口を出さない。
+            if indicator.hasResultValues, let pair = comparisonPair ?? Self.valueOnlyPair(priceFeaturesEnabled: plan.priceFeaturesEnabled) {
                 linkSection(title: "過去イベント比較", route: .historicalComparison(
                     indicatorId: indicator.id,
                     indicatorName: indicator.name,
@@ -212,13 +213,14 @@ struct IndicatorDetailCard: View {
     }
 
     /// 「2025/10/15(水) 21:30」。
-    @MainActor static func releaseLabel(_ date: Date) -> String {
+    @MainActor static func releaseLabel(_ date: Date, showsTime: Bool = true) -> String {
         let preferences = AppPreferences.shared
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = preferences.timeZone
         calendar.locale = Locale(identifier: "ja_JP")
         let weekday = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: date) - 1]
-        return "\(preferences.dateString(date))(\(weekday)) \(preferences.timeString(date))"
+        let dayText = "\(preferences.dateString(date))(\(weekday))"
+        return showsTime ? "\(dayText) \(preferences.timeString(date))" : dayText
     }
 
     private func linkRow(_ title: String, detail: String? = nil, value: AppRoute) -> some View {

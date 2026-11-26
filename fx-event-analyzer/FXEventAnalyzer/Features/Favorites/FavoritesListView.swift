@@ -70,8 +70,8 @@ struct FavoritesListView: View {
 
     private func route(for item: HomeFavoriteItem) -> AppRoute {
         switch item {
-        case .event(let id, _, _, _, _, _): return .eventDetail(id: id)
-        case .indicator(let id, _, _, _, _, _): return .indicatorDetail(id: id)
+        case .event(let id, _, _, _, _, _, _): return .eventDetail(id: id)
+        case .indicator(let id, _, _, _, _, _, _): return .indicatorDetail(id: id)
         case .fxPair: return .homeCurrencyPairEditor
         }
     }
@@ -95,16 +95,16 @@ struct FavoritesListView: View {
 
     @ViewBuilder private func row(_ item: HomeFavoriteItem) -> some View {
         switch item {
-        case let .event(_, countryCode, _, name, importance, releaseDatetime):
-            rowContent(label: "発表", date: releaseDatetime, countryCode: countryCode, name: name, importance: importance)
-        case let .indicator(_, countryCode, _, name, importance, nextReleaseDatetime):
-            rowContent(label: "次回", date: nextReleaseDatetime, countryCode: countryCode, name: name, importance: importance)
+        case let .event(_, countryCode, _, name, importance, releaseDatetime, precision):
+            rowContent(label: "発表", date: releaseDatetime, showsTime: precision?.showsTime ?? true, countryCode: countryCode, name: name, importance: importance)
+        case let .indicator(_, countryCode, _, name, importance, nextReleaseDatetime, precision):
+            rowContent(label: "次回", date: nextReleaseDatetime, showsTime: precision?.showsTime ?? true, countryCode: countryCode, name: name, importance: importance)
         case .fxPair:
             EmptyView()
         }
     }
 
-    private func rowContent(label: String, date: Date?, countryCode: String, name: String, importance: Importance) -> some View {
+    private func rowContent(label: String, date: Date?, showsTime: Bool, countryCode: String, name: String, importance: Importance) -> some View {
         let colors = HomeView.importanceBadgeColors(importance)
         return HStack(spacing: 5) {
             VStack(alignment: .leading, spacing: 0) {
@@ -112,7 +112,7 @@ struct FavoritesListView: View {
                     if let date {
                         NotoText.text(label, size: 7)
                         Text(Self.dateString(date))
-                        Text(Self.timeString(date))
+                        if showsTime { Text(Self.timeString(date)) }
                     } else {
                         NotoText.text("予定なし", size: 7)
                     }

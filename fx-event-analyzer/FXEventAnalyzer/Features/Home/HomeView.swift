@@ -826,7 +826,7 @@ struct HomeView: View {
             // APPROXIMATEでも前置詞を付けず、EXACTと同じ表示にする(列幅・
             // 国旗の位置は常に一定のまま)。イベント詳細(EventDetailCards.swift)
             // は列の余裕があるため「約」の表示を維持している。
-            Text(AppPreferences.shared.timeString(event.releaseDatetime))
+            Text(event.releaseDatetimePrecision.showsTime ? AppPreferences.shared.timeString(event.releaseDatetime) : "未定")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(-0.2)
                 .foregroundStyle(.white)
@@ -1240,10 +1240,10 @@ struct HomeView: View {
 
     @ViewBuilder private func favoriteGridCard(_ item: HomeFavoriteItem) -> some View {
         switch item {
-        case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime):
+        case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime, let releasePrecision):
             NavigationLink(value: AppRoute.eventDetail(id: id)) {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
-                    dateRow(releaseDatetime)
+                    dateRow(releaseDatetime, showsTime: releasePrecision?.showsTime ?? true)
                 } footer: {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
                 }
@@ -1255,11 +1255,11 @@ struct HomeView: View {
         // 同じ`/indicators/{id}/events?status=SCHEDULED`を追加で叩いて
         // 取得した実データで、架空の日時は表示しない(無ければ日付無しの
         // まま)。
-        case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime):
+        case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime, let nextReleasePrecision):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
                     if let nextReleaseDatetime {
-                        dateRow(nextReleaseDatetime)
+                        dateRow(nextReleaseDatetime, showsTime: nextReleasePrecision?.showsTime ?? true)
                     } else {
                         EmptyView()
                     }
@@ -1295,10 +1295,12 @@ struct HomeView: View {
     // 要望と逆行するため)。
     // HQ再指摘(2026-10-06)「日付と時刻の文字間隔が詰めすぎている」:
     // -1.0は詰めすぎだったため、-0.4まで緩めた。
-    @ViewBuilder private func dateRow(_ date: Date) -> some View {
+    @ViewBuilder private func dateRow(_ date: Date, showsTime: Bool) -> some View {
+        let shortDate = AppPreferences.shared.shortDateString(date)
+        let label = showsTime ? "\(shortDate) \(AppPreferences.shared.timeString(date))" : shortDate
         HStack(spacing: 3) {
             Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(Self.linkBlue)
-            Text("\(AppPreferences.shared.shortDateString(date)) \(AppPreferences.shared.timeString(date))").font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
+            Text(label).font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
         }
     }
 

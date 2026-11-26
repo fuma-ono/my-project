@@ -124,7 +124,9 @@ struct IndicatorReleasesView: View {
     }
 
     private func dateText(_ event: IndicatorEventSummary) -> some View {
-        NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7.5)
+        let date = AppPreferences.shared.dateString(event.releaseDatetime)
+        let label = event.showsTime ? "\(date) \(AppPreferences.shared.timeString(event.releaseDatetime))" : date
+        return NotoText.text(label, size: 7.5)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

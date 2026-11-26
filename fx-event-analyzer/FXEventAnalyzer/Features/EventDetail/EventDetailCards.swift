@@ -69,7 +69,10 @@ struct EventDetailCards: View {
             if plan.priceFeaturesEnabled {
                 reactionTable
             }
-            comparisonLink
+            // 日銀・ECBの会合(値が無い予定)では、過去イベント比較・戦略分析の入口を出さない。
+            if response.event.meeting == nil {
+                comparisonLink
+            }
             nextReleaseFooter
             attributionNotice
             disclaimerFooter
@@ -156,7 +159,7 @@ struct EventDetailCards: View {
                     // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認
                     // されない表示」: Eurostat等、発表の正確な時刻が不明な指標は
                     // 「約」を前置。
-                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision))", size: 8)
+                    NotoText.text(Self.releaseDateTimeText(event), size: 8)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                 }
@@ -219,7 +222,9 @@ struct EventDetailCards: View {
     /// (従来1指標しか値が無い画面で「前年比」とだけ表示すると、YoY%が本来の
     /// 値ではない指標(NFP等)では誤った説明になるため)。
     @ViewBuilder private var results: some View {
-        if isLocked {
+        if let meeting = response.event.meeting {
+            meetingResults(meeting)
+        } else if isLocked {
             lockedResults
         } else if let policyRate = response.event.policyRate {
             policyRateResults(policyRate)
@@ -244,6 +249,45 @@ struct EventDetailCards: View {
                 .accessibilityIdentifier("eventDetailPolicyRateRange")
             NotoText.text("適用日 \(policyRate.effectiveDateText)", size: 7)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .frame(minHeight: Self.summaryCardMinHeight)
+        .frame(width: 214)
+        .background(GradientCardBackground())
+    }
+
+    /// 見出しの日時。日付だけ・不明の発表(日銀・ECBの会合など)は時刻を出さず日付だけ。
+    @MainActor static func releaseDateTimeText(_ event: EventDetailEvent) -> String {
+        let date = AppPreferences.shared.dateString(event.releaseDatetime)
+        // 会合(`meeting`)の発表時刻は未確認なので、精度の値に関わらず日付だけ。
+        guard event.releaseDatetimePrecision.showsTime, event.meeting == nil else { return date }
+        let time = AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision)
+        return "\(date) \(time)"
+    }
+
+    /// 日銀・ECBの金融政策会合(api-design v1.54): 結果・予想・前回の代わりに、会合の期間・出所・公式ページへのリンクだけ。
+    /// 時刻・政策金利の値・予想・結果は出さない(無い)。文言は事実だけで、相場や売買についての記述はしない。カードの大きさ・背景は結果のカードと同じ。
+    @ViewBuilder private func meetingResults(_ meeting: EventMeeting) -> some View {
+        VStack(spacing: 2) {
+            if let period = meeting.periodText {
+                NotoText.text("会合: \(period)", size: 10)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("eventDetailMeetingPeriod")
+            }
+            NotoText.text("出所: \(meeting.sourceName)", size: 7)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(1)
+                .accessibilityIdentifier("eventDetailMeetingSource")
+            if let url = meeting.officialURL {
+                Link(destination: url) {
+                    NotoText.text("公式サイトで日程を見る", size: 7)
+                        .foregroundStyle(V5P.cyan)
+                }
+                .accessibilityIdentifier("eventDetailMeetingLink")
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 2)
@@ -696,7 +740,7 @@ struct EventDetailCards: View {
         switch nextReleaseState {
         case .available(let nextRelease):
             nextReleaseFooterCard {
-                NotoText.text(IndicatorDetailCard.releaseLabel(nextRelease), size: 8.5).foregroundStyle(.white)
+                NotoText.text(IndicatorDetailCard.releaseLabel(nextRelease, showsTime: response.event.releaseDatetimePrecision.showsTime && response.event.meeting == nil), size: 8.5).foregroundStyle(.white)
             }
         case .loading:
             // HQ指摘(2026-10-28)「次回発表の表示にラグがある」対応: 日時が
