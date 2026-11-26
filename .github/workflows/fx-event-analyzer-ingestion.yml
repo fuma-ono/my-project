@@ -57,7 +57,8 @@ name: FX Event Analyzer - Data ingestion (dev)
 #   - 日銀・ECB の金融政策会合の日程(手動実行のみ、target=boj-ecb-schedule-dry-run / boj-ecb-schedule): HQ指示 2026-11-25。人が確認した表
 #     (ingestion/mappings/centralBankSchedule.ts)から BOJ_RATE・EU_ECB_RATE の予定を economic_events に入れる(外部APIは呼ばない。値は入れない。
 #     発表時刻は公式ページに無いので DATE_ONLY)。dry-run は DB に書かない(ingestion_logs にも書かない)。migration 20261125000002(EU_ECB_RATE の指標)・20261125000003(会合の期間と出典の表)が前提。
-#     定期実行には入れていない# 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
+#     定期実行には入れていない
+# 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
   schedule:
