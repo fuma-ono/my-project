@@ -24,6 +24,18 @@ export interface StoredEvent {
   data_status: 'PENDING' | 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE';
 }
 
+/** 会合(複数日)の期間と出典(migration 20261125000003 の economic_event_meetings)。値は持たない。 */
+export interface NewEventMeeting {
+  event_id: string;
+  /** 'YYYY-MM-DD'(会合の初日・最終日。現地の日付) */
+  meeting_start_date: string;
+  meeting_end_date: string;
+  /** 公式ページの URL(https) */
+  source_url: string;
+  /** 'YYYY-MM-DD' 人が公式ページと最後に比べた日 */
+  checked_at: string;
+}
+
 export interface NewEvent {
   /** economic_events.is_provisional (migration 20261022000002, DB default false). Only the FOMC schedule sets it. */
   is_provisional?: boolean;
@@ -310,6 +322,8 @@ export interface IngestionStore {
   listEventsByProvider(provider: string): Promise<ProviderEventRow[]>;
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
   insertEvent(event: NewEvent): Promise<StoredEvent>;
+  /** 会合の期間・出典を event_id で upsert する(同じ行を更新。日銀・ECB の日程表だけ)。 */
+  upsertEventMeeting(meeting: NewEventMeeting): Promise<void>;
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
   /**
    * FOMC の政策金利を記録した会合を RELEASED + AVAILABLE にする(設計 S1)。**status が SCHEDULED の行だけ**を変える

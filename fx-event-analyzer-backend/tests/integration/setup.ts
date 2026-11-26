@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
@@ -38,6 +39,8 @@ export function loadIntegrationEnv(): IntegrationEnv | null {
       PRICE_FEATURES_ENABLED: 'true',
       // 既存の結合テストは FREE の上限(過去の発表・比較・通知の重要度・お気に入り)を検証するので、既定で適用する。
       FREE_LIMITS_ENFORCED: 'true',
+      // 要約・本文を返す経路を検証するので、結合テストでは SPEECH_TEXT_EXPOSED を有効にする(既定は false。無効の挙動は単体テストが検証)。
+      SPEECH_TEXT_EXPOSED: 'true',
     }),
     anonKey: SUPABASE_ANON_KEY,
   };
@@ -114,7 +117,9 @@ async function createUserWithRetry(
  * signature/claims shape production tokens have. */
 export async function createTestUser(ctx: IntegrationContext): Promise<TestUser> {
   userCounter += 1;
-  const email = `fx-backend-test-${Date.now()}-${userCounter}@example.com`;
+  // 並列に動く別のテストファイルは、それぞれ userCounter が 0 から始まる。時刻(ミリ秒)と番号だけでは同じメールになりうる
+  // (CI で 'A user with this email address has already been registered' が出た)。UUID で重複を避ける。
+  const email = `fx-backend-test-${randomUUID()}-${userCounter}@example.com`;
   const password = 'Test-Password-1234!';
 
   const data = await createUserWithRetry(ctx, email, password);
