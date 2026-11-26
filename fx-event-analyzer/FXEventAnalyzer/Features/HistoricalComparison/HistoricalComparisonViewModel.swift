@@ -56,6 +56,9 @@ final class HistoricalComparisonViewModel: ObservableObject {
         var queryItems: [URLQueryItem] = []
         if !fxPairId.isEmpty { queryItems.append(URLQueryItem(name: "fx_pair_id", value: fxPairId)) }
         queryItems.append(URLQueryItem(name: "timeframe", value: selectedTimeframe))
+        // 固定の上限は無く、ページ(page / limit、最大100)で全件に届く。1ページ目に新しい方から最大100回分を取る
+        // (統計はBackendが保存済みの発表をまとめて数える)。
+        queryItems.append(URLQueryItem(name: "limit", value: "100"))
         let endpoint = Endpoint(
             path: "indicators/\(indicatorId)/comparison",
             queryItems: queryItems

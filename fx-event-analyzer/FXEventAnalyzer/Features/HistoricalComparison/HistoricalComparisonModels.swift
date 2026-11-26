@@ -16,15 +16,23 @@ struct ComparisonResponse: Decodable, Equatable {
     let advancedStatistics: AdvancedStatistics?
     let events: [ComparisonEventSummary]
     let meta: PaginationMeta
-    /// 比べた回数の上限(api-design v1.37、無料3回・プレミアム20回)。古いBackendではnil。
+    /// 比べた回数の上限(api-design v1.37)。1.0は無料も固定の上限なし。古いBackendではnil。
     var historyLimit: HistoryLimit? = nil
     /// 過去の発表の制限(api-design v1.33 §21・§28.2、無料プランは直近3回)。古いBackendではnil。
     var pastReleaseLimit: PastReleaseLimit? = nil
 
     struct HistoryLimit: Decodable, Equatable {
         let applied: Int
+        /// 固定の上限なし(`max_for_plan`がnull)のときは`Int.max`(`isLimited`はfalseになる)。
         let maxForPlan: Int
         let proMax: Int
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            applied = try container.decode(Int.self, forKey: .applied)
+            maxForPlan = try container.decodeIfPresent(Int.self, forKey: .maxForPlan) ?? Int.max
+            proMax = try container.decodeIfPresent(Int.self, forKey: .proMax) ?? Int.max
+        }
 
         enum CodingKeys: String, CodingKey {
             case applied

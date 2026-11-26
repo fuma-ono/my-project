@@ -75,7 +75,7 @@ struct IndicatorReleasesView: View {
                 if let values = Self.releaseValues(event) {
                     NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
                         HStack(spacing: 0) {
-                            dateText(event)
+                            dateAndSurprise(event)
                             number(values.actual).frame(width: 34, alignment: .trailing)
                             number(values.forecast).frame(width: 34, alignment: .trailing)
                             if event.isPreviousLocked {
@@ -131,6 +131,22 @@ struct IndicatorReleasesView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// 発表日の下に、結果と予想の差(「予想より上振れ(+0.2)」など)を小さく出す。結果と予想が
+    /// 両方あるときだけ。無ければ発表日だけ(今までの見た目)。
+    private func dateAndSurprise(_ event: IndicatorEventSummary) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            dateText(event)
+            if let text = Self.releaseSurpriseText(event) {
+                NotoText.text(text, size: 6)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var previousLockIcon: some View {
         Image(systemName: "lock.fill")
             .font(.system(size: 7, weight: .semibold))
@@ -143,6 +159,12 @@ struct IndicatorReleasesView: View {
             .font(.system(size: 8, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(.white)
+    }
+
+    /// 行に出す結果と予想の差の文。ロックされた発表・結果か予想が無い発表ではnil。
+    static func releaseSurpriseText(_ event: IndicatorEventSummary) -> String? {
+        guard !event.isLocked, event.actual != nil, event.forecast != nil else { return nil }
+        return ValueFormat.surpriseSummary(surprise: event.surprise, decimals: event.valueDecimals)
     }
 
     /// 行に出す結果・予想・前回の文字。無料プランで隠された発表(`isLocked`)ではnil

@@ -120,6 +120,8 @@ export interface ComparisonReactionRow {
   pips: number | null;
 }
 
+const REACTION_QUERY_CHUNK = 100;
+
 /** Only `data_status = AVAILABLE` rows — incomplete data is never mixed
  * into statistics (db-design.md §10). */
 export async function listAvailableReactionsForComparison(
@@ -128,16 +130,21 @@ export async function listAvailableReactionsForComparison(
   fxPairId: string,
   timeframes: string[],
 ): Promise<ComparisonReactionRow[]> {
-  if (eventIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from('event_price_reactions')
-    .select('event_id, timeframe, movement, pips')
-    .in('event_id', eventIds)
-    .eq('fx_pair_id', fxPairId)
-    .in('timeframe', timeframes)
-    .eq('data_status', 'AVAILABLE');
-  if (error) throw error;
-  return data ?? [];
+  const rows: ComparisonReactionRow[] = [];
+  // 固定の上限が無いとき(1.0 の FREE)は発表の数が多くなりうるので、URL・1 回のクエリの大きさを抑えるため、
+  // 100 件ずつに分けて読む(負荷対策。結果は同じ)。
+  for (let start = 0; start < eventIds.length; start += REACTION_QUERY_CHUNK) {
+    const { data, error } = await supabase
+      .from('event_price_reactions')
+      .select('event_id, timeframe, movement, pips')
+      .in('event_id', eventIds.slice(start, start + REACTION_QUERY_CHUNK))
+      .eq('fx_pair_id', fxPairId)
+      .in('timeframe', timeframes)
+      .eq('data_status', 'AVAILABLE');
+    if (error) throw error;
+    rows.push(...(data ?? []));
+  }
+  return rows;
 }
 
 /**

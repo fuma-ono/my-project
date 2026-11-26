@@ -1795,6 +1795,8 @@ function speechesFixture() {
       speaker: SPEAKERS.powell,
       title: '地区連銀総裁との意見交換会',
       summary: null,
+      // 1.0の最小表示(オーナー決定 2026-11-25): 要約が無い発言は公式の出典リンクだけを出す。
+      source_url: 'https://www.federalreserve.gov/newsevents/speech/example.htm',
       statement_datetime: isoSecondsPlusMinutes(-3 * 24 * 60),
       importance: 'MEDIUM',
       status: 'DELIVERED',

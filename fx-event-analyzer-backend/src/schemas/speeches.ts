@@ -43,4 +43,7 @@ export const speakerParamsSchema = z.object({
 /** GET /speakers/{id}/comparison (api-design.md §14.10). fx_pair_id omitted = the speaker's first pair. */
 export const speakerComparisonQuerySchema = z.object({
   fx_pair_id: z.guid().optional(),
+  /** 発言を新しい順にページで取る(既定 20 件、最大 100)。固定の上限は無く、ページで全件に届く。 */
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
 });

@@ -522,12 +522,31 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.fxPairsLabel, "すべての通貨ペア")
     }
 
-    func testFreePlanAllowsOnlyHighAndOnePair() async {
+    func testFreePlanLiftedAllowsAllImportancesAndPairs() async {
         let apiClient = MockAPIClient()
         apiClient.result = .success(settings)
         apiClient.results["fx-pairs"] = .success(FXPairListResponse(data: [FXPairResponse(symbol: "USDJPY"), FXPairResponse(symbol: "GBPJPY")]))
         let free = PlanStore()
         free.set(plan: .free, limits: .free())
+        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: MockScheduler(), debounce: .milliseconds(30), store: store, plan: free)
+        viewModel.load()
+        await waitUntil { viewModel.loadState == .loaded && viewModel.fxPairSymbols == ["USDJPY", "GBPJPY"] }
+
+        // 1.0: 重要度・通貨ペア数の上限は外れている(鍵なし)。
+        XCTAssertFalse(viewModel.isLocked(importance: "HIGH"))
+        XCTAssertFalse(viewModel.isLocked(importance: "MEDIUM"))
+        XCTAssertFalse(viewModel.isLocked(importance: "LOW"))
+        XCTAssertFalse(viewModel.isAllPairsLocked)
+        viewModel.tapFxPair("GBPJPY")
+        XCTAssertNotNil(viewModel.settings.fxPairs)
+    }
+
+    func testFreePlanAllowsOnlyHighAndOnePair() async {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(settings)
+        apiClient.results["fx-pairs"] = .success(FXPairListResponse(data: [FXPairResponse(symbol: "USDJPY"), FXPairResponse(symbol: "GBPJPY")]))
+        let free = PlanStore()
+        free.set(plan: .free, limits: .freeRestricted())
         let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: MockScheduler(), debounce: .milliseconds(30), store: store, plan: free)
         viewModel.load()
         await waitUntil { viewModel.loadState == .loaded && viewModel.fxPairSymbols == ["USDJPY", "GBPJPY"] }

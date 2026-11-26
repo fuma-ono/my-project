@@ -261,4 +261,20 @@ final class SpeechDetailPrecisionTests: XCTestCase {
         XCTAssertEqual(SpeechDetailCards.reactionEmptyMessage(response(status: .delivered, precision: .publicationTime)), "ポッドキャストのため値動きの分析はありません。")
         XCTAssertEqual(SpeechDetailCards.reactionEmptyMessage(response(status: .delivered, precision: .exact)), "値動きのデータがありません。")
     }
+
+    /// 1.0の最小表示(オーナー決定 2026-11-25): Backendは要約を隠すとき summary:null・summary_status/body_status を
+    /// 無効値で返す。iOSは未知の項目を無視してデコードでき、source_urlは公式リンクとして読める。
+    func testDecodesMinimalSpeechWithSourceUrlAndHiddenText() throws {
+        let json = Data("""
+        {"speech_id":"s4","speaker":{"speaker_id":"sp4","name":"ジェローム・パウエル","title":"議長","organization":"FRB","country_code":"US","currency_code":"USD"},
+         "title":"Press Conference","summary":null,"summary_status":"NOT_AVAILABLE","summary_method":null,"body_status":"NOT_APPLICABLE",
+         "statement_datetime":"2026-10-16T14:00:00Z","importance":"HIGH","status":"DELIVERED",
+         "source_url":"https://www.federalreserve.gov/newsevents/speech/x.htm"}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(SpeechDetailResponse.self, from: json)
+        XCTAssertNil(response.summary)
+        XCTAssertEqual(response.sourceUrl, "https://www.federalreserve.gov/newsevents/speech/x.htm")
+    }
 }
