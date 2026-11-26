@@ -78,7 +78,7 @@ struct FavoritesListView: View {
 
     private func importance(of item: HomeFavoriteItem) -> Importance {
         switch item {
-        case .event(_, _, _, _, let importance, _), .indicator(_, _, _, _, let importance, _): return importance
+        case .event(_, _, _, _, let importance, _, _), .indicator(_, _, _, _, let importance, _, _): return importance
         case .fxPair: return .low
         }
     }
