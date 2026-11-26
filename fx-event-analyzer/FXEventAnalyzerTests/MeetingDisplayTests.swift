@@ -43,13 +43,20 @@ final class MeetingDisplayTests: XCTestCase {
         let summary = try decoder().decode(IndicatorSummary.self, from: Data(withFields.utf8))
         XCTAssertFalse(summary.nextReleaseShowsTime)
         XCTAssertFalse(summary.hasResultValues)
-        let old = try decoder().decode(IndicatorSummary.self, from: Data((base + "}").utf8))
+        // 古いバックエンド・未知の値の確認は、予定だけの指標(BOJ_RATE / EU_ECB_RATE)ではない指標コードで行う
+        // (予定だけの指標は、精度が無くても時刻なし・結果なしにする安全側の判定がある)。
+        let valueBase = base.replacingOccurrences(of: "BOJ_RATE", with: "US_CPI")
+        let old = try decoder().decode(IndicatorSummary.self, from: Data((valueBase + "}").utf8))
         XCTAssertTrue(old.nextReleaseShowsTime)
         XCTAssertTrue(old.hasResultValues)
-        let unknown = base + #","next_release_precision":"SOMETHING_NEW","result_type":"SOMETHING_NEW"}"#
+        let unknown = valueBase + #","next_release_precision":"SOMETHING_NEW","result_type":"SOMETHING_NEW"}"#
         let tolerant = try decoder().decode(IndicatorSummary.self, from: Data(unknown.utf8))
         XCTAssertTrue(tolerant.nextReleaseShowsTime)
         XCTAssertTrue(tolerant.hasResultValues)
+        // 予定だけの指標は、古いバックエンド(精度・結果の種類が無い)でも、時刻なし・結果なし。
+        let scheduleOnlyOld = try decoder().decode(IndicatorSummary.self, from: Data((base + "}").utf8))
+        XCTAssertFalse(scheduleOnlyOld.nextReleaseShowsTime)
+        XCTAssertFalse(scheduleOnlyOld.hasResultValues)
     }
 
     func testIndicatorEventSummaryReadsPrecision() throws {
