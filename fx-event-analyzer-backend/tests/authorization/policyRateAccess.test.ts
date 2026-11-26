@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   requireUnlockedEvent,
   requireUnlockedEventForPlan,
@@ -18,6 +18,12 @@ import {
 } from '../../src/authorization/policyRateAccess.js';
 import { ApiError } from '../../src/errors/ApiError.js';
 import { fakeSupabaseClient } from '../helpers/fakeSupabaseClient.js';
+import { setFreeLimitsEnforced } from '../../src/domain/planLimits.js';
+
+// 1.0 は FREE の上限を外す(domain/planLimits.ts の FREE_LIMITS_LIFTED、既定)。このファイルは従来どおりの FREE の上限
+// (FREE_LIMITS_ENFORCED=true、1.1 で戻したときの動き)を確かめる。外した状態は planLimits.test.ts の別 describe で確かめる。
+beforeAll(() => setFreeLimitsEnforced(true));
+afterAll(() => setFreeLimitsEnforced(false));
 
 const FOMC = { indicator_id: 'ind-fomc', indicator_code: POLICY_RATE_INDICATOR };
 const meeting = (n: number, indicator_id = 'ind-fomc') => ({
@@ -397,6 +403,20 @@ describe('runtime check of indicator_code is centralized: nothing slips through 
       await expect(requireUnlockedEvent(client, 'u-pro', event(1, POLICY_RATE_INDICATOR))).resolves.toEqual({
         previousLocked: false,
       });
+    });
+  });
+});
+
+describe('FREE limits lifted (1.0 default): FOMC policy rates follow past_releases_max', () => {
+  beforeAll(() => setFreeLimitsEnforced(false));
+  afterAll(() => setFreeLimitsEnforced(true));
+
+  it('FREE: no meeting is locked, even the oldest of many, and the DB is not read', async () => {
+    const client = world(8);
+    const oldest = { id: 'm1', indicator_id: 'ind-fomc', indicator_code: POLICY_RATE_INDICATOR };
+    expect(await isPolicyRateLockedForPlan(client, 'FREE', oldest)).toBe(false);
+    await expect(requireUnlockedEventForPlan(client, 'FREE', { ...oldest, status: 'SCHEDULED' })).resolves.toEqual({
+      previousLocked: false,
     });
   });
 });

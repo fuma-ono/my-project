@@ -46,7 +46,8 @@ struct FavoriteItemLoader {
                 // 表示名は全画面統一(HQ指示 2026-10-13)。
                 name: CountryFlag.indicatorDisplayText(response.event.indicatorName, countryCode: response.event.countryCode, displayName: response.event.displayName),
                 importance: response.event.importance,
-                releaseDatetime: response.event.releaseDatetime
+                releaseDatetime: response.event.releaseDatetime,
+                releasePrecision: response.event.releaseDatetimePrecision
             )
         } catch {
             return nil
@@ -65,13 +66,15 @@ struct FavoriteItemLoader {
                 )
             )
             let (response, scheduledResponse) = try await (detail, scheduled)
+            let nextEvent = NextReleaseQuery.next(in: scheduledResponse.data, after: now)
             return .indicator(
                 id: response.indicator.id,
                 countryCode: response.indicator.countryCode,
                 currencyCode: response.indicator.currencyCode,
                 name: CountryFlag.indicatorDisplayText(response.indicator.name, countryCode: response.indicator.countryCode, displayName: response.indicator.displayName),
                 importance: response.indicator.importance,
-                nextReleaseDatetime: NextReleaseQuery.next(in: scheduledResponse.data, after: now)?.releaseDatetime
+                nextReleaseDatetime: nextEvent?.releaseDatetime,
+                nextReleasePrecision: nextEvent?.precision
             )
         } catch {
             return nil

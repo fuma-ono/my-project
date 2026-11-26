@@ -16,7 +16,14 @@ struct AccountService {
 
     /// Physical deletion (§24.3, `204 No Content`). The App Store
     /// subscription is not cancelled by this — SCR-024 tells the user so.
-    func deleteAccount() async throws {
-        let _: EmptyResponse = try await apiClient.send(Endpoint(path: "account", method: .delete))
+    ///
+    /// `appleAuthorizationCode`はAppleログインのユーザーが削除時に再認証して得た
+    /// コードで、バックエンドがAppleのトークン失効に使う(保存はしない)。無ければ本文なし。
+    func deleteAccount(appleAuthorizationCode: String? = nil) async throws {
+        var body: Data? = nil
+        if let code = appleAuthorizationCode {
+            body = try JSONEncoder().encode(["apple_authorization_code": code])
+        }
+        let _: EmptyResponse = try await apiClient.send(Endpoint(path: "account", method: .delete, body: body))
     }
 }

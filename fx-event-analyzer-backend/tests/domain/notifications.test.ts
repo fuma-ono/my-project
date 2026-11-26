@@ -5,6 +5,7 @@ import {
   formatIsoSeconds,
   fxPairsForCurrency,
   isInQuietHours,
+  isNotificationEligible,
   localMinutesOfDay,
   MAX_UPCOMING_NOTIFICATIONS,
   NOTIFICATION_TIME_PATTERN,
@@ -418,5 +419,16 @@ describe('result_type on upcoming items (HQ指示 2026-10-27)', () => {
       minutes: 'NONE',
       'speech-1': null,
     });
+  });
+});
+
+describe('BOJ/ECB date-only meetings are never notified (no fake announcement time)', () => {
+  it('upcoming list, inbox and calendar updates all use isNotificationEligible, which needs an EXACT time', () => {
+    const boj = indicator({ id: 'boj', release_datetime_precision: 'DATE_ONLY', scheduled_at: '2026-10-06T03:00:00Z' });
+    const ecb = indicator({ id: 'ecb', release_datetime_precision: 'DATE_ONLY', scheduled_at: '2026-10-07T13:15:00Z' });
+    expect(buildUpcomingNotifications(prefs, [boj, ecb], window)).toEqual([]);
+    for (const candidate of [boj, ecb]) {
+      expect(isNotificationEligible(candidate, prefs, ['SCHEDULED', 'RELEASED', 'DELIVERED', 'CANCELLED'])).toBe(false);
+    }
   });
 });

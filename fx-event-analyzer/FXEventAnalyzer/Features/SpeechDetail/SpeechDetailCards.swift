@@ -27,6 +27,8 @@ struct SpeechDetailCards: View {
     /// HQレビュー結果(2026-11-12「要人発言詳細 追加改善」承認分): 長い原文抜粋を初期状態で
     /// 折りたたむ(「続きを読む／閉じる」)。既定は折りたたみ(false)。
     @State private var isExcerptExpanded = false
+    /// 価格由来の表示(通貨ペア別の値動き)を出すか(`price_features_enabled`、1.0の既定はfalse)。
+    @ObservedObject private var plan = PlanStore.shared
 
     var body: some View {
         // HQ指示(2026-10-12、2回目)「発言部分の枠もまだ上に上げて」:
@@ -34,10 +36,15 @@ struct SpeechDetailCards: View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                statementCard
+                if hasStatementCard {
+                    statementCard
+                }
+                sourceLink
                 attributionNotice
             }
-            reactionTable
+            if plan.priceFeaturesEnabled {
+                reactionTable
+            }
             comparisonLink
         }
         .frame(width: 214)
@@ -144,6 +151,27 @@ struct SpeechDetailCards: View {
     /// 3. イベント詳細画面とのY座標の一致はもう優先しない方針になった
     ///    ため、`EventDetailCards.summaryCardMinHeight`への強制(旧実装)
     ///    を外し、折りたたみ時はカードが自然な高さまで縮むようにした。
+    /// オーナー決定(2026-11-25、1.0の最小表示): 要約・原文抜粋はBackendが返したときだけ出す。
+    /// 発言済みで`summary`が無いとき(1.0の既定)は空のカードも「要約準備中」のような文言も出さない。
+    /// 発言前・中止の状態文は残す。
+    private var hasStatementCard: Bool {
+        response.status == .scheduled || response.status == .cancelled || response.summary != nil
+    }
+
+    /// 公式の発言ページへのリンク(中立な文言)。httpsのURLだけ。
+    @ViewBuilder private var sourceLink: some View {
+        if let raw = response.sourceUrl, let url = URL(string: raw), url.scheme == "https" {
+            Link(destination: url) {
+                NotoText.text("公式サイトで原文を見る", size: 9)
+                    .foregroundStyle(V5P.cyan)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .frame(width: 214, alignment: .leading)
+            .accessibilityIdentifier("speechDetailSourceLink")
+        }
+    }
+
     @ViewBuilder private var statementCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             if response.status == .scheduled {
@@ -167,8 +195,6 @@ struct SpeechDetailCards: View {
                     .padding(.top, 2)
                     .accessibilityIdentifier("speechDetailExcerptToggle")
                 }
-            } else {
-                NotoText.text("要約はまだ用意されていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:

@@ -14,6 +14,9 @@ struct IndicatorDetailCard: View {
     var attribution: Attribution? = nil
     let isFavorite: Bool
     let onToggleFavorite: () -> Void
+    /// 価格フラグ(`price_features_enabled`)。falseのとき(1.0の既定)は、通貨ペアなし(値のみ)で過去イベント比較を開き、
+    /// 為替・値動きに触れない文言にする。
+    @ObservedObject private var plan = PlanStore.shared
 
     var body: some View {
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
@@ -33,7 +36,7 @@ struct IndicatorDetailCard: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(V5P.cyan)
                         VStack(alignment: .leading, spacing: 2) {
-                            NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
+                            NotoText.text(Self.releaseLabel(next.releaseDatetime, showsTime: next.showsTime && !indicator.isScheduleOnly), size: 9.5).foregroundStyle(.white)
                             NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
                                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                                 .lineLimit(1)
@@ -45,20 +48,21 @@ struct IndicatorDetailCard: View {
                     }
                 }
             }
-            if let pair = comparisonPair {
+            // 結果の値が出ない指標(日銀・ECBの会合など)には、過去イベント比較の入口を出さない。
+            if indicator.hasResultValues, let pair = comparisonPair ?? Self.valueOnlyPair(priceFeaturesEnabled: plan.priceFeaturesEnabled) {
                 linkSection(title: "過去イベント比較", route: .historicalComparison(
                     indicatorId: indicator.id,
                     indicatorName: indicator.name,
-                    fxPairId: pair.fxPairId,
-                    fxPairSymbol: pair.symbol
+                    fxPairId: plan.priceFeaturesEnabled ? pair.fxPairId : "",
+                    fxPairSymbol: plan.priceFeaturesEnabled ? pair.symbol : ""
                 )) {
                     HStack(spacing: 8) {
                         Image(systemName: "clock")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(V5P.cyan)
                         VStack(alignment: .leading, spacing: 2) {
-                            NotoText.text("過去\(PlanStore.shared.limits.historyEventsMax)回のデータを表示", size: 9.5).foregroundStyle(.white)
-                            NotoText.text("過去の結果・予想・前回と為替の動きを比較できます", size: 7)
+                            NotoText.text(Self.historyTitle(max: PlanStore.shared.limits.historyEventsMax), size: 9.5).foregroundStyle(.white)
+                            NotoText.text(Self.comparisonSubtitle(priceFeaturesEnabled: plan.priceFeaturesEnabled), size: 7)
                                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
@@ -71,6 +75,22 @@ struct IndicatorDetailCard: View {
             attributionNotice
         }
         .frame(width: 214)
+    }
+
+    /// 過去イベント比較の見出し。固定の上限がある(1.1で制限を戻したとき)ときだけ回数を出し、無いときは回数を示さない。
+    static func historyTitle(max: Int?) -> String {
+        guard let max else { return "過去のデータを表示" }
+        return "過去\(max)回のデータを表示"
+    }
+
+    /// 過去イベント比較の副題。価格フラグがfalseのときは、為替・値動きに触れない。
+    static func comparisonSubtitle(priceFeaturesEnabled: Bool) -> String {
+        priceFeaturesEnabled ? "過去の結果・予想・前回と為替の動きを比較できます" : "過去の結果・予想・前回を比較できます"
+    }
+
+    /// 価格フラグがfalseのとき、通貨ペアが無くても過去イベント比較を開けるようにする印(中身は使わない)。
+    static func valueOnlyPair(priceFeaturesEnabled: Bool) -> RelatedFxPairSummary? {
+        priceFeaturesEnabled ? nil : RelatedFxPairSummary(fxPairId: "", symbol: "", priority: 0)
     }
 
     /// 名前・国/通貨/重要度、概要、項目の表のカード。「注目される理由」はHQ指示(2026-10-09)で外した。
@@ -199,13 +219,14 @@ struct IndicatorDetailCard: View {
     }
 
     /// 「2025/10/15(水) 21:30」。
-    @MainActor static func releaseLabel(_ date: Date) -> String {
+    @MainActor static func releaseLabel(_ date: Date, showsTime: Bool = true) -> String {
         let preferences = AppPreferences.shared
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = preferences.timeZone
         calendar.locale = Locale(identifier: "ja_JP")
         let weekday = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: date) - 1]
-        return "\(preferences.dateString(date))(\(weekday)) \(preferences.timeString(date))"
+        let dayText = "\(preferences.dateString(date))(\(weekday))"
+        return showsTime ? "\(dayText) \(preferences.timeString(date))" : dayText
     }
 
     private func linkRow(_ title: String, detail: String? = nil, value: AppRoute) -> some View {

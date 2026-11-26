@@ -8,7 +8,6 @@ import SwiftUI
 struct AppInfoView: View {
     @Binding var tabSelection: Int
     @State private var page: Page?
-    @State private var showsWebsitePending = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -54,10 +53,11 @@ struct AppInfoView: View {
                 .background(AccountCardBackground())
 
                 VStack(spacing: 0) {
-                    linkRow("公式サイトを開く") {
-                        if let url = AppInfo.websiteURL { openURL(url) } else { showsWebsitePending = true }
+                    // 公式サイトのURLが決まる(`AppInfo.websiteURL`が非nil)までは行ごと出さない。
+                    if let url = AppInfo.websiteURL {
+                        linkRow("公式サイトを開く") { openURL(url) }
+                        SettingsListSeparator()
                     }
-                    SettingsListSeparator()
                     linkRow("アプリを評価する") { requestReview() }
                 }
                 .frame(width: 214)
@@ -74,15 +74,12 @@ struct AppInfoView: View {
             V5BottomBar(selected: $tabSelection)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .alert("公式サイトは準備中です", isPresented: $showsWebsitePending) {
-            Button("OK", role: .cancel) {}
-        }
         .navigationDestination(item: $page) { page in
             switch page {
             case .license: LegalDocumentView(document: AppInfo.licenseDocument, tabSelection: $tabSelection)
             case .openSource: OpenSourceLicensesView(tabSelection: $tabSelection)
             case .libraries: LegalDocumentView(document: AppInfo.librariesDocument, tabSelection: $tabSelection)
-            case .dataSources: LegalDocumentView(document: AppInfo.dataSourcesDocument, tabSelection: $tabSelection)
+            case .dataSources: LegalDocumentView(document: AppInfo.visibleDataSourcesDocument(priceFeaturesEnabled: PlanStore.shared.priceFeaturesEnabled), tabSelection: $tabSelection)
             }
         }
     }
@@ -175,6 +172,16 @@ enum AppInfo {
                 // 同じ(iOS側で独自の文言を作らない)。
                 "出典：Eurostat（欧州連合統計局）。ユーロ圏の消費者物価指数・失業率に使用しています。",
                 "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。",
+                // 英国・豪州・カナダ・日本の公式統計。文言は domain/attribution.ts の ONS_ATTRIBUTION・ABS_ATTRIBUTION・
+                // STATCAN_ATTRIBUTION・ESTAT_ATTRIBUTION の source と notice と同じ(iOS側で独自の文言を作らない)。
+                "出典：英国国家統計局（ONS）。英国の経済指標に使用しています。",
+                "Source: Office for National Statistics licensed under the Open Government Licence v.3.0",
+                "出典：オーストラリア統計局（ABS）。豪州の経済指標に使用しています。",
+                "Source: Australian Bureau of Statistics. © Commonwealth of Australia. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Disclaimer: https://www.abs.gov.au/website-privacy-copyright-and-disclaimer",
+                "出典：カナダ統計局（Statistics Canada）。カナダの経済指標に使用しています。",
+                "Source: Statistics Canada. Reproduced and distributed on an \"as is\" basis with the permission of Statistics Canada.",
+                "出典：政府統計の総合窓口（e-Stat）。日本の経済指標に使用しています。",
+                "出典：政府統計の総合窓口(e-Stat)。このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。",
             ]),
             // HQ指示(2026-11-05「NY連銀の出典表示の軽微な修正」): FOMC政策金利(誘導目標レンジ、api-design v1.47)。
             // 文言は Backend の domain/attribution.ts の nyFedAttribution と同じ(iOS側で独自の文言を作らない)。
@@ -186,6 +193,24 @@ enum AppInfo {
         ],
         footer: []
     ) }
+
+    /// 価格フラグ(`price_features_enabled`)がfalseのとき(1.0の既定)は、価格・pipsに触れる「値動き・pipsについて」の
+    /// 節を外した出典の文書。trueのときは`dataSourcesDocument`と同じ。
+    static func visibleDataSourcesDocument(priceFeaturesEnabled: Bool) -> LegalDocument {
+        let full = dataSourcesDocument
+        guard !priceFeaturesEnabled else { return full }
+        return LegalDocument(
+            id: full.id,
+            screenTitle: full.screenTitle,
+            title: full.title,
+            preamble: full.preamble,
+            sections: full.sections.filter { $0.heading != priceSectionHeading },
+            footer: full.footer
+        )
+    }
+
+    /// 価格・pipsに触れる節の見出し(価格フラグがfalseのとき外す)。
+    static let priceSectionHeading = "値動き・pipsについて"
 
     /// 今の年(UTC)。
     static var currentUTCYear: Int {

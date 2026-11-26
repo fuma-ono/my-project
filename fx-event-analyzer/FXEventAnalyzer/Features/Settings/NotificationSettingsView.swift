@@ -11,6 +11,8 @@ struct NotificationSettingsView: View {
     @State private var picker: OptionPicker?
     @State private var showsRateAlerts = false
     @State private var planPrompt: String?
+    /// 価格フラグ(レートアラートの行)と購入フラグ(PRO・有料の併記)。1.0の既定はどちらもfalse。
+    @ObservedObject private var plan = PlanStore.shared
     private let apiClient: APIClient
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -93,9 +95,12 @@ struct NotificationSettingsView: View {
             SettingsListSeparator()
             SettingsListToggleRow(title: "要人発言の通知", isOn: viewModel.settings.speeches, onChange: { viewModel.setSpeeches($0) })
                 .dimmed(!viewModel.settings.push)
-            SettingsListSeparator()
             // HQ指示(2026-10-15): レートアラート(指定した価格を上回った・下回ったら通知)。
-            SettingsListValueRow(title: "レートアラート", value: "") { showsRateAlerts = true }
+            // 価格フラグがfalseのとき(1.0の既定)は行ごと出さない。
+            if plan.priceFeaturesEnabled {
+                SettingsListSeparator()
+                SettingsListValueRow(title: "レートアラート", value: "") { showsRateAlerts = true }
+            }
         }
     }
 
@@ -179,12 +184,14 @@ struct NotificationSettingsView: View {
     private var fxPairSheet: some View {
         let selected = viewModel.settings.fxPairs
         let footer = viewModel.isAllPairsLocked
-            ? "無料プランでは1つの通貨ペアを選べます。"
+            ? (plan.purchasesEnabled ? "無料プランでは1つの通貨ペアを選べます。" : "選べる通貨ペアは1つです。")
             : "選択しない場合は、すべての通貨ペアが対象になります。"
         return SettingsListOptionSheet(title: "対象通貨ペア", footer: footer) {
             SettingsListOptionRow(label: "すべての通貨ペア", isSelected: selected == nil, isLocked: viewModel.isAllPairsLocked) {
                 if viewModel.isAllPairsLocked {
-                    showPlanPrompt("無料プランの通知は、通貨ペア1つまでです。プレミアムプランなら複数・すべての通貨ペアを対象にできます。")
+                    showPlanPrompt(plan.purchasesEnabled
+                        ? "無料プランの通知は、通貨ペア1つまでです。プレミアムプランなら複数・すべての通貨ペアを対象にできます。"
+                        : "通知の対象にできる通貨ペアは、1つまでです。")
                 } else {
                     viewModel.setFxPairs(nil)
                 }
@@ -206,7 +213,9 @@ struct NotificationSettingsView: View {
                     isLocked: viewModel.isLocked(importance: importance)
                 ) {
                     if viewModel.isLocked(importance: importance) {
-                        showPlanPrompt("無料プランの通知は、重要度「高」だけです。プレミアムプランなら「中」「低」も選べます。")
+                        showPlanPrompt(plan.purchasesEnabled
+                            ? "無料プランの通知は、重要度「高」だけです。プレミアムプランなら「中」「低」も選べます。"
+                            : "通知の対象にできる重要度は「高」だけです。")
                     } else {
                         viewModel.toggleImportance(importance)
                     }

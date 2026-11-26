@@ -42,6 +42,13 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
     var previousLocked: Bool? = nil
     /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
     var valueDecimals: Int? = nil
+    /// 発表時刻の精度(`release_datetime_precision`、任意)。文字列のまま持ち、知らない値・無い(古いBackend)はnil。
+    var releaseDatetimePrecisionRaw: String? = nil
+
+    /// 発表時刻の精度。読めなければnil。
+    var precision: ReleaseDatetimePrecision? { releaseDatetimePrecisionRaw.flatMap { ReleaseDatetimePrecision(rawValue: $0) } }
+    /// 時刻を出してよいか。日付だけ・不明は出さない。精度が分からない(nil)ときは今までどおり出す。
+    var showsTime: Bool { precision?.showsTime ?? true }
 
     /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
     var isPreviousLocked: Bool { previousLocked ?? false }
@@ -51,6 +58,7 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
         case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
         case valueDecimals = "value_decimals"
+        case releaseDatetimePrecisionRaw = "release_datetime_precision"
         case id = "event_id"
         case releaseDatetime = "release_datetime"
         case status

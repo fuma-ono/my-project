@@ -234,3 +234,24 @@ export async function listRevisions(
   if (error) throw error;
   return { rows: data ?? [], total: count ?? 0 };
 }
+
+/**
+ * 日銀・ECB の会合の期間と出典(economic_event_meetings、service_role だけが読める)。行が無い・表が無い(未適用の環境)ときは null
+ * (会合の表示を出さないだけ。詳細の応答は壊さない)。
+ */
+export async function getEventMeetingRow(
+  supabase: SupabaseClient,
+  eventId: string,
+): Promise<{ meeting_start_date: string; meeting_end_date: string; source_url: string } | null> {
+  const { data, error } = await supabase
+    .from('economic_event_meetings')
+    .select('meeting_start_date, meeting_end_date, source_url')
+    .eq('event_id', eventId)
+    .maybeSingle();
+  if (error) {
+    // 表が無い(PostgREST PGRST205 / Postgres 42P01)環境は「会合なし」として扱う。それ以外は呼び出し側へ。
+    if (error.code === 'PGRST205' || error.code === '42P01') return null;
+    throw error;
+  }
+  return data ?? null;
+}

@@ -32,6 +32,24 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
     /// 一覧画面の表示名(api-design v1.21、HQの表示名ルール
     /// docs/projects/fx-event-analyzer/indicator-display-names.md)。未登録はnil。
     var displayName: String? = nil
+    /// 次回・前回の発表時刻の精度(任意。文字列のまま持ち、知らない値・古いBackendはnil)。日付だけなら時刻を出さない。
+    var nextReleasePrecisionRaw: String? = nil
+    var latestReleasePrecisionRaw: String? = nil
+    /// `NONE` = 結果の値が出ない指標(日銀・ECBの会合など)。文字列のまま持ち、無い・知らない値はnil(今までの表示)。
+    var resultTypeRaw: String? = nil
+
+    /// 日程だけの指標(日銀・ECBの会合)か。精度・`result_type`が無い古いBackend・古い保存でも、時刻を出さないための固定の判定。
+    var isScheduleOnly: Bool { ScheduleOnlyIndicators.codes.contains(code) }
+
+    /// 次回の発表時刻を出してよいか。日程だけの指標は常にfalse。精度が分からない(nil)ときは今までどおり出す。
+    var nextReleaseShowsTime: Bool {
+        if isScheduleOnly { return false }
+        guard let raw = nextReleasePrecisionRaw, let precision = ReleaseDatetimePrecision(rawValue: raw) else { return true }
+        return precision.showsTime
+    }
+
+    /// 結果の値(結果・予想・前回)が出る指標か。`result_type`が`NONE`のときだけfalse。
+    var hasResultValues: Bool { resultTypeRaw != "NONE" && !isScheduleOnly }
 
     enum CodingKeys: String, CodingKey {
         case marketViewAbove = "market_view_above"
@@ -40,6 +58,9 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
         case nextEventId = "next_event_id"
         case latestReleaseDatetime = "latest_release_datetime"
         case displayName = "display_name"
+        case nextReleasePrecisionRaw = "next_release_precision"
+        case latestReleasePrecisionRaw = "latest_release_precision"
+        case resultTypeRaw = "result_type"
         case nameEn = "name_en"
         case keyPoints = "key_points"
         case id

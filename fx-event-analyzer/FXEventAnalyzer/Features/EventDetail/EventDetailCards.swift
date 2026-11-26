@@ -19,6 +19,9 @@ struct EventDetailCards: View {
     /// `PlanStore`を見て渡す — 未確定(`isConfirmed == false`)のときは安全側としてfalseのまま
     /// (既定値もfalse)。
     var canOpenStrategyAnalysis: Bool = false
+    /// 価格由来の表示(主要通貨ペアの値動き・トレード戦略分析)を出すか(`GET /entitlements`の`price_features_enabled`)。
+    /// falseのとき(1.0の既定)は表と戦略分析のリンクを出さず、過去イベント比較は通貨ペアなしの値のみで開く。
+    @ObservedObject private var plan = PlanStore.shared
     /// `canOpenStrategyAnalysis`がfalseのときにタップされた(FREE・未確定): 遷移せず、
     /// アップグレードの確認ポップアップを出す。
     var onStrategyAnalysisBlockedTap: () -> Void = {}
@@ -60,15 +63,31 @@ struct EventDetailCards: View {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
+                surpriseLine
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
-            reactionTable
-            comparisonLink
+            if plan.priceFeaturesEnabled {
+                reactionTable
+            }
+            // 日銀・ECBの会合(値が無い予定)では、過去イベント比較・戦略分析の入口を出さない。
+            if response.event.meeting == nil {
+                comparisonLink
+            }
             nextReleaseFooter
             attributionNotice
+            disclaimerFooter
         }
         .frame(width: 214)
+    }
+
+    /// 売買の推奨ではない旨の小さな注記(フッター)。文言は`StrategyAnalysisText.footerDisclaimer`。
+    private var disclaimerFooter: some View {
+        NotoText.text(StrategyAnalysisText.footerDisclaimer, size: 6)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 214, alignment: .leading)
+            .accessibilityIdentifier("eventDetailDisclaimer")
     }
 
     // MARK: - 指標のカード
@@ -141,7 +160,7 @@ struct EventDetailCards: View {
                     // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認
                     // されない表示」: Eurostat等、発表の正確な時刻が不明な指標は
                     // 「約」を前置。
-                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision))", size: 8)
+                    NotoText.text(Self.releaseDateTimeText(event), size: 8)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                 }
@@ -204,13 +223,33 @@ struct EventDetailCards: View {
     /// (従来1指標しか値が無い画面で「前年比」とだけ表示すると、YoY%が本来の
     /// 値ではない指標(NFP等)では誤った説明になるため)。
     @ViewBuilder private var results: some View {
-        if isLocked {
+        if let meeting = response.event.meeting {
+            meetingResults(meeting)
+        } else if isLocked {
             lockedResults
         } else if let policyRate = response.event.policyRate {
             policyRateResults(policyRate)
         } else {
             unlockedResults
         }
+    }
+
+    /// 結果と予想の差の一行(「予想より上振れ(+0.2)」など)。発表済みで結果と予想が両方あるときだけ。
+    /// 事実の表示のみ(良し悪し・値動きへの影響は言わない)。
+    @ViewBuilder private var surpriseLine: some View {
+        if let text = Self.surpriseText(response: response) {
+            NotoText.text(text, size: 7.5)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .frame(width: 214, alignment: .center)
+                .accessibilityIdentifier("eventDetailSurprise")
+        }
+    }
+
+    static func surpriseText(response: EventDetailResponse) -> String? {
+        guard !response.event.isLocked, response.event.policyRate == nil else { return nil }
+        guard response.event.status == .released else { return nil }
+        guard response.snapshot?.actual != nil, response.snapshot?.forecast != nil else { return nil }
+        return ValueFormat.surpriseSummary(surprise: response.analysis.surprise, decimals: response.event.valueDecimals)
     }
 
     /// FOMCの会合の政策決定(api-design v1.47、HQ承認 2026-11-05): 結果・予想・前回の代わりに、誘導目標レンジ
@@ -229,6 +268,45 @@ struct EventDetailCards: View {
                 .accessibilityIdentifier("eventDetailPolicyRateRange")
             NotoText.text("適用日 \(policyRate.effectiveDateText)", size: 7)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .frame(minHeight: Self.summaryCardMinHeight)
+        .frame(width: 214)
+        .background(GradientCardBackground())
+    }
+
+    /// 見出しの日時。日付だけ・不明の発表(日銀・ECBの会合など)は時刻を出さず日付だけ。
+    @MainActor static func releaseDateTimeText(_ event: EventDetailEvent) -> String {
+        let date = AppPreferences.shared.dateString(event.releaseDatetime)
+        // 会合(`meeting`)の発表時刻は未確認なので、精度の値に関わらず日付だけ。
+        guard event.releaseDatetimePrecision.showsTime, event.meeting == nil else { return date }
+        let time = AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision)
+        return "\(date) \(time)"
+    }
+
+    /// 日銀・ECBの金融政策会合(api-design v1.54): 結果・予想・前回の代わりに、会合の期間・出所・公式ページへのリンクだけ。
+    /// 時刻・政策金利の値・予想・結果は出さない(無い)。文言は事実だけで、相場や売買についての記述はしない。カードの大きさ・背景は結果のカードと同じ。
+    @ViewBuilder private func meetingResults(_ meeting: EventMeeting) -> some View {
+        VStack(spacing: 2) {
+            if let period = meeting.periodText {
+                NotoText.text("会合: \(period)", size: 10)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("eventDetailMeetingPeriod")
+            }
+            NotoText.text("出所: \(meeting.sourceName)", size: 7)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(1)
+                .accessibilityIdentifier("eventDetailMeetingSource")
+            if let url = meeting.officialURL {
+                Link(destination: url) {
+                    NotoText.text("公式サイトで日程を見る", size: 7)
+                        .foregroundStyle(V5P.cyan)
+                }
+                .accessibilityIdentifier("eventDetailMeetingLink")
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 2)
@@ -449,7 +527,7 @@ struct EventDetailCards: View {
     /// 関連通貨ペアの5分の値だけで作る。
     var pairs: [EventMajorFxReaction] {
         if let major = response.majorFxReactions, !major.isEmpty { return major }
-        return response.relatedFxPairs.map { EventMajorFxReaction(fxPairId: $0.fxPairId, symbol: $0.symbol, reactions: [$0.reaction]) }
+        return response.relatedFxPairs.map { EventMajorFxReaction(fxPairId: $0.fxPairId, symbol: $0.symbol, reactions: [$0.reaction].compactMap { $0 }) }
     }
 
     /// HQ指示(2026-10-09)「縦線と横線を交わらせたきれいな表に」: どのマスも同じ幅・
@@ -598,7 +676,19 @@ struct EventDetailCards: View {
     @ViewBuilder private var comparisonLink: some View {
         let symbol = response.relatedFxPairs.first?.symbol ?? pairs.first?.symbol
         let pairId = response.relatedFxPairs.first?.fxPairId ?? pairs.first?.fxPairId
-        if let symbol, let pairId {
+        if !plan.priceFeaturesEnabled {
+            // 価格フラグがfalse: 通貨ペアなし(値のみ)の過去イベント比較。通貨ペアのID・記号は空で渡す
+            // (`HistoricalComparisonView`が空のとき`fx_pair_id`を付けない)。戦略分析のリンクは出さない。
+            NavigationLink(value: AppRoute.historicalComparison(
+                indicatorId: response.event.indicatorId,
+                indicatorName: response.event.indicatorName,
+                fxPairId: "",
+                fxPairSymbol: ""
+            )) {
+                linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
+            }
+            .buttonStyle(SettingsRowPressStyle())
+        } else if let symbol, let pairId {
             NavigationLink(value: AppRoute.historicalComparison(
                 indicatorId: response.event.indicatorId,
                 indicatorName: response.event.indicatorName,
@@ -647,11 +737,13 @@ struct EventDetailCards: View {
                 .foregroundStyle(SubscriptionPalette.gold)
                 .frame(width: 18)
             NotoText.text("トレード戦略分析", size: 9).foregroundStyle(.white)
-            NotoText.text("Pro", size: 6.5)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Capsule().fill(SubscriptionPalette.gold))
+            if plan.purchasesEnabled {
+                NotoText.text("Pro", size: 6.5)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(SubscriptionPalette.gold))
+            }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 9.5, weight: .semibold))
@@ -667,7 +759,7 @@ struct EventDetailCards: View {
         switch nextReleaseState {
         case .available(let nextRelease):
             nextReleaseFooterCard {
-                NotoText.text(IndicatorDetailCard.releaseLabel(nextRelease), size: 8.5).foregroundStyle(.white)
+                NotoText.text(IndicatorDetailCard.releaseLabel(nextRelease, showsTime: response.event.releaseDatetimePrecision.showsTime && response.event.meeting == nil), size: 8.5).foregroundStyle(.white)
             }
         case .loading:
             // HQ指摘(2026-10-28)「次回発表の表示にラグがある」対応: 日時が

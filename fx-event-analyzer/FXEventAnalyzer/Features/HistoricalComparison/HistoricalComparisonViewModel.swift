@@ -51,12 +51,17 @@ final class HistoricalComparisonViewModel: ObservableObject {
     }
 
     private func fetch() async {
+        // 価格フラグがfalseのとき(値のみのモード)は通貨ペアなしで開くので、fx_pair_idは空 → 付けない
+        // (Backendは任意)。
+        var queryItems: [URLQueryItem] = []
+        if !fxPairId.isEmpty { queryItems.append(URLQueryItem(name: "fx_pair_id", value: fxPairId)) }
+        queryItems.append(URLQueryItem(name: "timeframe", value: selectedTimeframe))
+        // 固定の上限は無く、ページ(page / limit、最大100)で全件に届く。1ページ目に新しい方から最大100回分を取る
+        // (統計はBackendが保存済みの発表をまとめて数える)。
+        queryItems.append(URLQueryItem(name: "limit", value: "100"))
         let endpoint = Endpoint(
             path: "indicators/\(indicatorId)/comparison",
-            queryItems: [
-                URLQueryItem(name: "fx_pair_id", value: fxPairId),
-                URLQueryItem(name: "timeframe", value: selectedTimeframe),
-            ]
+            queryItems: queryItems
         )
         do {
             let response: ComparisonResponse = try await apiClient.send(endpoint)

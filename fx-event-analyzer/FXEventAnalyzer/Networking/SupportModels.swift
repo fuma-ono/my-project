@@ -77,6 +77,16 @@ enum SupportCategory {
         ("OTHER", "その他"),
     ]
 
+    /// 選択肢に出す種類。課金のフラグ(`purchases_enabled`)がfalseなら「プラン・支払い」、価格由来のフラグ
+    /// (`price_features_enabled`)がfalseなら「チャートの使い方」を出さない(Backendの値は変えない)。
+    static func options(priceFeaturesEnabled: Bool, purchasesEnabled: Bool) -> [(value: String, label: String)] {
+        inquiryOptions.filter { option in
+            if option.value == "BILLING" { return purchasesEnabled }
+            if option.value == "CHART" { return priceFeaturesEnabled }
+            return true
+        }
+    }
+
     static func label(_ value: String) -> String {
         inquiryOptions.first { $0.value == value }?.label ?? "その他"
     }

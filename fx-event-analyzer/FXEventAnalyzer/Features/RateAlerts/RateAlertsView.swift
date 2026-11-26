@@ -114,7 +114,7 @@ final class RateAlertsViewModel: ObservableObject {
             message = "\(Self.pairLabel(pair.symbol)) が \(Self.priceText(price)) を\(direction == .above ? "上回った" : "下回った")ら通知します。"
             await load()
         } catch {
-            message = "追加できませんでした。プランの上限に達していないかご確認ください。"
+            message = "追加できませんでした。件数の上限に達していないかご確認ください。"
         }
     }
 
@@ -263,7 +263,7 @@ struct RateAlertsView: View {
             .frame(width: 214)
             .background(AccountCardBackground())
             if let limit = viewModel.limit, limit.maxForPlan < limit.proMax {
-                NotoText.text("無料プランは\(limit.maxForPlan)件まで。プレミアムなら\(limit.proMax)件まで設定できます。", size: 6.5)
+                NotoText.text(PlanStore.shared.purchasesEnabled ? "無料プランは\(limit.maxForPlan)件まで。プレミアムなら\(limit.proMax)件まで設定できます。" : "設定できるのは\(limit.maxForPlan)件までです。", size: 6.5)
                     .foregroundStyle(V5P.cyan)
                     .padding(.horizontal, 4)
             }

@@ -22,7 +22,8 @@ export type Plan = (typeof PLANS)[number];
 export type CalendarPastLimit = { unit: 'MONTHS'; count: number } | { unit: 'YEARS'; count: number };
 
 export interface PlanLimits {
-  calendar_past: CalendarPastLimit;
+  /** null = さかのぼる範囲に制限なし(保存されているデータの範囲まで)。 */
+  calendar_past: CalendarPastLimit | null;
   /** `to` may not exceed Jan 1st of (current year + this), 00:00 local. */
   calendar_future_years: number;
   /** お気に入り (stored on-device; the Backend only reports the number). null = unlimited. */
@@ -31,8 +32,8 @@ export interface PlanLimits {
   notification_importances: readonly Importance[];
   /** 通知の対象通貨ペアの上限. null = unlimited, including "all pairs" (fx_pairs = null). */
   notification_fx_pairs_max: number | null;
-  /** 過去イベント比較に使う過去の発表回の上限 (most recent first). */
-  history_events_max: number;
+  /** 過去イベント比較に使う過去の発表回の上限 (most recent first). null = 固定の上限なし(ページネーションで全件に届く)。 */
+  history_events_max: number | null;
   /** 有効な(is_active)レートアラートの上限 (POST /rate-alerts, api-design.md §24.12). */
   rate_alerts_max: number;
   /** 指標ごとに値を見られる過去の発表(RELEASED)の回数。古い発表はロック
@@ -69,7 +70,50 @@ export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
  * user, or the column default) is evaluated as this one pair. */
 export const FREE_DEFAULT_NOTIFICATION_FX_PAIR = 'USDJPY';
 
+/**
+ * 1.0 は無料のみ・購入なし(オーナー決定 2026-11-25)。FREE の上限をすべて外す(FREE_LIMITS_LIFTED):
+ * 過去の発表(past_releases_max: 制限なし。FOMC の政策金利のロックも同じ数字で決まるので一緒に外れる)、
+ * 過去イベント比較(history_events_max: 固定の上限なし。件数はページネーションで全件に届く)、通知の重要度(全部)、
+ * 通知の対象通貨ペア数(制限なし)、お気に入り(制限なし)、カレンダーをさかのぼる範囲(制限なし。保存されているデータまで)。
+ * 通知の「すべての通貨ペア」(fx_pairs = null)も使える。レートアラートの件数(rate_alerts_max)は、価格由来の機能が非表示のため変えない。
+ * カレンダーの先(calendar_future_years = 2 年)は FREE / PRO 共通の技術的な範囲(超えると 422、プランの案内なし)なので変えない。
+ * レート制限・ページネーションの上限(limit 最大 100)・リクエストサイズの上限・カレンダーの 1 回の範囲(62 日)などの技術的な制限は、
+ * この仕組みと無関係で、そのまま。
+ *
+ * 1.1 で FREE/PRO の制限を戻すときは、環境変数 FREE_LIMITS_ENFORCED=true を設定するだけ(コード・DB の変更は不要)。
+ * PLAN_LIMITS.FREE は、戻したときの(従来どおりの)FREE の上限の定義として残す。PRO・default_entitlements・
+ * planFromFeatures・locked / required_plan の仕組みは変えない。
+ */
+export const FREE_LIMITS_LIFTED: Readonly<PlanLimits> = {
+  ...PLAN_LIMITS.FREE,
+  calendar_past: null,
+  favorites_max: null,
+  notification_importances: IMPORTANCES_DESC,
+  notification_fx_pairs_max: null,
+  history_events_max: null,
+  past_releases_max: null,
+};
+
+/**
+ * 過去イベント比較で、固定の上限が無い(history_events_max = null)ときの、統計に使う発表の数の技術的な上限
+ * (1 回のクエリ・URL の大きさを抑えるための負荷対策。プランの制限ではない)。`events` はこの範囲を page / limit(最大 100)で全件たどれる。
+ * 1 つの指標・1 人の要人の保存済みの発表は、通常これより十分少ない。
+ */
+export const COMPARISON_TECHNICAL_MAX_EVENTS = 1000;
+
+/** FREE の上限を適用するか(FREE_LIMITS_ENFORCED、既定 false = 1.0 は上限を外す)。buildApp が env から設定する。 */
+let freeLimitsEnforced = false;
+
+export function setFreeLimitsEnforced(enforced: boolean): void {
+  freeLimitsEnforced = enforced;
+}
+
+export function isFreeLimitsEnforced(): boolean {
+  return freeLimitsEnforced;
+}
+
 export function planLimitsFor(plan: Plan): PlanLimits {
+  if (plan === 'FREE' && !freeLimitsEnforced) return FREE_LIMITS_LIFTED;
   return PLAN_LIMITS[plan];
 }
 
@@ -78,9 +122,10 @@ export function planFromFeatures(features: readonly string[]): Plan {
   return features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS) ? 'PRO' : 'FREE';
 }
 
-/** Earliest `from` GET /calendar accepts for `plan` (inclusive). */
-export function calendarEarliestFrom(plan: Plan, now: Date, timeZone: string): Date {
+/** Earliest `from` GET /calendar accepts for `plan` (inclusive). null = no limit (stored data only). */
+export function calendarEarliestFrom(plan: Plan, now: Date, timeZone: string): Date | null {
   const past = planLimitsFor(plan).calendar_past;
+  if (past === null) return null;
   const { year, month } = localYearMonth(now, timeZone);
   return past.unit === 'MONTHS'
     ? startOfLocalDayUtc(year, month - past.count, 1, timeZone)
@@ -96,20 +141,23 @@ export function calendarLatestTo(plan: Plan, now: Date, timeZone: string): Date 
 
 /** GET /entitlements `limits` (api-design.md §27). */
 export interface EntitlementLimits {
-  calendar_earliest_from: string;
+  /** null = 制限なし(保存されているデータの範囲まで)。 */
+  calendar_earliest_from: string | null;
   calendar_latest_to: string;
   favorites_max: number | null;
   notification_importances: Importance[];
   notification_fx_pairs_max: number | null;
-  history_events_max: number;
+  /** null = 固定の上限なし。 */
+  history_events_max: number | null;
   /** null = no cap (PRO). */
   past_releases_max: number | null;
 }
 
 export function toEntitlementLimits(plan: Plan, now: Date, timeZone: string): EntitlementLimits {
   const limits = planLimitsFor(plan);
+  const earliestFrom = calendarEarliestFrom(plan, now, timeZone);
   return {
-    calendar_earliest_from: formatIsoSeconds(calendarEarliestFrom(plan, now, timeZone)),
+    calendar_earliest_from: earliestFrom === null ? null : formatIsoSeconds(earliestFrom),
     calendar_latest_to: formatIsoSeconds(calendarLatestTo(plan, now, timeZone)),
     favorites_max: limits.favorites_max,
     notification_importances: [...limits.notification_importances],
@@ -142,10 +190,11 @@ export function checkCalendarRange(
     return { kind: 'OUT_OF_RANGE', field: 'to', bound: latestTo };
   }
   const earliestFrom = calendarEarliestFrom(plan, now, timeZone);
-  if (from.getTime() < earliestFrom.getTime()) {
-    const upgrade = PLANS.slice(PLANS.indexOf(plan) + 1).find(
-      (candidate) => from.getTime() >= calendarEarliestFrom(candidate, now, timeZone).getTime(),
-    );
+  if (earliestFrom !== null && from.getTime() < earliestFrom.getTime()) {
+    const upgrade = PLANS.slice(PLANS.indexOf(plan) + 1).find((candidate) => {
+      const candidateFrom = calendarEarliestFrom(candidate, now, timeZone);
+      return candidateFrom === null || from.getTime() >= candidateFrom.getTime();
+    });
     return upgrade
       ? { kind: 'PLAN_LIMIT_EXCEEDED', field: 'from', bound: earliestFrom, requiredPlan: upgrade }
       : { kind: 'OUT_OF_RANGE', field: 'from', bound: earliestFrom };
@@ -212,8 +261,9 @@ export function applyNotificationPlanLimits(
 export interface HistoryLimit {
   /** Past releases actually used for stats/events (= min(released, max_for_plan)). */
   applied: number;
-  max_for_plan: number;
-  pro_max: number;
+  /** null = 固定の上限なし。 */
+  max_for_plan: number | null;
+  pro_max: number | null;
 }
 
 export function historyLimitFor(plan: Plan, usedCount: number): HistoryLimit {

@@ -97,6 +97,12 @@ enum ResultStatusDisplay {
     }
 }
 
+/// 日程だけで値(結果・予想・前回)も発表時刻も無い指標のコード(日銀・ECBの金融政策会合、backendの`RESULT_TYPE_NONE_INDICATORS`の
+/// 一部と同じ)。`release_datetime_precision`や`result_type`が無い古い応答でも、時刻と過去イベント比較を出さないための固定の判定。
+enum ScheduleOnlyIndicators {
+    static let codes: Set<String> = ["BOJ_RATE", "EU_ECB_RATE"]
+}
+
 /// api-design.md §11.1: drives which timeframes are analyzable for an
 /// event, independent of stored reaction data_status.
 enum ReleaseDatetimePrecision: String, Codable, Equatable {
@@ -109,6 +115,14 @@ enum ReleaseDatetimePrecision: String, Codable, Equatable {
     static func lenient<K: CodingKey>(from container: KeyedDecodingContainer<K>, forKey key: K) -> ReleaseDatetimePrecision? {
         guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
         return ReleaseDatetimePrecision(rawValue: raw)
+    }
+
+    /// 発表の時刻を出してよいか。日付だけ・不明は時刻を出さない(カレンダーの`CalendarItem.hasTime`と同じ判断)。
+    var showsTime: Bool {
+        switch self {
+        case .dateOnly, .unknown: return false
+        case .exact, .approximate: return true
+        }
     }
 }
 

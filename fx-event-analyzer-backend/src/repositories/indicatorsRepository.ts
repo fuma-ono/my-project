@@ -7,6 +7,7 @@ import {
   normalizeKeyPoints,
   type IndicatorReleaseSummary,
 } from '../domain/indicators.js';
+import { resultTypeForIndicator, type ResultType } from '../domain/resultType.js';
 
 export interface IndicatorRow {
   id: string;
@@ -52,7 +53,7 @@ export interface ListIndicatorsFilters {
 }
 
 /** §13.1 list item: the indicator plus its next / latest release (v1.20). */
-export type IndicatorListRow = IndicatorRow & IndicatorReleaseSummary;
+export type IndicatorListRow = IndicatorRow & IndicatorReleaseSummary & { result_type: ResultType };
 
 export async function listIndicators(
   supabase: SupabaseClient,
@@ -105,7 +106,12 @@ function withSummaries(
   indicators: IndicatorRow[],
   summaries: Map<string, IndicatorReleaseSummary>,
 ): IndicatorListRow[] {
-  return indicators.map((row) => ({ ...row, ...(summaries.get(row.id) ?? EMPTY_RELEASE_SUMMARY) }));
+  return indicators.map((row) => ({
+    ...row,
+    ...(summaries.get(row.id) ?? EMPTY_RELEASE_SUMMARY),
+    // 結果の値が出ない指標(日銀・ECBの会合など)は NONE(domain/resultType.ts)。
+    result_type: resultTypeForIndicator(row.code),
+  }));
 }
 
 /** PostgREST `in.(...)` goes in the URL — keep each request's id list short. */
@@ -133,7 +139,7 @@ export async function getIndicatorReleaseSummaries(
       chunks.map(async (ids) => {
         const { data, error } = await supabase
           .from('economic_events')
-          .select('id, indicator_id, release_datetime')
+          .select('id, indicator_id, release_datetime, release_datetime_precision')
           .in('indicator_id', ids)
           .eq('status', 'SCHEDULED')
           .gte('release_datetime', now.toISOString())
@@ -146,7 +152,7 @@ export async function getIndicatorReleaseSummaries(
       chunks.map(async (ids) => {
         const { data, error } = await supabase
           .from('economic_events')
-          .select('id, indicator_id, release_datetime')
+          .select('id, indicator_id, release_datetime, release_datetime_precision')
           .in('indicator_id', ids)
           .eq('status', 'RELEASED')
           .order('release_datetime', { ascending: false });
@@ -276,6 +282,7 @@ export async function listEventsForIndicator(
 export interface LatestEventRow {
   id: string;
   release_datetime: string;
+  release_datetime_precision: string | null;
   status: string;
 }
 
@@ -288,7 +295,7 @@ export async function getLatestEvent(
 ): Promise<LatestEventRow | null> {
   const { data, error } = await supabase
     .from('economic_events')
-    .select('id, release_datetime, status')
+    .select('id, release_datetime, release_datetime_precision, status')
     .eq('indicator_id', indicatorId)
     .lte('release_datetime', now.toISOString())
     .order('release_datetime', { ascending: false })

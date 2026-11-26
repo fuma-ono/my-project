@@ -190,7 +190,7 @@ struct IndicatorsView: View {
                         // 2026-10-14「次回の文字サイズは日時と揃えて」: 6→7.5、2回目「0.5小さく」で7。
                         NotoText.text(isNext ? "次回" : "前回", size: 7)
                         Text(Self.dateString(date))
-                        if isNext { Text(Self.timeString(date)) }
+                        if isNext && indicator.nextReleaseShowsTime { Text(Self.timeString(date)) }
                     } else {
                         NotoText.text("予定なし", size: 7)
                     }

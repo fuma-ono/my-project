@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   accessFields,
   lockedEventIds,
@@ -16,6 +16,12 @@ import {
 import { RELEASE_SNAPSHOT_COLUMNS } from '../../src/repositories/eventsRepository.js';
 import { SNAPSHOT_VALUE_COLUMNS } from '../../src/repositories/historicalRepository.js';
 import { resolvePastReleaseAccessForPlan } from '../../src/authorization/pastReleaseAccess.js';
+import { setFreeLimitsEnforced } from '../../src/domain/planLimits.js';
+
+// 1.0 は FREE の上限を外す(domain/planLimits.ts の FREE_LIMITS_LIFTED、既定)。このファイルは従来どおりの FREE の上限
+// (FREE_LIMITS_ENFORCED=true、1.1 で戻したときの動き)を確かめる。外した状態は planLimits.test.ts の別 describe で確かめる。
+beforeAll(() => setFreeLimitsEnforced(true));
+afterAll(() => setFreeLimitsEnforced(false));
 
 const IND_A = 'a0000000-0000-0000-0000-000000000000';
 const IND_B = 'b0000000-0000-0000-0000-000000000000';

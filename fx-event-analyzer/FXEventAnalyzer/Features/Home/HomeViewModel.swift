@@ -37,16 +37,17 @@ enum HomeFavoriteItem: Identifiable, Equatable, Codable {
     /// `fetchFavoriteIndicator`からも呼ぶようにした(新規エンドポイントは
     /// 追加していない)。該当イベントが無ければnilのままで、架空の日時は
     /// 表示しない。
-    case event(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, releaseDatetime: Date)
-    case indicator(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, nextReleaseDatetime: Date?)
+    /// `releasePrecision` / `nextReleasePrecision`は発表時刻の精度(任意。古い保存・Backendではnil)。日付だけ・不明なら時刻を出さない。
+    case event(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, releaseDatetime: Date, releasePrecision: ReleaseDatetimePrecision? = nil)
+    case indicator(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, nextReleaseDatetime: Date?, nextReleasePrecision: ReleaseDatetimePrecision? = nil)
     /// `FavoritesStore.ItemType.fxPair`と同じ理由で、まだ実際には生成
     /// されない(通貨ペア単体取得APIも★も無い)が、型は先に揃えてある。
     case fxPair(id: String, symbol: String, price: String, change: String, isUp: Bool)
 
     var id: String {
         switch self {
-        case .event(let id, _, _, _, _, _): return "event:\(id)"
-        case .indicator(let id, _, _, _, _, _): return "indicator:\(id)"
+        case .event(let id, _, _, _, _, _, _): return "event:\(id)"
+        case .indicator(let id, _, _, _, _, _, _): return "indicator:\(id)"
         case .fxPair(let id, _, _, _, _): return "fxPair:\(id)"
         }
     }

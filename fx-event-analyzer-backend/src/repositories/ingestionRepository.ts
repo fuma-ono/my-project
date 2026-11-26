@@ -12,6 +12,7 @@ import type {
   IngestionLogRow,
   IngestionStore,
   NewEvent,
+  NewEventMeeting,
   NewFomcPolicyDecision,
   StoredFomcPolicyDecision,
   NewReleaseSnapshot,
@@ -169,6 +170,11 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       const { data, error } = await supabase.from('economic_events').insert(event).select(EVENT_COLUMNS).single();
       if (error) throw error;
       return data;
+    },
+
+    async upsertEventMeeting(meeting: NewEventMeeting): Promise<void> {
+      const { error } = await supabase.from('economic_event_meetings').upsert(meeting, { onConflict: 'event_id' });
+      if (error) throw error;
     },
 
     async updateEvent(eventId: string, patch: EventPatch): Promise<void> {

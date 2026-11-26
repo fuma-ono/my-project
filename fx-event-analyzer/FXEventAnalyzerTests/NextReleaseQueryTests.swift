@@ -73,7 +73,7 @@ final class NextReleaseQueryTests: XCTestCase {
 
         let item = await FavoriteItemLoader(apiClient: apiClient).fetchFavoriteIndicator(id: "ind_1")
 
-        guard case .indicator(_, _, _, _, _, let nextReleaseDatetime) = item else {
+        guard case .indicator(_, _, _, _, _, let nextReleaseDatetime, _) = item else {
             return XCTFail("expected an indicator item")
         }
         XCTAssertNil(nextReleaseDatetime)

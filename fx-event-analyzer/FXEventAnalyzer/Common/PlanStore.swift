@@ -14,13 +14,24 @@ final class PlanStore: ObservableObject {
     /// (`plan`は仮の無料プラン)。ホームのキャッシュがプランの一致を確かめるのに使う(HQ承認 2026-11-02)。
     @Published private(set) var isConfirmed = false
 
+    /// サーバー側フラグ(`GET /entitlements`の`price_features_enabled`)。価格由来の表示(為替レート・pips・
+    /// 値動き・チャート・戦略分析・価格アラート)を出してよいか。既定false(読み込み前・オフライン・失敗・
+    /// ログアウト時も隠す側)。1.0は常にfalse。1.1以降にサーバー側でtrueにして再有効化する。
+    @Published private(set) var priceFeaturesEnabled = false
+    /// サーバー側フラグ(`purchases_enabled`)。購入(PRO課金)の導線を出してよいか。既定false(同上)。
+    @Published private(set) var purchasesEnabled = false
+
     var isPro: Bool { plan == .pro }
+
+    /// `reset()`のたびに増やす。reset前に始まった`load`の結果を、reset後に書き込まないための世代。
+    private var generation = 0
 
     /// HQ指示(2026-11-05)「Splash先行通信」: `userID`を渡すと、Splash中に開始済みの
     /// `/entitlements`があればその結果を再利用する(二重取得にしない)。渡さない・
     /// 先行取得が無い場合は従来どおり新規に取得する(他の呼び出し元・既存の挙動は
     /// 変わらない)。
     func load(apiClient: APIClient, userID: UUID? = nil, prefetchCoordinator: HomePrefetchCoordinator = .shared) async {
+        let startedGeneration = generation
         do {
             let response: EntitlementsResponse
             if let userID, let prefetched = prefetchCoordinator.consumeEntitlements(for: userID) {
@@ -28,25 +39,37 @@ final class PlanStore: ObservableObject {
             } else {
                 response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
             }
+            guard startedGeneration == generation else { return }
             plan = response.plan ?? .free
             limits = response.limits ?? (plan == .pro ? .pro() : .free())
+            priceFeaturesEnabled = response.priceFeaturesEnabled ?? false
+            purchasesEnabled = response.purchasesEnabled ?? false
             isConfirmed = true
         } catch {
+            guard startedGeneration == generation else { return }
             // 取れないときは前回の値のまま(起動直後は無料プランの範囲)。
+            // フラグだけは、取れないときはfalse(隠す側)に戻す(オーナー指示)。
+            priceFeaturesEnabled = false
+            purchasesEnabled = false
         }
     }
 
     /// ログアウト・セッション切れ: 前のユーザーのプランを残さず、無料プランの範囲に戻す。
     func reset() {
+        generation += 1
         plan = .free
         limits = .free()
+        priceFeaturesEnabled = false
+        purchasesEnabled = false
         isConfirmed = false
     }
 
     /// テスト用。
-    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true) {
+    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true, priceFeaturesEnabled: Bool? = nil, purchasesEnabled: Bool? = nil) {
         self.plan = plan
         self.limits = limits
+        if let priceFeaturesEnabled { self.priceFeaturesEnabled = priceFeaturesEnabled }
+        if let purchasesEnabled { self.purchasesEnabled = purchasesEnabled }
         isConfirmed = confirmed
     }
 
@@ -57,7 +80,8 @@ final class PlanStore: ObservableObject {
 /// `GET /entitlements`の`limits`。古いBackend(項目なし)では端末で同じ規則を計算する。
 struct PlanLimits: Decodable, Equatable {
     /// 経済カレンダーでさかのぼれる最初の日時(含む)。
-    let calendarEarliestFrom: Date
+    /// nilは制限なし(保存されているデータの範囲まで)。
+    let calendarEarliestFrom: Date?
     /// 経済カレンダーで見られる最後の日時(含まない)。
     let calendarLatestTo: Date
     /// お気に入りの上限。nilは無制限。
@@ -66,8 +90,8 @@ struct PlanLimits: Decodable, Equatable {
     let notificationImportances: [String]
     /// 通知の対象通貨ペアの上限。nilは無制限。
     let notificationFxPairsMax: Int?
-    /// 過去イベント比較に使う回数。
-    let historyEventsMax: Int
+    /// 過去イベント比較に使う回数。nilは固定の上限なし(ページで全件に届く)。
+    let historyEventsMax: Int?
     /// 指標ごとに値を見られる過去の発表の回数(api-design v1.33 §28.2)。nilは上限なし。
     /// 古いBackend(項目なし)ではnil。どの発表を隠すかは各Responseの`locked`で判断する。
     var pastReleasesMax: Int? = nil
@@ -82,16 +106,33 @@ struct PlanLimits: Decodable, Equatable {
         case pastReleasesMax = "past_releases_max"
     }
 
-    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は5回、
-    /// 過去の発表は指標ごとに直近3回。
+    /// 無料プラン(1.0): オーナー決定 2026-11-25 で、1.0 は無料のみ・購入なしのため、無料プランの上限をすべて外した
+    /// (過去の発表・過去イベント比較・通知の重要度と通貨ペア数・お気に入り・カレンダーをさかのぼる範囲)。Backendの
+    /// `FREE_LIMITS_LIFTED`(planLimits.ts)と同じ値。`GET /entitlements`が取れない・古いときも、鍵や
+    /// 「準備中」を出さないよう、この値を既定にする。カレンダーの先(2年)は無料・プレミアム共通なので変えない。
     static func free(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
+        PlanLimits(
+            calendarEarliestFrom: nil,
+            calendarLatestTo: yearStart(offset: 2, from: now, calendar: calendar),
+            favoritesMax: nil,
+            notificationImportances: ["HIGH", "MEDIUM", "LOW"],
+            notificationFxPairsMax: nil,
+            historyEventsMax: nil,
+            pastReleasesMax: nil
+        )
+    }
+
+    /// 無料プランの従来の上限(1.1で制限を戻すときの定義。Backendの`PLAN_LIMITS.FREE`と同じ値): お気に入り3件、
+    /// 通知はHIGHと通貨ペア1つ、比較は3回、過去の発表は指標ごとに直近3回。1.0では使わない(テストで制限側の
+    /// 画面の動きを確かめるために残す)。
+    static func freeRestricted(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
         PlanLimits(
             calendarEarliestFrom: monthStart(offset: -1, from: now, calendar: calendar),
             calendarLatestTo: yearStart(offset: 2, from: now, calendar: calendar),
             favoritesMax: 3,
             notificationImportances: ["HIGH"],
             notificationFxPairsMax: 1,
-            historyEventsMax: 3, // v1.37: FREE 5 → 3(Backend の planLimits.ts と同じ)
+            historyEventsMax: 3,
             pastReleasesMax: 3
         )
     }

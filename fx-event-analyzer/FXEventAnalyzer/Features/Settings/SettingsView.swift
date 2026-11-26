@@ -106,6 +106,10 @@ struct SettingsView: View {
     /// SCR-025 ログアウト確認ダイアログ(2026-09-29 HQ承認、2-b)。
     @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
+    /// 購入の導線(`purchases_enabled`)・価格由来の画面(`price_features_enabled`)のフラグ。
+    /// どちらもfalse(1.0の既定)のとき、「プラン・購読管理」「ホーム通貨ペア編集」の行を出さず、
+    /// 下の行と背景の高さを詰める(絶対座標の配置のため、行の位置は`group1Rows`から計算する)。
+    @ObservedObject private var plan = PlanStore.shared
 
     /// 1行あたりの高さ(V5座標系、234×491)。参考画像v2の実測は約36.8だが、
     /// 画像に無いログアウト行をタブバーの上に収めるため34に詰めている。
@@ -133,9 +137,28 @@ struct SettingsView: View {
     /// グループ2(ヘルプ・お問い合わせ〜アプリ情報)のカード上端y。
     // HQ指示(2026-10-09)「チャート分析画面がなくなったので、チャート設定はなくして」で1グループ目は5行。
     // HQ指示(2026-10-20)「起動診断画面を追加」で「起動診断」を6行目に追加、6行に変更。
-    private static let group2Top: CGFloat = group1Top + 6 * rowHeight + groupGap
-    /// ログアウトカードの上端y。
-    private static let logoutTop: CGFloat = group2Top + 4 * rowHeight + groupGap
+    /// 1グループ目の行数。常にある行(アカウント情報・通知設定・表示・地域設定・起動診断)の4行に、
+    /// 「プラン・購読管理」(購入フラグ)と「ホーム通貨ペア編集」(価格フラグ)を、出すときだけ足す。
+    static func group1RowCount(purchasesEnabled: Bool, priceFeaturesEnabled: Bool) -> Int {
+        #if DEBUG
+        let fixedRows = 4
+        #else
+        let fixedRows = 3 // リリースでは起動診断の行が無い
+        #endif
+        return fixedRows + (purchasesEnabled ? 1 : 0) + (priceFeaturesEnabled ? 1 : 0)
+    }
+
+    static func group2Top(group1Rows: Int) -> CGFloat {
+        group1Top + CGFloat(group1Rows) * rowHeight + groupGap
+    }
+
+    static func logoutTop(group1Rows: Int) -> CGFloat {
+        group2Top(group1Rows: group1Rows) + 4 * rowHeight + groupGap
+    }
+
+    private var group1Rows: Int {
+        Self.group1RowCount(purchasesEnabled: plan.purchasesEnabled, priceFeaturesEnabled: plan.priceFeaturesEnabled)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -143,31 +166,43 @@ struct SettingsView: View {
                 V5Header(title: "設定", back: false)
 
                 let g1 = Self.group1Top
-                groupBackground(topY: g1, rowCount: 6)
+                // 行の位置(0始まり): 0 アカウント情報、1 通知設定、(購入フラグがtrueのとき 2 プラン・購読管理)、
+                // 表示・地域設定、(価格フラグがtrueのとき ホーム通貨ペア編集)、起動診断。
+                let displayIndex = plan.purchasesEnabled ? 3 : 2
+                let pairEditorIndex = displayIndex + 1
+                let diagnosticsIndex = displayIndex + (plan.priceFeaturesEnabled ? 2 : 1)
+                groupBackground(topY: g1, rowCount: group1Rows)
                 NavigationLink(value: AppRoute.account) {
                     rowLabel("person.fill", "アカウント情報", nudge: CGSize(width: 0, height: -0.75))
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 0))
                 NavigationLink(value: SettingsSubRoute.notificationSettings) {
                     rowLabel("bell.fill", "通知設定")
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 1))
-                NavigationLink(value: SettingsSubRoute.subscriptionManagement) {
-                    rowLabel("crown.fill", "プラン・購読管理", nudge: CGSize(width: 0, height: -0.5))
-                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 2))
+                if plan.purchasesEnabled {
+                    NavigationLink(value: SettingsSubRoute.subscriptionManagement) {
+                        rowLabel("crown.fill", "プラン・購読管理", nudge: CGSize(width: 0, height: -0.5))
+                    }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 2))
+                }
                 NavigationLink(value: SettingsSubRoute.displaySettings) {
                     rowLabel("globe", "表示・地域設定")
-                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 3))
-                NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
-                    rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集")
-                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 4))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: displayIndex))
+                if plan.priceFeaturesEnabled {
+                    NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
+                        rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集")
+                    }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: pairEditorIndex))
+                }
                 // HQ指示(2026-10-20)「起動診断画面」。ui-screens.mdの参考画像
                 // には無い行だが、HQから直接「設定画面に『起動診断』という
                 // 項目を追加する」と明示指示されたため追加。既存のデザイン
                 // (カード・行の見た目)はそのまま踏襲する。
+                // 2026-11-25: 開発者向けの画面のため、リリースビルド(App Store/TestFlight)では出さない。
+                #if DEBUG
                 NavigationLink(value: AppRoute.launchDiagnostics) {
                     rowLabel("stethoscope", "起動診断")
-                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 5))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: diagnosticsIndex))
+                #endif
 
-                let g2 = Self.group2Top
+                let g2 = Self.group2Top(group1Rows: group1Rows)
                 groupBackground(topY: g2, rowCount: 4)
                 NavigationLink(value: SettingsSubRoute.help) {
                     rowLabel("questionmark.circle.fill", "ヘルプ・お問い合わせ")
@@ -352,6 +387,6 @@ struct SettingsView: View {
                     .multilineTextAlignment(.center).frame(width: Self.cardWidth).offset(y: 9)
             }
         }
-        .position(x: 117, y: Self.logoutTop + Self.rowHeight / 2)
+        .position(x: 117, y: Self.logoutTop(group1Rows: group1Rows) + Self.rowHeight / 2)
     }
 }

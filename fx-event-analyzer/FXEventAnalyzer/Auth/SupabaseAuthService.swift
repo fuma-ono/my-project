@@ -170,12 +170,21 @@ final class SupabaseAuthService: AuthServicing {
         }
     }
 
+    private static func hasAppleIdentity(_ user: User) -> Bool {
+        guard let identities = user.identities else { return false }
+        for identity in identities where identity.provider == "apple" {
+            return true
+        }
+        return false
+    }
+
     private static func mapSession(_ session: Session) -> UserSession {
         UserSession(
             userID: session.user.id,
             accessToken: session.accessToken,
             expiresAt: Date(timeIntervalSince1970: session.expiresAt),
-            email: session.user.email
+            email: session.user.email,
+            hasAppleIdentity: Self.hasAppleIdentity(session.user)
         )
     }
 

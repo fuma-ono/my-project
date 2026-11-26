@@ -237,7 +237,7 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertEqual(response.snapshot?.unit, "%")
         XCTAssertNil(response.analysis.surprise)
         XCTAssertNil(response.explanation)
-        XCTAssertNil(response.relatedFxPairs.first?.reaction.analysisStatus)
+        XCTAssertNil(response.relatedFxPairs.first?.reaction?.analysisStatus)
         XCTAssertEqual(response.majorFxReactions?.first?.reactions.count, 3)
     }
 
@@ -301,7 +301,7 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertTrue(response.event.isLocked)
         XCTAssertEqual(response.event.requiredPlan, "PRO")
         XCTAssertNil(response.snapshot?.actual)
-        XCTAssertNil(response.relatedFxPairs.first?.reaction.pips)
+        XCTAssertNil(response.relatedFxPairs.first?.reaction?.pips)
         let cards = EventDetailCards(response: response)
         XCTAssertTrue(cards.isLocked)
         XCTAssertFalse(cards.canOpenReactions)
@@ -638,8 +638,61 @@ final class PastReleaseLimitTests: XCTestCase {
     // MARK: - GET /entitlements・PlanStore
 
     func testPlanLimitsDefaults() {
-        XCTAssertEqual(PlanLimits.free().pastReleasesMax, 3)
+        // 1.0(オーナー決定 2026-11-25): 無料プランの4つの上限は外れている。
+        let free = PlanLimits.free()
+        XCTAssertNil(free.pastReleasesMax)
+        XCTAssertNil(free.favoritesMax)
+        XCTAssertEqual(free.notificationImportances, ["HIGH", "MEDIUM", "LOW"])
+        XCTAssertNil(free.historyEventsMax)
+        XCTAssertNil(free.notificationFxPairsMax)
+        XCTAssertNil(free.calendarEarliestFrom)
         XCTAssertNil(PlanLimits.pro().pastReleasesMax)
+    }
+
+    func testRestrictedFreeLimitsAreKeptForLaterRelease() {
+        let restricted = PlanLimits.freeRestricted()
+        XCTAssertEqual(restricted.pastReleasesMax, 3)
+        XCTAssertEqual(restricted.favoritesMax, 3)
+        XCTAssertEqual(restricted.notificationImportances, ["HIGH"])
+        XCTAssertEqual(restricted.historyEventsMax, 3)
+        XCTAssertEqual(restricted.notificationFxPairsMax, 1)
+        XCTAssertNotNil(restricted.calendarEarliestFrom)
+    }
+
+    func testEntitlementsLimitsDecodeUnboundedFreeLimits() throws {
+        let json = """
+        {
+          "features": ["VIEW_BASIC_EVENT"],
+          "plan": "FREE",
+          "limits": {
+            "calendar_earliest_from": null,
+            "calendar_latest_to": "2028-01-01T00:00:00Z",
+            "favorites_max": null,
+            "notification_importances": ["HIGH", "MEDIUM", "LOW"],
+            "notification_fx_pairs_max": null,
+            "history_events_max": null,
+            "past_releases_max": null
+          }
+        }
+        """.data(using: .utf8)!
+
+        let limits = try XCTUnwrap(makeDecoder().decode(EntitlementsResponse.self, from: json).limits)
+
+        XCTAssertNil(limits.calendarEarliestFrom)
+        XCTAssertNil(limits.favoritesMax)
+        XCTAssertNil(limits.notificationFxPairsMax)
+        XCTAssertNil(limits.historyEventsMax)
+        XCTAssertNil(limits.pastReleasesMax)
+        XCTAssertEqual(limits.notificationImportances, ["HIGH", "MEDIUM", "LOW"])
+    }
+
+    func testHistoryLimitWithoutFixedCapIsNotLimited() throws {
+        let json = "{\"applied\": 150, \"max_for_plan\": null, \"pro_max\": 20}".data(using: .utf8)!
+
+        let limit = try JSONDecoder().decode(ComparisonResponse.HistoryLimit.self, from: json)
+
+        XCTAssertEqual(limit.applied, 150)
+        XCTAssertFalse(limit.isLimited)
     }
 
     func testEntitlementsLimitsDecodePastReleasesMax() throws {
@@ -709,8 +762,8 @@ final class PastReleaseLimitTests: XCTestCase {
         store.reset()
 
         XCTAssertFalse(store.isPro)
-        XCTAssertEqual(store.limits.pastReleasesMax, 3)
-        XCTAssertEqual(store.limits.favoritesMax, 3)
+        XCTAssertNil(store.limits.pastReleasesMax)
+        XCTAssertNil(store.limits.favoritesMax)
     }
 
     // MARK: - 画面に出す値

@@ -184,7 +184,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
 
     it('FREE reaches back to the 1st of last month (inclusive); one second earlier is 403 with required_plan PRO', async () => {
       const headers = await newUser(true, 'FREE');
-      const earliest = calendarEarliestFrom('FREE', new Date(), 'UTC');
+      const earliest = calendarEarliestFrom('FREE', new Date(), 'UTC')!;
       expect((await get(headers, rangeQuery(earliest, new Date(earliest.getTime() + 30 * DAY_MS)))).status).toBe(200);
 
       const tooEarly = new Date(earliest.getTime() - 1000);
@@ -195,7 +195,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
 
     it('computes the FREE bound in the timezone query parameter (default UTC)', async () => {
       const headers = await newUser(true, 'FREE');
-      const tokyoEarliest = calendarEarliestFrom('FREE', new Date(), 'Asia/Tokyo');
+      const tokyoEarliest = calendarEarliestFrom('FREE', new Date(), 'Asia/Tokyo')!;
       const to = new Date(tokyoEarliest.getTime() + 30 * DAY_MS);
       // 00:00 JST on the 1st is 15:00 UTC the day before — earlier than the UTC bound.
       expect((await get(headers, rangeQuery(tokyoEarliest, to, 'Asia/Tokyo'))).status).toBe(200);
@@ -204,7 +204,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
 
     it('PRO reaches back to Jan 1st of (current year - 5); earlier is 422 for every plan', async () => {
       const headers = await newUser();
-      const earliest = calendarEarliestFrom('PRO', new Date(), 'UTC');
+      const earliest = calendarEarliestFrom('PRO', new Date(), 'UTC')!;
       expect((await get(headers, rangeQuery(earliest, new Date(earliest.getTime() + 31 * DAY_MS)))).status).toBe(200);
 
       const tooEarly = new Date(earliest.getTime() - 1000);

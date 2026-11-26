@@ -18,3 +18,13 @@ export const updateAccountBodySchema = z
   .strict();
 
 export type UpdateAccountBody = z.infer<typeof updateAccountBodySchema>;
+
+/** DELETE /account body. The whole body is optional: builds that predate Sign
+ * in with Apple token revocation send none. Unknown fields are ignored. */
+export const deleteAccountBodySchema = z
+  .object({
+    apple_authorization_code: z.string().min(1).max(4096).optional(),
+  })
+  .nullish();
+
+export type DeleteAccountBody = z.infer<typeof deleteAccountBodySchema>;

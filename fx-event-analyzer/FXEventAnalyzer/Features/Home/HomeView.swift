@@ -50,6 +50,8 @@ struct HomeView: View {
     @Binding var path: NavigationPath
     @Binding var tabSelection: Int
     @ObservedObject private var notifications = NotificationsStore.shared
+    /// 価格由来の表示(通貨ペアカード・要人発言の値動き)を出すかのフラグ(`GET /entitlements`)。
+    @ObservedObject private var plan = PlanStore.shared
     private let apiClient: APIClient
 
     init(apiClient: APIClient, userID: UUID? = nil, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
@@ -87,10 +89,11 @@ struct HomeView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            loadingScaffold { LoadingView(caption: "読み込み中...") }
+            loadingScaffold { SlowLoadHintLoadingView() }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。実装が完了次第、ここに表示されます。") }
-        case .loaded(_, let majorFx) where majorFx.isEmpty:
+        // 価格フラグがfalseのときは、通貨ペアが空でも空状態にせず、他のカードを出し続ける。
+        case .loaded(_, let majorFx) where majorFx.isEmpty && plan.priceFeaturesEnabled:
             loadingScaffold { FXEmptyState(icon: "chart.bar", title: "表示できる通貨ペアがありません", message: "しばらくしてから再度お試しください。") }
         case .loaded:
             loadedScreen
@@ -548,8 +551,12 @@ struct HomeView: View {
 
     private var loadedScreen: some View {
         let topEvents = Array(mappedTodayEvents.prefix(3))
-        let pairs = Array(mappedPairs.prefix(3))
-        let favorites = Array(viewModel.favoriteItems.prefix(3))
+        let pairs = plan.priceFeaturesEnabled ? Array(mappedPairs.prefix(3)) : []
+        let favorites = Array(viewModel.favoriteItems.filter { item in
+            // 通貨ペア(価格を出す項目)は価格フラグがfalseのとき出さない。
+            if case .fxPair = item { return plan.priceFeaturesEnabled }
+            return true
+        }.prefix(3))
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
 
         return V5Viewport {
@@ -566,6 +573,7 @@ struct HomeView: View {
                     // 0件でもセクション自体を隠さず空状態を案内する
                     // (`speechesCard`が元から常時表示+空状態表示だったのに
                     // 合わせた)。
+                    nextReleaseRow
                     todayEventsCard(topEvents)
                     if !pairs.isEmpty {
                         pairsCard(pairs)
@@ -592,6 +600,25 @@ struct HomeView: View {
         }
         .onChange(of: viewModel.freshDataVersion) { _, _ in
             DiagnosticsStore.shared.recordHomeReadyToDisplay()
+        }
+    }
+
+    /// 「次の発表まで 2時間15分」の1行(価格フラグのOFF/ON共通)。次に来る時刻確定の予定が無ければ何も出さない。
+    /// 1分ごとに描き直すだけ(`TimelineView`)で、別のタイマーは持たない。流れるレイアウトの中の1行なので、
+    /// 絶対位置のものと重ならない。日時は設定のタイムゾーン(`AppPreferences`)で出す。
+    @ViewBuilder private var nextReleaseRow: some View {
+        TimelineView(.periodic(from: Date(), by: 60)) { context in
+            if let event = HomeNextRelease.pick(from: viewModel.upcomingEvents, now: context.date),
+               let countdown = HomeNextRelease.countdownText(to: event.releaseDatetime, now: context.date) {
+                let name = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
+                let line = "\(countdown)・\(name) \(AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision))"
+                V5JPFont.text(line, size: 7.5)
+                    .foregroundStyle(V5P.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: Self.cardWidth, alignment: .leading)
+                    .accessibilityIdentifier("homeNextRelease")
+            }
         }
     }
 
@@ -819,7 +846,7 @@ struct HomeView: View {
             // APPROXIMATEでも前置詞を付けず、EXACTと同じ表示にする(列幅・
             // 国旗の位置は常に一定のまま)。イベント詳細(EventDetailCards.swift)
             // は列の余裕があるため「約」の表示を維持している。
-            Text(AppPreferences.shared.timeString(event.releaseDatetime))
+            Text(event.releaseDatetimePrecision.showsTime ? AppPreferences.shared.timeString(event.releaseDatetime) : "未定")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(-0.2)
                 .foregroundStyle(.white)
@@ -924,7 +951,7 @@ struct HomeView: View {
 
     /// 予想・前回のみ(`HomeEventSummary`に単位情報が無いため数値のみ)。
     /// 無料プランで隠された発表(`isLocked`)では値を出さない(nil)。
-    static func eventSubtitle(_ event: HomeEventSummary) -> String? {
+    @MainActor static func eventSubtitle(_ event: HomeEventSummary) -> String? {
         guard !event.isLocked else { return nil }
         var parts: [String] = []
         // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
@@ -1233,10 +1260,10 @@ struct HomeView: View {
 
     @ViewBuilder private func favoriteGridCard(_ item: HomeFavoriteItem) -> some View {
         switch item {
-        case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime):
+        case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime, let releasePrecision):
             NavigationLink(value: AppRoute.eventDetail(id: id)) {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
-                    dateRow(releaseDatetime)
+                    dateRow(releaseDatetime, showsTime: releasePrecision?.showsTime ?? true)
                 } footer: {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
                 }
@@ -1248,11 +1275,11 @@ struct HomeView: View {
         // 同じ`/indicators/{id}/events?status=SCHEDULED`を追加で叩いて
         // 取得した実データで、架空の日時は表示しない(無ければ日付無しの
         // まま)。
-        case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime):
+        case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime, let nextReleasePrecision):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
                     if let nextReleaseDatetime {
-                        dateRow(nextReleaseDatetime)
+                        dateRow(nextReleaseDatetime, showsTime: nextReleasePrecision?.showsTime ?? true)
                     } else {
                         EmptyView()
                     }
@@ -1288,10 +1315,12 @@ struct HomeView: View {
     // 要望と逆行するため)。
     // HQ再指摘(2026-10-06)「日付と時刻の文字間隔が詰めすぎている」:
     // -1.0は詰めすぎだったため、-0.4まで緩めた。
-    @ViewBuilder private func dateRow(_ date: Date) -> some View {
+    @ViewBuilder private func dateRow(_ date: Date, showsTime: Bool) -> some View {
+        let shortDate = AppPreferences.shared.shortDateString(date)
+        let label = showsTime ? "\(shortDate) \(AppPreferences.shared.timeString(date))" : shortDate
         HStack(spacing: 3) {
             Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(Self.linkBlue)
-            Text("\(AppPreferences.shared.shortDateString(date)) \(AppPreferences.shared.timeString(date))").font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
+            Text(label).font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
         }
     }
 
@@ -1480,7 +1509,7 @@ struct HomeView: View {
                     NotoText.text(speech.speakerName, size: 7)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    V5JPFont.text(speech.headline, size: 6, weight: .regular)
+                    NotoText.text(speech.headline, size: 6)
                         .tracking(-0.4)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
@@ -1508,9 +1537,11 @@ struct HomeView: View {
                 // HQ指示(2026-10-14)「USD/JPY・発言前・現在と縦線の間に余白を設けて。詰まって見える」:
                 // 縦線を3pt左へ寄せ(11→8)、その分だけ縦線と右側の間を広げた(2→5)。右側の幅は変えないので
                 // 文字の大きさは変わらない。
-                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 8)
+                if plan.priceFeaturesEnabled {
+                    Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 8)
+                }
 
-                if let symbol = speech.reactionFxSymbol {
+                if plan.priceFeaturesEnabled, let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
                         // HQ再指摘(2026-10-06、3回目、CIキャプチャで再々確認)
                         // 「現在の価格がまだ'149...'のように切れている」:

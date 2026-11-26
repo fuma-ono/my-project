@@ -8,6 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    # 1.0はiPhoneのみ(オーナー決定)。テスト系ターゲットにも効くようプロジェクト共通で指定。
+    TARGETED_DEVICE_FAMILY: "1"
     # Empty by default. CI overrides these on the xcodebuild command line
     # (SUPABASE_URL="..." as a trailing build-setting override — see
     # .github/workflows/fx-event-analyzer-ios-build.yml), which takes
@@ -58,7 +60,7 @@ targets:
         PRODUCT_NAME: FXEventAnalyzer
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
-        TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad
+        TARGETED_DEVICE_FAMILY: "1" # 1.0はiPhoneのみ(オーナー決定。iPadは1.1以降)
         SUPPORTS_MACCATALYST: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -98,6 +100,10 @@ targets:
       path: FXEventAnalyzer/Resources/Info.plist
       properties:
         UILaunchScreen: {}
+        # App Store Connectの輸出コンプライアンス(暗号化の使用)の質問を省く。
+        # 標準のHTTPS(URLSession)・OS標準の暗号のみで、独自の暗号化は使わない
+        # (免除対象)。指示はHQ(App Store審査準備)。
+        ITSAppUsesNonExemptEncryption: false
         # XcodeGen's generated Info.plist otherwise hard-codes "1.0" / "1";
         # read the build settings so SCR-023 アプリ情報 shows the real version.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
@@ -133,11 +139,9 @@ targets:
         # 方式に変更した(詳細は同Viewのコメント参照)。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UISupportedInterfaceOrientations~ipad:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
+        # 2026-11-25: 1.0はiPhoneのみ(TARGETED_DEVICE_FAMILY: "1")のため、
+        # iPad用の向き設定(UISupportedInterfaceOrientations~ipad)は削除。
+        # iPadを復活させる1.1では4方向すべてを再度入れること(無いと409)。
         # Read at runtime via SupabaseConfig. Values come from the SUPABASE_URL /
         # SUPABASE_ANON_KEY build settings (see settings.base above), which CI
         # populates from GitHub Actions secrets and which are blank by default.

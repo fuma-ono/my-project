@@ -281,7 +281,7 @@ final class Phase3ModelsDecodingTests: XCTestCase {
         XCTAssertEqual(response.event.revisionStatus, .revised)
         XCTAssertEqual(response.analysis.surprise, 0.2)
         XCTAssertEqual(response.explanation?.source, "U.S. Bureau of Labor Statistics")
-        XCTAssertEqual(response.relatedFxPairs.first?.reaction.analysisStatus, .ready)
+        XCTAssertEqual(response.relatedFxPairs.first?.reaction?.analysisStatus, .ready)
         XCTAssertEqual(response.availableTimeframes, ["1m", "5m", "15m", "30m", "60m"])
     }
 

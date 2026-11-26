@@ -170,9 +170,9 @@ final class Phase4ModelsDecodingTests: XCTestCase {
 
         XCTAssertEqual(response.totalEvents, 20)
         XCTAssertEqual(response.analyzableEvents, 18)
-        XCTAssertEqual(response.stats.upwardCount, 12)
-        XCTAssertTrue(response.advancedStatistics.available)
-        XCTAssertEqual(response.advancedStatistics.data?.averageAbsolutePips, 28.0)
+        XCTAssertEqual(response.stats?.upwardCount, 12)
+        XCTAssertEqual(response.advancedStatistics?.available, true)
+        XCTAssertEqual(response.advancedStatistics?.data?.averageAbsolutePips, 28.0)
         XCTAssertEqual(response.events.first?.id, "30000000-0000-0000-0000-000000000001")
     }
 
@@ -196,9 +196,9 @@ final class Phase4ModelsDecodingTests: XCTestCase {
 
         let response = try makeDecoder().decode(ComparisonResponse.self, from: json)
 
-        XCTAssertFalse(response.advancedStatistics.available)
-        XCTAssertEqual(response.advancedStatistics.requiredEntitlement, "VIEW_ADVANCED_STATS")
-        XCTAssertNil(response.advancedStatistics.data)
+        XCTAssertEqual(response.advancedStatistics?.available, false)
+        XCTAssertEqual(response.advancedStatistics?.requiredEntitlement, "VIEW_ADVANCED_STATS")
+        XCTAssertNil(response.advancedStatistics?.data)
     }
 
     func testComparisonResponseDecodesEmptyEventsAsAGenuineNoHistoryState() throws {
@@ -220,7 +220,7 @@ final class Phase4ModelsDecodingTests: XCTestCase {
 
         XCTAssertEqual(response.totalEvents, 0)
         XCTAssertTrue(response.events.isEmpty)
-        XCTAssertNil(response.stats.averageMovement)
+        XCTAssertNotNil(response.stats); XCTAssertNil(response.stats?.averageMovement)
     }
 
     /// api-design.md §7.2: incomplete data (fewer analyzable than total) is

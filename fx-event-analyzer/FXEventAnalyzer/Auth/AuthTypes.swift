@@ -11,6 +11,9 @@ struct UserSession: Equatable {
     /// `GET /account` — email/password are owned by Supabase Auth
     /// (api-design.md §24.2), so it comes from the session itself.
     var email: String? = nil
+    /// ユーザーにAppleのIDが紐づいているか(Supabaseのidentitiesから判定)。
+    /// アカウント削除時にAppleの再認証(トークン失効用)を行うかの判断にだけ使う。
+    var hasAppleIdentity: Bool = false
 
     var isExpired: Bool {
         expiresAt <= Date()

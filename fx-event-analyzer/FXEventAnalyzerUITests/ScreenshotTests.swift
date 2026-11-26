@@ -29,6 +29,11 @@ final class ScreenshotTests: XCTestCase {
         // latency observed in real CI (~13s), so faster runs should still
         // catch Splash below.
         app.launchEnvironment["UI_SCREENSHOT_HOLD_SPLASH"] = "1"
+        // 案B(1.0はApple/Googleのみ、2026-11-24): 本番設定ではメール/パスワードの
+        // ログイン欄が出ないため、モックサーバーへメールでログインするこのテストだけ
+        // メール認証UIを出す(`AuthConfig.emailAuthEnabled`参照)。Apple/Googleの
+        // ログインはXCUITestで操作できないので、テスト用のメールログインを残している。
+        app.launchEnvironment["UI_SCREENSHOT_EMAIL_AUTH"] = "1"
         app.launch()
     }
 
@@ -663,16 +668,18 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from the long-summary FRB speech")
 
-        // ③ FRBの発言済みだが原稿(要約)のない発言 — 「要約はまだ用意されていません。」。
+        // ③ FRBの発言済みだが原稿(要約)のない発言 — 1.0の最小表示: 空のカードや「要約準備中」の文言は出さず、
+        // 公式サイトへのリンクだけを出す(オーナー決定 2026-11-25)。
         tap(containing: "地区連銀総裁との意見交換会")
-        XCTAssertTrue(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 15), "FRB speech without a summary did not show the no-summary message")
+        XCTAssertTrue(waitForAnyElement(containing: "公式サイトで原文を見る", timeout: 15), "FRB speech without a summary did not show the source link")
+        XCTAssertFalse(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 1), "No-summary wording must not appear")
         capture("13f-SpeechDetail-FRB-NoSummary")
 
         // ③': 同じ画面をFREEプランでも確認する(要人発言はプラン制限の対象ではないため、
         // 表示内容が一致するはず — HQ指示「FREE/PROで表示内容が一致すること」)。
         XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not switch the mock Backend to the FREE plan")
         resumeAppToRefreshPlanStore()
-        XCTAssertTrue(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 15), "FRB no-summary speech did not render identically on the FREE plan")
+        XCTAssertTrue(waitForAnyElement(containing: "公式サイトで原文を見る", timeout: 15), "FRB no-summary speech did not render identically on the FREE plan")
         capture("13f-SpeechDetail-FRB-NoSummary-FREE")
         XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not restore the mock Backend to the PRO plan")
         resumeAppToRefreshPlanStore()

@@ -7,6 +7,8 @@ import UIKit
 /// 状態はBackendで検証してから出す(`SubscriptionManagementViewModel`)。
 struct SubscriptionManagementView: View {
     @StateObject private var viewModel: SubscriptionManagementViewModel
+    /// 価格フラグがfalseのとき、価格・値動きに触れる特典の説明を出さない(この画面自体は購入フラグがfalseなら到達不能)。
+    @ObservedObject private var plan = PlanStore.shared
     @Binding var tabSelection: Int
     @State private var sheet: Sheet?
     /// 購入シートから開く利用規約・プライバシーポリシー(App Storeの審査で、
@@ -118,7 +120,7 @@ struct SubscriptionManagementView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     NotoText.text("より多くの機能を利用するには", size: 7.5).foregroundStyle(.white)
                     NotoText.text("プレミアムプランにご登録ください。", size: 7.5).foregroundStyle(V5P.cyan)
-                    NotoText.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 7)
+                    NotoText.text(plan.priceFeaturesEnabled ? "過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。" : "すべての機能が利用可能になります。", size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .fixedSize(horizontal: false, vertical: true)
                     // ボタンは文の下に置き、文を横幅いっぱいに使う(折り返しを減らす)。
@@ -302,7 +304,9 @@ struct SubscriptionManagementView: View {
     private var benefitsSheet: some View {
         SubscriptionSheet(title: "特典内容の確認") {
             VStack(alignment: .leading, spacing: 14) {
-                benefit("chart.xyaxis.line", "高度な統計", "過去の同じ指標の発表時に、為替がどう動いたかの詳しい統計を見られます。")
+                if plan.priceFeaturesEnabled {
+                    benefit("chart.xyaxis.line", "高度な統計", "過去の同じ指標の発表時に、為替がどう動いたかの詳しい統計を見られます。")
+                }
                 // HQ指示(2026-10-08)の無料プランの制限と対になる特典。
                 benefit("clock.arrow.circlepath", "過去20回分のイベント比較", "無料プランは直近5回分です。プレミアムプランなら約5年分(20回)と比べられます。")
                 benefit("calendar", "5年前までの経済カレンダー", "無料プランは先月の1日からです。プレミアムプランなら5年前までさかのぼれます。")

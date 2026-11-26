@@ -47,6 +47,11 @@ struct EventDetailEvent: Decodable, Equatable {
     /// FOMCの会合の政策決定(api-design v1.47、HQ承認 2026-11-05)。誘導目標レンジの下限・上限と適用日。
     /// 記録された会合だけ付く。ほかの指標・まだ記録が無い会合・古いBackendではnil(今までの表示)。
     var policyRate: PolicyRate? = nil
+    /// 日銀・ECBの金融政策会合の日程(api-design v1.54、HQ指示 2026-11-26)。会合の期間・出所・公式ページだけ(時刻・値は無い)。
+    /// 対象の予定だけ付く。ほかの指標・古いBackendではnil(今までの表示)。
+    /// 読めない形(型違いなど)のときはこの項目だけ捨て、詳細全体の読み込みは失敗させない(`LenientEventMeeting`)。
+    var meetingBox: LenientEventMeeting? = nil
+    var meeting: EventMeeting? { meetingBox?.value }
     /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
@@ -70,6 +75,7 @@ struct EventDetailEvent: Decodable, Equatable {
         case attribution
         case valueDecimals = "value_decimals"
         case policyRate = "policy_rate"
+        case meetingBox = "meeting"
         case id
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"
@@ -110,6 +116,52 @@ struct PolicyRate: Decodable, Equatable {
         effectiveDate.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil
             ? effectiveDate.replacingOccurrences(of: "-", with: "/")
             : effectiveDate
+    }
+}
+
+/// `event.meeting`を読めなかったとき(型違い・欠けた項目など)にnilにする入れ物。会合の表示だけが消え、イベント詳細は開ける。
+struct LenientEventMeeting: Decodable, Equatable {
+    let value: EventMeeting?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        value = try? container.decode(EventMeeting.self)
+    }
+}
+
+/// 日銀・ECBの金融政策会合の日程(api-design v1.54の`event.meeting`)。日付は現地の日付(`YYYY-MM-DD`)で、
+/// 決定の公表時刻は未確認のため持たない。出所の名前と公式ページ(https)は公表元のまま表示する(加工しない)。
+struct EventMeeting: Decodable, Equatable {
+    let startDate: String
+    let endDate: String
+    let sourceUrl: String
+    let sourceName: String
+
+    enum CodingKeys: String, CodingKey {
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case sourceUrl = "source_url"
+        case sourceName = "source_name"
+    }
+
+    /// 「12月17日」。日付として読めなければnil。
+    static func monthDayText(_ value: String) -> String? {
+        let parts = value.split(separator: "-")
+        guard parts.count == 3 else { return nil }
+        guard let month = Int(parts[1]), let day = Int(parts[2]) else { return nil }
+        return "\(month)月\(day)日"
+    }
+
+    /// 「12月17日〜12月18日」(1日だけの会合は「12月17日」)。日付として読めなければnil(会合の行を出さない)。
+    var periodText: String? {
+        guard let start = Self.monthDayText(startDate), let end = Self.monthDayText(endDate) else { return nil }
+        return start == end ? start : "\(start)〜\(end)"
+    }
+
+    /// 公式ページ。https以外・読めないURLはnil(リンクを出さない)。
+    var officialURL: URL? {
+        guard sourceUrl.hasPrefix("https://") else { return nil }
+        return URL(string: sourceUrl)
     }
 }
 
@@ -205,7 +257,8 @@ struct EventRelatedFxPair: Decodable, Identifiable, Equatable {
     let fxPairId: String
     let symbol: String
     let priority: Int
-    let reaction: EventReactionSummary
+    /// 価格フラグがfalseのときBackendはこのキー自体を返さない(2026-11-24)ので、Optional。
+    let reaction: EventReactionSummary?
 
     var id: String { fxPairId }
 
