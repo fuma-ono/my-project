@@ -1,0 +1,34 @@
+[
+ {
+  "part": "pokomaru_body",
+  "ref": "#74CF85",
+  "render": "#79C87E",
+  "deltaE76": 4.1,
+  "n_ref": 54479,
+  "n_img": 105450
+ },
+ {
+  "part": "pipi_body",
+  "ref": "#FDC02C",
+  "render": "#FCC33D",
+  "deltaE76": 5.1,
+  "n_ref": 33964,
+  "n_img": 56208
+ },
+ {
+  "part": "fuwari_fur",
+  "ref": "#A2CEFA",
+  "render": "#9BC1DD",
+  "deltaE76": 9.7,
+  "n_ref": 34125,
+  "n_img": 48767
+ },
+ {
+  "part": "fuwari_ear_inner",
+  "ref": "#FD97B3",
+  "render": "#F69AA9",
+  "deltaE76": 7.1,
+  "n_ref": 5379,
+  "n_img": 9315
+ }
+]

@@ -1,0 +1,10 @@
+# 生成物は Git に入れない(スクリプトと設定のみ管理)
+out/
+*.mp4
+*.mov
+*.wav
+*.blend
+*.blend1
+# 証拠用の小さな静止フレーム(evidence/*.jpg)と JSON ログだけは管理する
+!evidence/*.jpg
+!evidence/*.json
