@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.53
+# FX Event Analyzer: API詳細設計書 v1.57
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -8,7 +8,7 @@
 
 - **v1.0**: HQ作成・共有(本書のベース)
 - **v1.57**(2026-11-27、HQ指示「値動き分析の価格点の権利ゲート」。`claude/fx-reaction-analysis-price-gate`。**DB 変更なし・新しいエラーコードなし**): `GET /events/{event_id}/reaction-analysis` の応答のうち、**絶対的な価格水準(価格情報そのもの)= 各窓の `close_price` と `reference.pre_release_price`** を、台帳(`twelvedata_free_internal`)が **`externalDisplay` を `confirmed`(証跡 URL と確認日つき)で確認済みのときだけ**返す。未確認・否認・証跡なし・確認日なしのときは **キーごと省略**(null は返さない。1・5 分の参考窓を含む全窓。`reference` は `pre_release_bar_closed_at` だけになる)。pips・高値/安値の pips・range・比率・ラベル・evidence・過去比較などの分析結果は変わらず返す。**このルートの権利ゲートは変えない**(`commercialUse` + `derivedDisplay` + `storage`。`externalDisplay` が未確認でも 200 で分析結果を返し、`externalDisplay` だけでは開かない)。価格点の有無を端末が知るため `meta` に **`price_points_included`**(bool)を追加(項目の追加だけ。`no usable pair` の 200 でも付く)。判定は静的な台帳だけで、環境変数・クエリ・ヘッダでは切り替えられない(迂回フラグなし)。台帳の既定(全項目 `unconfirmed`)は 403 のまま(DB を読まない)。テクニカル分析・strategy-analysis・planLimits・他機能の必要権利は変更なし。
-- **v1.56**(2026-11-27、HQ指示「① イベント値動き分析 API」。`claude/fx-event-reaction-analysis` で追加。**フラグ OFF が既定・権利ゲートあり・DB 変更なし(migration なし)**): 新設 **`GET /events/{event_id}/reaction-analysis?fx_pair_id=<uuid>`**(`fx_pair_id` 省略時は strategy-analysis と同じ既定ペア。他のクエリ項目は無視)。発表後の 1 分足の終値の動きを、窓ごとに **記述的に** 分類して返す(価格の予測・売買の助言ではない)。読み取り時に fx_prices の 1 分足と event_price_reactions から計算し、ラベルは保存しない。**処理の順**(上で打ち切り): 認証(Bearer)→ `PRICE_FEATURES_ENABLED` が false なら 404 `NOT_FOUND`(DB を読まない)→ データ権利台帳が feature `eventReactionAnalysis` を確認済みでなければ 403 `DATA_RIGHTS_UNCONFIRMED`(`detail.missing` に `sourceId:right` の一覧。静的な台帳で DB を読まない。技術チャート API と同じコード・同じ形。迂回フラグなし)→ `VIEW_BASIC_EVENT`(無ければ 403 `FEATURE_NOT_ENTITLED`)→ `VIEW_ADVANCED_STATS` が無ければ 200 `{available:false, required_entitlement:'VIEW_ADVANCED_STATS'}`(他のキーは null / 空。価格・イベントのテーブルは読まない)→ 入力検証(422 `VALIDATION_ERROR`)→ 404 `EVENT_NOT_FOUND` → 404 `FX_PAIR_NOT_FOUND`(使えるペアが 1 つも無い指標は 200 で `fx_pair:null`・`windows:[]`)。新しいエラーコードは追加しない。**応答**(`data` ラッパーなし。strategy-analysis と同じ): `event_id` / `available` / `required_entitlement` / `event` / `fx_pair` / `selectable_pairs` / `market_event`(同時発表の束ね。`label_shared`)/ `meta`(`param_set_id`='rx-v1'、`param_set_status`='PROVISIONAL'、`params_hash`、`params`、`classifier_version`、`data_source`、`bars_as_of`、`computed_at`、`time_basis`、`rights_ledger`、`history_limits`)/ `dst_mismatch_caution` / `reference`(P0)/ `baseline`(σ。`pre_window_overlaps`)/ `initial`(最初の 2 分)/ `windows`(minutes=1,5,15,30,60 の固定順 5 要素)/ `history`(過去比較。15・30・60 分窓だけ)。**窓**: `data_status`('AVAILABLE'|'UNAVAILABLE'|'DATA_PENDING')と `pips` / `close_price` / `high_pips` / `low_pips` / `range_pips`(= high_pips − low_pips)は既存の event_price_reactions と同じ値。`classification_status`('CLASSIFIED'|'UNDETERMINED'|'REFERENCE_ONLY'|'PENDING')、`label`('CONTINUATION'|'PULLBACK'|'FULL_RETRACE'|'REVERSAL'|'UNDETERMINED'|null)、`reason`、`evidence`(`initial_z` / `peak_offset_pips` / `worst_pullback_pips` / `worst_pullback_ratio` / `final_offset_pips` / `final_retracement_ratio` / `final_offset_in_noise_units` / `borderline`。CLASSIFIED のときだけ)、`overlap`(`has_overlap` と、窓 (T, T+n] に重なる他の予定・要人発言の一覧)。1 分窓は `REFERENCE_ONLY`/`WINDOW_TOO_SHORT`、5 分窓は `REFERENCE_ONLY`/`WINDOW_EXCLUDED_BY_PARAMS`(値は返す・label は null)。まだ閉じていない窓(終了 + 確定待ちの 2 分)は `PENDING`(label null)。UNDETERMINED の `reason`: `RELEASE_TIME_NOT_EXACT` / `NO_PRICE_DATA` / `MISSING_BARS` / `BASELINE_UNAVAILABLE` / `NO_INITIAL_MOVE` / `SMALL_INITIAL`。欠けた 1 分足は補間・推測しない(その窓だけ `MISSING_BARS`)。**頂点・谷の時刻は応答に含めない**。**過去比較**(`history.windows[]`): 同じ指標・同じペア・同じ窓の、この発表より前の RELEASED・EXACT の発表を新しい順に最大 10 件(1 分足が無いものも `NO_PRICE_DATA` の標本として数える)。判定できた標本が 3 件以上のときだけ `status:'OK'` で `shares` と `dominant_label`(同数なら null)を返し、3 件未満は `INSUFFICIENT_SAMPLE`(0 件は `NO_HISTORY`)で割合・最多ラベルは null。`sample_count` / `min_required` / `max_samples` / `determined_count` / `undetermined_count` / `undetermined_by_reason` / `overlap_count` / `class_counts` / `samples[]` は常に返す。件数の上限は planLimits の `history_events_max` を使わない(1.0 の FREE は null=上限なし、PRO は 20 で、プランで分析が変わり計算量が無制限になるため。strategy-analysis の固定 5 / 3 と同じ考え方で、分析パラメータの 10 / 3)。**時刻**: 保存・応答の時刻は UTC。基準変動 σ の「同じ時刻帯」は America/New_York の時計(夏時間は IANA で処理)。米国と欧州/英国で夏時間の切替日がずれる期間(2026: 03-08〜03-29、10-25〜11-01。from 含む・to 含まない)の発表には `dst_mismatch_caution:{active:true, reason:'US_EU_DST_TRANSITION_DATES_DIFFER', from_date, to_date}`(事実のフラグ。ラベルは返す。豪州・NZ は未対応)。**パラメータ**: レジストリのパラメータセット rx-v1(暫定: 窓 1/5/15/30/60、分類窓 15/30/60、w0=2、k_small=2.0、k_pb=2.0、r_push=0.5、r_full=0.85、ρ=1.0、φ=0.25、直近 3 本の中央値、欠け足の許容 0。実イベント 13 件・独立 3 件相当で統計的に検証できていない)。既存のセットは書き換えず、変更は新しい id(再分類レポート `scripts/reclass-report.ts` で遷移を確認してから採用)。**データ権利台帳**: 権利を **生データ**(`storage`・`redistribution`)と **分析結果**(`commercialUse`・`derivedDisplay`=派生値の商用の外部表示・提供)に分けて記録し、台帳の項目に `providerName` / `termsUrl` / 各権利の `confirmedAt` / `evidenceUrl` を持つ。`eventReactionAnalysis` が必要とするのは `commercialUse` + `derivedDisplay` + `storage`(確認日・提供元名・規約 URL の記録も必要)。生データの再配布(`redistribution`)は必須にしない。生の足(candles)を返す技術チャート(`chartHistory`)だけが `redistribution` を追加で必要とする。`twelvedata_free_internal` はすべて未確認のまま(どの環境でも 403)。**`GET /entitlements`**: トップレベルに任意の **`event_reaction_analysis_enabled`**(既定 false。`PRICE_FEATURES_ENABLED` が true で台帳が確認済みのときだけ true。`technical_analysis_enabled` と同じ作り。VIEW_ADVANCED_STATS の有無とは別)を追加(項目の追加だけ)。**既存 API は変更なし**(`GET /events/{id}/strategy-analysis` は応答のバイト一致をスナップショットテストで固定)。画面設計者向けの応答の定義は fx-dev-records の `reaction_analysis_api_schema_for_designers.txt`。
+- **v1.56**(2026-11-27、HQ指示「① イベント値動き分析 API」。`claude/fx-event-reaction-analysis` で追加。**フラグ OFF が既定・権利ゲートあり・DB 変更なし(migration なし)**): 新設 **`GET /events/{event_id}/reaction-analysis?fx_pair_id=<uuid>`**(`fx_pair_id` 省略時は strategy-analysis と同じ既定ペア。他のクエリ項目は無視)。発表後の 1 分足の終値の動きを、窓ごとに **記述的に** 分類して返す(価格の予測・売買の助言ではない)。読み取り時に fx_prices の 1 分足と event_price_reactions から計算し、ラベルは保存しない。**処理の順**(上で打ち切り): 認証(Bearer)→ `PRICE_FEATURES_ENABLED` が false なら 404 `NOT_FOUND`(DB を読まない)→ データ権利台帳が feature `eventReactionAnalysis` を確認済みでなければ 403 `DATA_RIGHTS_UNCONFIRMED`(`error.missing` に `sourceId:right` の一覧。静的な台帳で DB を読まない。技術チャート API と同じコード・同じ形。迂回フラグなし)→ `VIEW_BASIC_EVENT`(無ければ 403 `FEATURE_NOT_ENTITLED`)→ `VIEW_ADVANCED_STATS` が無ければ 200 `{available:false, required_entitlement:'VIEW_ADVANCED_STATS'}`(他のキーは null / 空。価格・イベントのテーブルは読まない)→ 入力検証(422 `VALIDATION_ERROR`)→ 404 `EVENT_NOT_FOUND` → 404 `FX_PAIR_NOT_FOUND`(使えるペアが 1 つも無い指標は 200 で `fx_pair:null`・`windows:[]`)。新しいエラーコードは追加しない。**応答**(`data` ラッパーなし。strategy-analysis と同じ): `event_id` / `available` / `required_entitlement` / `event` / `fx_pair` / `selectable_pairs` / `market_event`(同時発表の束ね。`label_shared`)/ `meta`(`param_set_id`='rx-v1'、`param_set_status`='PROVISIONAL'、`params_hash`、`params`、`classifier_version`、`data_source`、`bars_as_of`、`computed_at`、`time_basis`、`rights_ledger`、`history_limits`)/ `dst_mismatch_caution` / `reference`(P0)/ `baseline`(σ。`pre_window_overlaps`)/ `initial`(最初の 2 分)/ `windows`(minutes=1,5,15,30,60 の固定順 5 要素)/ `history`(過去比較。15・30・60 分窓だけ)。**窓**: `data_status`('AVAILABLE'|'UNAVAILABLE'|'DATA_PENDING')と `pips` / `close_price` / `high_pips` / `low_pips` / `range_pips`(= high_pips − low_pips)は既存の event_price_reactions と同じ値。`classification_status`('CLASSIFIED'|'UNDETERMINED'|'REFERENCE_ONLY'|'PENDING')、`label`('CONTINUATION'|'PULLBACK'|'FULL_RETRACE'|'REVERSAL'|'UNDETERMINED'|null)、`reason`、`evidence`(`initial_z` / `peak_offset_pips` / `worst_pullback_pips` / `worst_pullback_ratio` / `final_offset_pips` / `final_retracement_ratio` / `final_offset_in_noise_units` / `borderline`。CLASSIFIED のときだけ)、`overlap`(`has_overlap` と、窓 (T, T+n] に重なる他の予定・要人発言の一覧)。1 分窓は `REFERENCE_ONLY`/`WINDOW_TOO_SHORT`、5 分窓は `REFERENCE_ONLY`/`WINDOW_EXCLUDED_BY_PARAMS`(値は返す・label は null)。まだ閉じていない窓(終了 + 確定待ちの 2 分)は `PENDING`(label null)。UNDETERMINED の `reason`: `RELEASE_TIME_NOT_EXACT` / `NO_PRICE_DATA` / `MISSING_BARS` / `BASELINE_UNAVAILABLE` / `NO_INITIAL_MOVE` / `SMALL_INITIAL`。欠けた 1 分足は補間・推測しない(その窓だけ `MISSING_BARS`)。**頂点・谷の時刻は応答に含めない**。**過去比較**(`history.windows[]`): 同じ指標・同じペア・同じ窓の、この発表より前の RELEASED・EXACT の発表を新しい順に最大 10 件(1 分足が無いものも `NO_PRICE_DATA` の標本として数える)。判定できた標本が 3 件以上のときだけ `status:'OK'` で `shares` と `dominant_label`(同数なら null)を返し、3 件未満は `INSUFFICIENT_SAMPLE`(0 件は `NO_HISTORY`)で割合・最多ラベルは null。`sample_count` / `min_required` / `max_samples` / `determined_count` / `undetermined_count` / `undetermined_by_reason` / `overlap_count` / `class_counts` / `samples[]` は常に返す。件数の上限は planLimits の `history_events_max` を使わない(1.0 の FREE は null=上限なし、PRO は 20 で、プランで分析が変わり計算量が無制限になるため。strategy-analysis の固定 5 / 3 と同じ考え方で、分析パラメータの 10 / 3)。**時刻**: 保存・応答の時刻は UTC。基準変動 σ の「同じ時刻帯」は America/New_York の時計(夏時間は IANA で処理)。米国と欧州/英国で夏時間の切替日がずれる期間(2026: 03-08〜03-29、10-25〜11-01。from 含む・to 含まない)の発表には `dst_mismatch_caution:{active:true, reason:'US_EU_DST_TRANSITION_DATES_DIFFER', from_date, to_date}`(事実のフラグ。ラベルは返す。豪州・NZ は未対応)。**パラメータ**: レジストリのパラメータセット rx-v1(暫定: 窓 1/5/15/30/60、分類窓 15/30/60、w0=2、k_small=2.0、k_pb=2.0、r_push=0.5、r_full=0.85、ρ=1.0、φ=0.25、直近 3 本の中央値、欠け足の許容 0。実イベント 13 件・独立 3 件相当で統計的に検証できていない)。既存のセットは書き換えず、変更は新しい id(再分類レポート `scripts/reclass-report.ts` で遷移を確認してから採用)。**データ権利台帳**: 権利を **生データ**(`storage`・`redistribution`)と **分析結果**(`commercialUse`・`derivedDisplay`=派生値の商用の外部表示・提供)に分けて記録し、台帳の項目に `providerName` / `termsUrl` / 各権利の `confirmedAt` / `evidenceUrl` を持つ。`eventReactionAnalysis` が必要とするのは `commercialUse` + `derivedDisplay` + `storage`(確認日・提供元名・規約 URL の記録も必要)。生データの再配布(`redistribution`)は必須にしない。生の足(candles)を返す技術チャート(`chartHistory`)だけが `redistribution` を追加で必要とする。`twelvedata_free_internal` はすべて未確認のまま(どの環境でも 403)。**`GET /entitlements`**: トップレベルに任意の **`event_reaction_analysis_enabled`**(既定 false。`PRICE_FEATURES_ENABLED` が true で台帳が確認済みのときだけ true。`technical_analysis_enabled` と同じ作り。VIEW_ADVANCED_STATS の有無とは別)を追加(項目の追加だけ)。**既存 API は変更なし**(`GET /events/{id}/strategy-analysis` は応答のバイト一致をスナップショットテストで固定)。画面設計者向けの応答の定義は fx-dev-records の `reaction_analysis_api_schema_for_designers.txt`。
 - **v1.55**(2026-11-26、HQ指示「テクニカル分析 API(P2→P3 の橋渡し)」。`claude/fx-ta-api` で追加。**フラグ OFF が既定・DB 変更なし**): 新設 **`GET /fx-pairs/{fx_pair_id}/technical?timeframe=5m|15m|30m|60m|4h|1d&limit=N&indicators=sma20,ema50,rsi14,atr14,macd,bollinger,stoch`**。`data` = `{fx_pair_id, symbol, timeframe, candles:[{t(ISO 8601 UTC・足の開始),o,h,l,c}], indicators:{<名前>: 数値配列(candles と同じ長さ・同じ並び。ウォームアップ区間は null)。macd は {macd,signal,histogram}、bollinger は {middle,upper,lower}、stoch は {k,d}}, key_zones:[{kind:support|resistance|at_price(最後の終値に対する位置),lower,upper,center,touches,high_touches,low_touches,first_t,last_t}], meta}`。`indicators` の指定は任意(省略時は空)。`sma|ema|rsi|atr` + 期間 2〜400、`macd`(12,26,9)・`bollinger`(20,±2σ)・`stoch`(14,3,3)は固定、最大 8 個、重複は除く。`limit` は 1〜1500(既定 300)。指標は返す窓の中だけで計算する(最初の `期間-1` 本は null。ウォームアップ用の追加読み出しはしない)。数値は小数 6 桁に丸める。`meta` = `{timeframe, convention:'NY17', bar_count, requested_limit, applied_limit, source_row_cap_hit, source_bar_count, expected_source_bars, has_gaps, partial_last, data_source, rights_ledger:{entry_id,status:'confirmed',features,evidence_urls}}`。1d は米国東部 17:00 区切りの FX 日(夏時間は自動、日曜 17:00 の開場が月曜の足)、4h は NY 時計 17/21/01/05/09/13 区切り。4h・1d は DB に保存されていないため、保存済みの 60m 足から計算して返す(DB の `60m` とエンジンの `1h` の対応はアダプタで明示)。取得行数の上限(technical limit)は 1 リクエストあたり保存足 10,000 行(新しい順に読む。1d の `applied_limit` は最大 415)。上限で打ち切られたとき `source_row_cap_hit` が true で、4h/1d は不完全かもしれない先頭の足を捨てる。`has_gaps`/`expected_source_bars`: 週末の休場(金曜 17:00 NY〜日曜 17:00 NY)は欠損に数えず、それ以外の欠けた足だけ数える(4h/1d は各足の expectedBars と barCount の比較)。欠けた足を補間・生成することはない。`partial_last` は 4h/1d の最後の足が確定していないこと(5m〜60m の保存足は確定済みとして扱う)。**ゲートの順序**: (1) `TECHNICAL_ANALYSIS_ENABLED`(`'true'` だけが有効、既定 false)と `PRICE_FEATURES_ENABLED` の両方が true でなければ、権限・DB の確認より前に既存の `404 NOT_FOUND`(新しいコードなし)。(2) データ源の権利の台帳(`src/domain/technical/rightsRegistry.ts`。現在は `twelvedata_free_internal` で全項目 `unconfirmed`)で `chartHistory`・`technicalIndicators`・`keyZones` が、`confirmed` かつ証跡 URL つきでなければ、新設の **`403 DATA_RIGHTS_UNCONFIRMED`**(`error.missing` に足りない `データ源:権利` を列挙。DB は読まない)。理由: フラグ OFF は「機能が無い」(404)、フラグ ON で権利だけ未確認は「運用上、意図して閉じている状態」で、診断できるよう別コードにした。プラン(`FEATURE_NOT_ENTITLED`)とは別の軸。本番では台帳が未確認のため、フラグを両方 true にしても閉じたまま。(3) 入力検証は既存どおり `422 VALIDATION_ERROR`(不正な timeframe・limit・indicators・fx_pair_id)。未知の通貨ペアは `404 FX_PAIR_NOT_FOUND`。**`GET /entitlements`** に最上位の **`technical_analysis_enabled`**(bool)を追加(項目の追加だけ): 両フラグが true で、台帳が確認済みのときだけ true(= このルートが 200 を返せる)。既定 false。プラン制限は付けない(1.0 は無料のみ)。DB の変更は無し。
 - **v1.54**(2026-11-26、HQ指示「日銀・ECBの会合日程の表示」): `GET /events/{id}` の `event` に、任意の項目 **`meeting`**(オブジェクト。無いときはキーごと無い)を追加(項目の追加だけ)。provider が `boj_meeting_schedule` / `ecb_meeting_schedule` の予定で、`economic_event_meetings`(service_role だけが読める)に行があるときだけ付く: `start_date`・`end_date`(会合の初日・最終日。現地の日付 `YYYY-MM-DD`)、`source_url`(公式ページ。https のみ)、`source_name`(`日本銀行` / `欧州中央銀行(ECB)`)。時刻・政策金利の値・予想・結果は無い(決定の公表時刻は未確認で、`release_datetime_precision` は `DATE_ONLY`)。表が無い・行が無い・読めない・URL が https でないときは `meeting` を付けない(詳細は今までどおり返る)。ロックした発表でも同じ(値ではない)。古い iOS は未知の項目を読み飛ばす。追加(同日): `GET /indicators` の各行と `GET /indicators/{id}` の `indicator` に、任意の **`next_release_precision`** / **`latest_release_precision`**(次回・前回の発表の `release_datetime_precision`。`DATE_ONLY` なら端末は時刻を出さない。無ければ null)と **`result_type`**(`VALUE` / `NONE`。日銀 `BOJ_RATE`・ECB `EU_ECB_RATE` は `NONE` = 結果の値が無い。端末は過去イベント比較を出さない)を追加。`latest_event` に `release_datetime_precision` を追加。`GET /indicators/{id}/events` の行は既に `release_datetime_precision` を持つ。カレンダー等の `result_type` も、この2指標は `NONE`(発表時刻を過ぎたら「公表済み」)。DB の変更は無し。
 - **v1.53**(2026-11-11、HQ指示「要人発言: 本文取得と要約生成を別々の工程として扱う」。`claude/fx-speech-pipeline` で追加。migration 20261111000001): 要人発言(SpeechSummary)に **`summary_method`** を追加(項目の追加だけ)。`EXTRACTIVE_EN` = 公式の本文(英語)から文をそのまま抜き出した要約(最大3文・700字。訳さない・言い換えない・言語モデルや有料 API は使わない)。null = 工程で作った要約ではない。**`summary_status` が `FAILED` を返すようになった**(要約の工程 `npm run ingest:speech-summaries` が本文から要約を作れなかったとき。理由は DB の `summary_error` に残し、API には出さない)。`GENERATING` は今も返さない。本文の保存は、権利を確認できた発言元だけ(今は FRB。Board のサイトは public domain・出典の明記)。ECB は「著者名の付いた文書の再掲には事前の書面の許可が要る」ため本文を保存せず、`body_status` = `NOT_APPLICABLE`(URL は残す)、要約も作らない(`summary_status` は `NOT_AVAILABLE`)。**日本語の要約はまだ無い**(言語モデルが要り、有料 API の承認が要る)。**DB の列の追加が必要**(DEV への適用は承認の後)
@@ -236,6 +236,7 @@ service_role credentialはClientへ絶対に公開しない。db-design.md 6章�
 - SUBSCRIPTION_REQUIRED
 - FEATURE_NOT_ENTITLED
 - PLAN_LIMIT_EXCEEDED(v1.15で追加。403)
+- DATA_RIGHTS_UNCONFIRMED(v1.55で追加。403。データ源の権利の台帳が未確認。不足は`error.missing`。テクニカル分析API(v1.55)と値動き分析API(14.12節)が返す)
 
 **`PLAN_LIMIT_EXCEEDED`(v1.15)**: 今のプランの利用上限(28.1節)を超えるが、上のプランなら使える場合に返す。`error`に`required_plan`(使えるプラン。MVPでは常に`"PRO"`)を追加する。どのプランでも使えない値は`422 VALIDATION_ERROR`にする。
 
@@ -983,6 +984,82 @@ Query：`fx_pair_id`(UUID、省略時はその要人の通貨の1件目のペア
 - 丸め：`pips`系は0.1(実際の気配の最小単位)、価格・`movement`系は小数6桁、`change_percent`は小数4桁
 - 発言済み(`DELIVERED`)の発言だけ数値を出す。`analysis_status`は14.8節
 - **通貨ペアの選び方**(14.5節・14.10節の省略時)：有効な(`is_active`)通貨ペアのうち、発言者の`currency_code`を含むもの。順番は`USDJPY`・`EURUSD`・`GBPUSD`・`AUDUSD`・`USDCHF`・`USDCAD`・`EURJPY`・`GBPJPY`・`AUDJPY`・`CADJPY`(14.1節の主要ペアの順)・`EURGBP`・`EURCHF`・`CHFJPY`・`NZDUSD`・`NZDJPY`・`EURAUD`、それ以外は通貨ペア名の順。最大4件。例：USD → USDJPY・EURUSD・GBPUSD・AUDUSD、JPY → USDJPY・EURJPY・GBPJPY・AUDJPY、EUR → EURUSD・EURJPY・EURGBP…
+
+## 14.12 GET /api/v1/events/{event_id}/reaction-analysis(v1.56で追加、v1.57で価格点の条件を追加)
+
+発表後の1分足の終値の動きを、窓ごとに**記述的に**分類して返す(価格の予測・売買の助言ではない)。応答のたびに`fx_prices`の1分足と`event_price_reactions`から計算し、ラベルは保存しない。パラメータセットは`rx-v1`(暫定、`meta.param_set_status` = `PROVISIONAL`)。DB変更なし・新しいエラーコードなし。コード: `src/routes/reactionAnalysis.ts`、`src/schemas/reactionAnalysis.ts`、`src/domain/reactionClassification/*`、`src/authorization/reactionAnalysis.ts`、`src/domain/technical/rightsLedger.ts`。
+
+**Request**: Path `event_id`(UUID形式)。Query `fx_pair_id`(任意、UUID形式。省略時は`strategy-analysis`と同じ既定ペア = 指標の関連ペアのうち`priority`昇順→主要ペアの順→`symbol`順の先頭)。他のQuery項目は無視する。認証は`Authorization: Bearer <Supabase JWT>`。
+
+**処理の順**(上で打ち切り。下は実行されない):
+
+1. 認証(Bearer)なし・無効 → `401 UNAUTHORIZED`
+2. `PRICE_FEATURES_ENABLED`が`false` → `404 NOT_FOUND`(DBを読まない)
+3. データ権利台帳が feature `eventReactionAnalysis` を確認済みでない → `403 DATA_RIGHTS_UNCONFIRMED`(静的な台帳でDBを読まない。迂回フラグなし)
+4. `VIEW_BASIC_EVENT`なし → `403 FEATURE_NOT_ENTITLED`
+5. `VIEW_ADVANCED_STATS`なし → `200`で`available:false`(下記「available:falseの応答」。価格・イベントのテーブルは読まない。このときは`event_id`の入力検証もしない)
+6. `event_id`・`fx_pair_id`がUUID形式でない → `422 VALIDATION_ERROR`
+7. イベントが無い → `404 EVENT_NOT_FOUND`
+8. `fx_pair_id`が無い・無効・指標の通貨を含まない → `404 FX_PAIR_NOT_FOUND`
+9. 使えるペアが1つも無い指標 → `200`(`fx_pair:null`、`windows:[]`、`history:{windows:[]}`、`reference`/`baseline`/`initial`は`null`、`selectable_pairs:[]`、`dst_mismatch_caution`・`meta`・`market_event`はオブジェクト。`meta.price_points_included`も付く)
+
+データ不足(1分足なし・欠け・基準変動なし)はHTTPエラーにせず、窓ごとの`classification_status` = `UNDETERMINED`と`reason`で表す(7章と同じ方針)。
+
+**エラー**: `403 DATA_RIGHTS_UNCONFIRMED`の不足一覧は**`error.missing`**(`error`オブジェクト直下。`detail`というキーは無い)。形は`{ "error": { "code": "DATA_RIGHTS_UNCONFIRMED", "message": "...", "missing": ["twelvedata_free_internal:commercialUse", ...] } }`。`missing`の要素は`<sourceId>:<right>`、台帳のエントリが0件なら`<sourceId>:*`、`providerName`・`termsUrl`が未記録なら`<sourceId>:providerName`・`<sourceId>:termsUrl`も入る。`422`の`message`は`"<path>: <問題>; ..."`の連結。`404 NOT_FOUND`は`{ "error": { "code": "NOT_FOUND", "message": ... } }`。
+
+**権利の条件**(`src/domain/technical/rightsLedger.ts`の`REQUIRED_RIGHTS`、台帳は`src/domain/technical/rightsRegistry.ts`の`twelvedata_free_internal`):
+
+- このルートが開く条件(3の権利ゲート): **`commercialUse` + `derivedDisplay` + `storage`**が、それぞれ`confirmed`・証跡URLつき・確認日(`YYYY-MM-DD`)つき、かつエントリに`providerName`・`termsUrl`が記録されていること。`redistribution`は要らない。
+- **価格点**(各窓の`close_price`と`reference.pre_release_price`)を返す条件: 台帳の全エントリで **`externalDisplay`**が`confirmed`(証跡URLと確認日つき)。ルートの権利ゲートには含まれない(`externalDisplay`が未確認でも200で分析結果を返す)。判定は静的な台帳だけで、環境変数・Query・ヘッダでは切り替えられない。
+- 参考(別のAPI): 生のローソク足を返す`chartHistory`(テクニカル分析API、v1.55)は、`externalDisplay` / `storage` / `history` / `userLimit`に加えて**`redistribution`**が要る。
+- 台帳の現在の既定は全項目`unconfirmed`なので、このAPIは`403 DATA_RIGHTS_UNCONFIRMED`のまま。
+
+**Response**(`data`ラッパーなし。`strategy-analysis`と同じ。キーと順序は固定):
+
+| キー | 型・内容 |
+|---|---|
+| `event_id` | string(uuid) |
+| `available` | boolean |
+| `required_entitlement` | `"VIEW_ADVANCED_STATS"` \| null(`available:false`のときだけ値あり) |
+| `event` | `{ indicator_id, indicator_code, name, country_code, currency_code, release_datetime, release_datetime_precision }`。`release_datetime`はミリ秒つきUTC(`"...:00.000Z"`)。`release_datetime_precision`は`EXACT` / `DATE_ONLY` / `APPROXIMATE` / `UNKNOWN`。`EXACT`でないと分類しない |
+| `fx_pair` | `{ fx_pair_id, symbol, pip_size }`。`pip_size`は`symbol`が`JPY`で終われば0.01、それ以外0.0001。全てのpipsはこの値での換算 |
+| `selectable_pairs` | `[{ fx_pair_id, symbol, is_default }]`(分析できるペア。既定ペアの順) |
+| `market_event` | `{ group_key, independent_market_events:1, indicator_count, co_released_indicators:[{indicator_id, indicator_code}], label_shared }`。同じ提供元・同じEXACTの時刻の指標は同じ価格経路・同じラベルを共有する。`group_key`は束ねられないとき`null`。`label_shared` = `indicator_count > 1` |
+| `meta` | 下記 |
+| `dst_mismatch_caution` | `{active:false}` または `{active:true, reason:'US_EU_DST_TRANSITION_DATES_DIFFER', from_date, to_date}`(`from_date`を含み`to_date`を含まない。`YYYY-MM-DD`。発表のUTC日付が、米国と欧州/英国で夏時間の切替日がずれる期間に入るときtrue。2026年: 03-08〜03-29、10-25〜11-01。2027年: 03-14〜03-28、10-31〜11-07。オーストラリア・ニュージーランドは未対応) |
+| `reference` | `{ pre_release_price?, pre_release_bar_closed_at }`。`pre_release_price`は発表時刻ちょうどに終わる1分足の終値(P0。その足が無ければ`null`、古い足で代用しない)で、`meta.price_points_included`が`true`のときだけキーが存在する。`pre_release_bar_closed_at`は常にキーがあり、P0があれば`release_datetime`と同じ時刻、無ければ`null` |
+| `baseline` | `{ kind:'MAX_OWN_TYPICAL_NY', source:'MAX_OWN_TYPICAL'\|'OWN_ONLY'\|'NONE', sigma_pips, sigma_own_pips, sigma_typical_pips (number\|null), typical_session_count, clock_mismatch_sessions, pre_window_overlaps:[overlap item] }`。sigma = max(発表前60分の値, 同じNY時刻の過去セッションの値)。`pre_window_overlaps[].offset_minutes`は負 |
+| `initial` | `{ window_minutes:2, signed_pips, direction:'UP'\|'DOWN'\|'FLAT'\|null, z0 }`(最初の2分。窓の値とは別) |
+| `windows` | 下記。`minutes` = 1, 5, 15, 30, 60の固定順5要素 |
+| `history` | 下記。15・30・60分窓だけ |
+
+`meta`: `param_set_id`(`'rx-v1'`)、`param_set_status`(`'PROVISIONAL'`\|`'VALIDATED'`)、`params_hash`(`sha256:<64hex>`)、`params`(`windows` [1,5,15,30,60]、`classified_windows` [15,30,60]、`w0`、`k_small`、`k_pb`、`r_push`、`r_full`、`rho`、`phi`、`end_median_bars`、`missing_bars_tolerated_in_window`、`eps`、`borderline_tolerance`、`baseline{...}`、`overlap{min_importance}`、`history{max_samples, min_determined}`)、`classifier_version`、`data_source`(`'twelvedata_free_internal'`)、`bars_as_of`(ISO UTC\|null)、`computed_at`、`time_basis`(`{event_times:'UTC', baseline_clock:'America/New_York'}`)、**`price_points_included`**(boolean。価格点を返したか。常に付く。使えるペアが無い200でも付く)、`rights_ledger`(`{entry_id, provider_name (string\|null), terms_url (string\|null), status:'confirmed', features:['eventReactionAnalysis'], confirmed_at ('YYYY-MM-DD'\|null), evidence_urls:[...]}`。`confirmed_at`・`evidence_urls`は必要な3権利だけから作り、`externalDisplay`の証跡は含まない)、`history_limits`(`{max_samples:10, min_required:3}`)。この順。
+
+`windows[]`:
+
+- `minutes`: 1 | 5 | 15 | 30 | 60
+- `data_status`: `AVAILABLE` | `UNAVAILABLE` | `DATA_PENDING`(既存の`event_price_reactions`の行の状態。行が無い・行が`PENDING`は`DATA_PENDING`)
+- `pips` / `high_pips` / `low_pips` / `range_pips`(number\|null。既存の`event_price_reactions`と同じ値。`range_pips` = `high_pips` − `low_pips`)
+- `close_price`(number\|null): **`meta.price_points_included`が`true`のときだけキーが存在する**。`false`のときはキーごと無い(`null`ではない。1・5分の参考窓を含む全窓)。`true`で`data_status`が`AVAILABLE`以外の窓は`null`。丸めない。
+- `classification_status`: `CLASSIFIED` | `UNDETERMINED` | `REFERENCE_ONLY` | `PENDING`
+- `label`: `CONTINUATION` | `PULLBACK` | `FULL_RETRACE` | `REVERSAL` | `UNDETERMINED` | `null`
+- `reason`: string\|null
+- `evidence`: object\|null(`CLASSIFIED`のときだけ。`initial_z` / `peak_offset_pips` / `worst_pullback_pips` / `worst_pullback_ratio` / `final_offset_pips` / `final_retracement_ratio` / `final_offset_in_noise_units` / `borderline`。頂点・谷の時刻は含まない)
+- `overlap`: `{ has_overlap, items:[{ kind:'EVENT'|'SPEECH', id, name?, datetime, currency, importance:'MEDIUM'|'HIGH', offset_minutes, time_uncertain }] }`(窓 (T, T+n] に入る、ペアの通貨のどちらかの、重要度MEDIUM以上の別の予定・要人発言。中止と同時発表グループの発表は除く。1・5分窓にも返る)
+
+`classification_status`との対応: `CLASSIFIED` = label は4分類のどれか・reason `null`・evidence あり。`UNDETERMINED` = label `UNDETERMINED`・reason あり・evidence `null`。`REFERENCE_ONLY` = label `null`・reason あり・evidence `null`。`PENDING` = label・reason・evidence すべて`null`(窓の終わり + 確定待ち2分が未到来)。**1分窓・5分窓は常に`REFERENCE_ONLY`**(値は返すが分類しない。1分窓は`WINDOW_TOO_SHORT`、5分窓は`WINDOW_EXCLUDED_BY_PARAMS`。非EXACTの発表でも変わらない)。**15・30・60分窓**が`CLASSIFIED` / `UNDETERMINED` / `PENDING`のどれか(非EXACTは`PENDING`より優先して`UNDETERMINED`/`RELEASE_TIME_NOT_EXACT`)。
+
+`reason`(`UNDETERMINED`、判定順): `RELEASE_TIME_NOT_EXACT`(1分足は読まない)/ `NO_PRICE_DATA`(経路全体 = P0の足から発表後60分までの61点が1点も無い。窓ごとの範囲ではない)/ `MISSING_BARS`(窓内に欠けた足が1本でもある。補間しない)/ `BASELINE_UNAVAILABLE`(基準変動が作れない。発表前60分の有効な1分終値変化が40本未満、またはσ<=0)/ `NO_INITIAL_MOVE` / `SMALL_INITIAL`。`REFERENCE_ONLY`の`reason`: `WINDOW_TOO_SHORT` / `WINDOW_EXCLUDED_BY_PARAMS`。
+
+丸め: `pips`系(`pips` / `high_pips` / `low_pips` / `range_pips` / `signed_pips`と`evidence`の`*_pips`)は小数2桁。比率・z系・sigma系・`shares`は小数4桁。`close_price`・`pre_release_price`は丸めない。
+
+`history`: `{ windows:[{ minutes (15|30|60), status:'OK'|'INSUFFICIENT_SAMPLE'|'NO_HISTORY', sample_count, min_required:3, max_samples:10, determined_count, undetermined_count, undetermined_by_reason:{<reason>:n}, overlap_count, class_counts:{CONTINUATION,PULLBACK,FULL_RETRACE,REVERSAL}, shares (null または各0〜1), dominant_label (null または4分類), samples:[{event_id, release_datetime, label, reason, has_overlap}] }] }`。標本 = 同じ指標・同じペア・同じ窓の、この発表より前の`status='RELEASED'`かつ`EXACT`の発表(新しい順に最大10)。`sample_count`が0 → `NO_HISTORY`、判定できた標本が3以上 → `OK`、それ以外 → `INSUFFICIENT_SAMPLE`。`shares`と`dominant_label`は`OK`のときだけ値が入る(最多が同数なら`dominant_label`は`null`)。1分足が無い過去の発表も標本に数える(`UNDETERMINED`/`NO_PRICE_DATA`)。現在の発表が非EXACTなら過去標本を読まず`NO_HISTORY`。`history_events_max`(28.1節)は使わない。
+
+**価格点の有無の2つの形**(v1.57): `meta.price_points_included` = `true`のとき `reference`は`{pre_release_price, pre_release_bar_closed_at}`、各窓に`close_price`あり。`false`のとき `reference`は`{pre_release_bar_closed_at}`だけ、各窓に`close_price`なし。`pips`・`high_pips`・`low_pips`・`range_pips`・ラベル・`evidence`・過去比較・基準変動は、どちらの場合も同じ値。
+
+**available:falseの応答**(`VIEW_ADVANCED_STATS`なし): `event_id`(入力値のまま)と`required_entitlement:"VIEW_ADVANCED_STATS"`以外は、`event` / `fx_pair` / `market_event` / `meta` / `dst_mismatch_caution` / `reference` / `baseline` / `initial` / `history` = `null`、`selectable_pairs` = `[]`、`windows` = `[]`。
+
+**Entitlements**: `GET /entitlements`(27章)の最上位に **`event_reaction_analysis_enabled`**(bool、既定`false`)。`PRICE_FEATURES_ENABLED`が`true`で、台帳が`eventReactionAnalysis`を確認済みのときだけ`true`(= このルートが権利ゲートまで通る)。`VIEW_BASIC_EVENT`・`VIEW_ADVANCED_STATS`の有無とは別なので、`true`でも200で開けるとは限らない(`VIEW_BASIC_EVENT`なし → 403、`VIEW_ADVANCED_STATS`なし → `available:false`)。
 
 ---
 
@@ -1959,7 +2036,11 @@ Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
     "notification_fx_pairs_max": 1,
     "history_events_max": 3,
     "past_releases_max": 3
-  }
+  },
+  "price_features_enabled": false,
+  "purchases_enabled": false,
+  "technical_analysis_enabled": false,
+  "event_reaction_analysis_enabled": false
 }
 ```
 
@@ -1971,6 +2052,11 @@ Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
 - `favorites_max` / `notification_fx_pairs_max`：`null` = 上限なし
 - `past_releases_max`(v1.33)：指標ごとに値を見られる過去の発表の回数(28.2節)。FREE `3`、PRO `null` = 上限なし
 - `notification_importances`：通知に使える重要度(`HIGH`, `MEDIUM`, `LOW`の順)
+- サーバー全体の機能の可否を示す最上位のbool(いずれもプランや`features`とは別。`src/routes/entitlements.ts`):
+  - `price_features_enabled`：`PRICE_FEATURES_ENABLED`。`false`の間、価格由来の情報を返さない
+  - `purchases_enabled`：`PURCHASES_ENABLED`(既定`false`)。購入導線の表示の可否だけで、APIの挙動は変えない
+  - `technical_analysis_enabled`(v1.55)：`TECHNICAL_ANALYSIS_ENABLED`と`PRICE_FEATURES_ENABLED`が両方`true`で、データ源の権利の台帳が確認済みのときだけ`true`(= `GET /fx-pairs/{fx_pair_id}/technical`が200を返せる)。既定`false`
+  - `event_reaction_analysis_enabled`(v1.56)：`PRICE_FEATURES_ENABLED`が`true`で、台帳が`eventReactionAnalysis`を確認済みのときだけ`true`(= `GET /events/{event_id}/reaction-analysis`が権利ゲートまで通る。14.12節)。既定`false`。`VIEW_ADVANCED_STATS`の有無とは別(それは応答の`available`)
 
 MVP：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_STATS
 
@@ -1995,6 +2081,7 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | 要人発言(v1.6で追加) | `GET /speeches`、`GET /speeches/{id}` | `VIEW_BASIC_EVENT` |
 | 要人発言の値動き(v1.28で追加) | `GET /speeches/{id}/reaction`、`GET /speeches/{id}/reaction/chart` | `VIEW_MARKET_REACTION` |
 | 要人ごとの過去比較(v1.28で追加) | `GET /speakers/{speaker_id}/comparison` | `VIEW_HISTORICAL`(件数はプランの`history_events_max`、28.1節) |
+| イベント値動き分析(v1.56で追加) | `GET /events/{event_id}/reaction-analysis` | `VIEW_BASIC_EVENT`(`VIEW_ADVANCED_STATS`が無ければ403にせず`available:false`。14.12節。台帳の権利ゲートが先) |
 | 経済カレンダー(v1.14で追加) | `GET /calendar` | `VIEW_BASIC_EVENT` |
 | 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
 | 通知一覧(v1.23で追加) | `GET /notifications` | `VIEW_BASIC_EVENT` |
