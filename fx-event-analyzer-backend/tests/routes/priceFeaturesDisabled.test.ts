@@ -109,7 +109,9 @@ describe('GET /entitlements', () => {
       expect(body.price_features_enabled).toBe(enabled);
       expect(body.purchases_enabled).toBe(false);
       expect(body.technical_analysis_enabled).toBe(false);
+      expect(body.event_reaction_analysis_enabled).toBe(false);
       expect(Object.keys(body).sort()).toEqual([
+        'event_reaction_analysis_enabled',
         'features',
         'limits',
         'plan',

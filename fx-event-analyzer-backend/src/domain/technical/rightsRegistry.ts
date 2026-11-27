@@ -11,6 +11,13 @@
  * 'unconfirmed', so GET /fx-pairs/{id}/technical answers 403 DATA_RIGHTS_UNCONFIRMED in every
  * environment even when TECHNICAL_ANALYSIS_ENABLED and PRICE_FEATURES_ENABLED are both 'true'.
  *
+ * The ledger records, per source: provider name, terms URL (termsUrl), and per right the status, evidenceUrl and
+ * confirmedAt. Rights over the RAW data (storage, redistribution) and rights over ANALYSIS RESULTS computed from it
+ * (commercialUse, derivedDisplay) are separate keys; which feature needs which is in REQUIRED_RIGHTS
+ * (rightsLedger.ts). GET /events/{id}/reaction-analysis (feature 'eventReactionAnalysis') needs commercialUse +
+ * derivedDisplay + storage and does not need raw-data redistribution; GET /fx-pairs/{id}/technical exposes raw candles
+ * (chartHistory) and does need redistribution. The registry keeps every right unconfirmed (pinned by a test).
+ *
  * To open the route: replace/extend this entry with the confirmed rights AND their evidenceUrl
  * (terms page or signed reply stored under fx-dev-records), after owner approval. Nothing else
  * (flags, code paths) may be used to bypass the gate.
@@ -23,6 +30,8 @@ export const TWELVEDATA_FREE_INTERNAL_SOURCE_ID = 'twelvedata_free_internal';
 export const TECHNICAL_RIGHTS_LEDGER: readonly RightsLedgerEntry[] = [
   {
     sourceId: TWELVEDATA_FREE_INTERNAL_SOURCE_ID,
+    providerName: 'Twelve Data (free key)',
+    termsUrl: 'https://twelvedata.com/terms',
     rights: {
       ...emptyRights(),
       externalDisplay: { status: 'unconfirmed', note: 'Free key is for internal verification; written reply pending.' },

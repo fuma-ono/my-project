@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { listActiveFeatureCodes } from '../authorization/entitlements.js';
 import { priceFeaturesEnabled } from '../authorization/priceFeatures.js';
+import { reactionAnalysisAvailable } from '../authorization/reactionAnalysis.js';
 import { technicalAnalysisAvailable } from '../authorization/technicalAnalysis.js';
 import { planFromFeatures, toEntitlementLimits } from '../domain/planLimits.js';
 import { entitlementsQuerySchema } from '../schemas/entitlements.js';
@@ -28,6 +29,9 @@ export function registerEntitlementsRoutes(app: FastifyInstance): void {
       // technical_analysis_enabled: GET /fx-pairs/{id}/technical が 200 を返せるか(TECHNICAL_ANALYSIS_ENABLED と PRICE_FEATURES_ENABLED が
       // 両方 true で、データ源の権利の台帳が確認済み)。既定 false。プラン制限は付けない(1.0 は無料のみ)。
       technical_analysis_enabled: technicalAnalysisAvailable(app),
+      // event_reaction_analysis_enabled: GET /events/{id}/reaction-analysis が権利ゲートまで通るか(PRICE_FEATURES_ENABLED が true で、
+      // データ源の権利の台帳が eventReactionAnalysis を確認済み)。既定 false。VIEW_ADVANCED_STATS の有無とは別(それは応答の available)。
+      event_reaction_analysis_enabled: reactionAnalysisAvailable(app),
     };
   });
 }
