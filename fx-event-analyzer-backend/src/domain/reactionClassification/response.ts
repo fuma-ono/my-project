@@ -67,6 +67,8 @@ export interface BuildInput {
   params: ReactionParams;
   ledgerEntry: RightsLedgerEntry;
   dataSource: string;
+  /** true only when the ledger confirms externalDisplay: then (and only then) close_price / pre_release_price are returned. */
+  includePricePoints: boolean;
   reactions: readonly ReactionRowInput[];
   bars: BarCloses;
   candidates: readonly OverlapCandidate[];
@@ -151,7 +153,8 @@ export function buildReactionAnalysis(input: BuildInput) {
       minutes: w.minutes,
       data_status: v.data_status,
       pips: pips(v.pips),
-      close_price: v.close_price,
+      // Absolute price level = price information itself: the key is omitted (not null) without the externalDisplay right.
+      ...(input.includePricePoints ? { close_price: v.close_price } : {}),
       high_pips: pips(v.high_pips),
       low_pips: pips(v.low_pips),
       range_pips: v.range_pips,
@@ -209,7 +212,7 @@ export function buildReactionAnalysis(input: BuildInput) {
     meta: metaBlock(input, analysis.barsAsOfMs),
     dst_mismatch_caution: dstMismatchCaution(releaseMs),
     reference: {
-      pre_release_price: analysis.preReleasePrice,
+      ...(input.includePricePoints ? { pre_release_price: analysis.preReleasePrice } : {}),
       pre_release_bar_closed_at: analysis.preReleasePrice === null ? null : new Date(releaseMs).toISOString(),
     },
     baseline: {
@@ -234,7 +237,7 @@ export function buildReactionAnalysis(input: BuildInput) {
 }
 
 export function metaBlock(
-  input: Pick<BuildInput, 'params' | 'ledgerEntry' | 'dataSource' | 'nowMs'>,
+  input: Pick<BuildInput, 'params' | 'ledgerEntry' | 'dataSource' | 'nowMs' | 'includePricePoints'>,
   barsAsOfMs: number | null,
 ) {
   const { params } = input;
@@ -248,6 +251,7 @@ export function metaBlock(
     bars_as_of: barsAsOfMs === null ? null : new Date(barsAsOfMs).toISOString(),
     computed_at: new Date(input.nowMs).toISOString(),
     time_basis: { event_times: 'UTC', baseline_clock: params.baseline.clock },
+    price_points_included: input.includePricePoints,
     rights_ledger: ledgerBlock(input.ledgerEntry),
     history_limits: { max_samples: params.history.max_samples, min_required: params.history.min_determined },
   };

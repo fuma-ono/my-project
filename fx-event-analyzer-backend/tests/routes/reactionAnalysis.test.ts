@@ -53,6 +53,8 @@ function ledgerWith(confirmed: readonly RightKey[], extra: Partial<RightsLedgerE
 }
 /** Raw-data redistribution is deliberately NOT confirmed: the analysis needs only commercial use, derived display, storage. */
 const CONFIRMED = ledgerWith(['commercialUse', 'derivedDisplay', 'storage']);
+/** Same plus externalDisplay (display of price information): the only ledger under which price points are returned. */
+const PRICED = ledgerWith(['commercialUse', 'derivedDisplay', 'storage', 'externalDisplay']);
 
 // ---- synthetic market data -------------------------------------------------
 /** Pips (1 pip = 0.01) above P0 of the golden shapes: index = minutes after the release. */
@@ -542,7 +544,8 @@ describe('200 response', () => {
   });
 
   it('reference price, baseline and initial move come from the synthetic bars', async () => {
-    const { body } = await analysis();
+    // Contract of this endpoint: pre_release_price / close_price exist only with externalDisplay confirmed (PRICED ledger).
+    const { body } = await analysis({ ledger: [PRICED] });
     const c0 = Math.round(quiet(Math.floor(T / MIN) - 1) * 1e6) / 1e6;
     expect(body.reference).toEqual({ pre_release_price: c0, pre_release_bar_closed_at: '2030-01-10T13:30:00.000Z' });
     expect(body.baseline).toMatchObject({
@@ -560,7 +563,7 @@ describe('200 response', () => {
   });
 
   it('windows: fixed order, reaction values, REFERENCE_ONLY for 1 and 5, labels for 15 / 30 / 60', async () => {
-    const { body } = await analysis();
+    const { body } = await analysis({ ledger: [PRICED] }); // close_price needs externalDisplay
     expect(body.windows.map((w: { minutes: number }) => w.minutes)).toEqual([1, 5, 15, 30, 60]);
     const [w1, w5, w15, w30, w60] = body.windows;
     expect(w1).toMatchObject({
@@ -843,7 +846,7 @@ describe('data gaps never become values', () => {
   });
 
   it('no 1-minute bars at all: every classified window is UNDETERMINED / NO_PRICE_DATA, values from the reaction rows stay', async () => {
-    const { body } = await analysis({ data: tables({ fx_prices: [] }) });
+    const { body } = await analysis({ ledger: [PRICED], data: tables({ fx_prices: [] }) });
     expect(body.meta.bars_as_of).toBeNull();
     expect(body.reference).toEqual({ pre_release_price: null, pre_release_bar_closed_at: null });
     expect(body.baseline).toMatchObject({ source: 'NONE', sigma_pips: null });
@@ -887,6 +890,167 @@ describe('windows that have not closed yet', () => {
       60: 'PENDING',
     });
     expect(body.windows[3]).toMatchObject({ label: null, reason: null, evidence: null });
+  });
+});
+
+/** Every key of a JSON value at any depth (arrays flattened), to prove a key is nowhere in the body. */
+function allKeys(value: unknown, out = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) value.forEach((v) => allKeys(v, out));
+  else if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      out.add(k);
+      allKeys(v, out);
+    }
+  }
+  return out;
+}
+/** Absolute price levels = price information itself. (pips / high_pips / low_pips / range_pips are analysis results and stay.) */
+const PRICE_POINT_KEYS = [
+  'close_price',
+  'pre_release_price',
+  'post_release_price',
+  'open_price',
+  'high_price',
+  'low_price',
+];
+
+describe('price points are gated by externalDisplay (owner decision 2026-11-27)', () => {
+  it('commercialUse + derivedDisplay + storage without externalDisplay: 200 with results, no price point key anywhere', async () => {
+    const { get } = await open({ ledger: [CONFIRMED] });
+    const response = await get(URL_OF());
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.available).toBe(true);
+    expect(body.meta.price_points_included).toBe(false);
+    // the analysis results are all still there
+    expect(body.windows).toHaveLength(5);
+    expect(body.windows[0]).toMatchObject({ pips: 4, high_pips: 4.5, low_pips: -0.3, range_pips: 4.8 });
+    expect(body.windows[2]).toMatchObject({ label: 'CONTINUATION', classification_status: 'CLASSIFIED' });
+    expect(body.baseline.sigma_pips).toBe(1);
+    expect(body.reference).toEqual({ pre_release_bar_closed_at: '2030-01-10T13:30:00.000Z' });
+    // deep scan of the keys, and of the serialized text (nothing echoes a price anywhere, e.g. meta / evidence)
+    const keys = allKeys(body);
+    for (const k of PRICE_POINT_KEYS) expect(keys.has(k)).toBe(false);
+    expect(response.body).not.toMatch(/close_price|pre_release_price|post_release_price|150\.04/);
+  });
+
+  it('every window, including the reference-only ones (1 and 5), has no price key (the key is omitted, not null)', async () => {
+    const { get } = await open({ ledger: [CONFIRMED] });
+    const body = (await get(URL_OF())).json();
+    for (const w of body.windows) expect(Object.keys(w)).not.toContain('close_price');
+    expect(Object.keys(body.windows[0])).toEqual([
+      'minutes',
+      'data_status',
+      'pips',
+      'high_pips',
+      'low_pips',
+      'range_pips',
+      'classification_status',
+      'label',
+      'reason',
+      'evidence',
+      'overlap',
+    ]);
+  });
+
+  it('with externalDisplay confirmed as well: the price points are present with the correct values', async () => {
+    const { get } = await open({ ledger: [PRICED] });
+    const response = await get(URL_OF());
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.meta.price_points_included).toBe(true);
+    const c0 = Math.round(quiet(Math.floor(T / MIN) - 1) * 1e6) / 1e6;
+    expect(body.reference.pre_release_price).toBe(c0);
+    expect(body.windows[0].close_price).toBe(150.04);
+    for (const w of body.windows) expect('close_price' in w).toBe(true);
+  });
+
+  it('the results are identical with and without the right; only the price point keys differ', async () => {
+    const off = (await (await open({ ledger: [CONFIRMED] })).get(URL_OF())).json();
+    const on = (await (await open({ ledger: [PRICED] })).get(URL_OF())).json();
+    const strip = (b: unknown) => {
+      const copy = JSON.parse(JSON.stringify(b)) as {
+        reference: Record<string, unknown>;
+        meta: Record<string, unknown>;
+        windows: Record<string, unknown>[];
+      };
+      delete copy.reference.pre_release_price;
+      delete copy.meta.price_points_included;
+      for (const w of copy.windows) delete w.close_price;
+      return copy;
+    };
+    expect(strip(on)).toEqual(strip(off));
+  });
+
+  it.each([
+    ['status unconfirmed', { status: 'unconfirmed' as const }],
+    ['denied', { status: 'denied' as const, evidenceUrl: 'https://evidence.example/x', confirmedAt: '2030-01-01' }],
+    ['confirmed without evidence url', { status: 'confirmed' as const, confirmedAt: '2030-01-01' }],
+    [
+      'confirmed without confirmation date',
+      { status: 'confirmed' as const, evidenceUrl: 'https://evidence.example/x' },
+    ],
+  ])('externalDisplay %s: price points omitted, endpoint still open', async (_n, right) => {
+    const entry = ledgerWith(['commercialUse', 'derivedDisplay', 'storage']);
+    entry.rights.externalDisplay = right;
+    const { get } = await open({ ledger: [entry] });
+    const response = await get(URL_OF());
+    expect(response.statusCode).toBe(200);
+    const keys = allKeys(response.json());
+    expect(keys.has('close_price') || keys.has('pre_release_price')).toBe(false);
+  });
+
+  it('externalDisplay alone does not open the endpoint (the existing three rights are still required)', async () => {
+    const { get, reads } = await appWith({ ledger: [ledgerWith(['externalDisplay'])] });
+    const response = await get(URL_OF());
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('DATA_RIGHTS_UNCONFIRMED');
+    expect(reads).toEqual([]);
+  });
+
+  it('fully unconfirmed registry (production default): 403, nothing leaks, DB not read', async () => {
+    const { get, reads } = await appWith({});
+    const response = await get(URL_OF());
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toMatch(/close_price|pre_release_price|price_points_included|150/);
+    expect(reads).toEqual([]);
+  });
+
+  it('no env var, query parameter or header can switch the price points on (the registry itself is pinned unconfirmed in reactionRights.test.ts)', async () => {
+    const { buildApp } = await import('../../src/app.js');
+    const { client } = recordingClient(tables());
+    const app = buildApp({
+      env: {
+        ...loadEnv({
+          SUPABASE_URL: 'http://127.0.0.1:54321',
+          SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+          EXTERNAL_DISPLAY: 'true',
+          PRICE_POINTS_ENABLED: 'true',
+          INCLUDE_PRICE_POINTS: 'true',
+        }),
+        PRICE_FEATURES_ENABLED: true,
+      },
+      supabase: client,
+      logger: false,
+      technicalRightsLedger: [CONFIRMED],
+    });
+    apps.push(app);
+    await app.ready();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1' + URL_OF(EVENT_ID, '?include_price_points=true&price_points=1&external_display=true'),
+      headers: {
+        authorization: 'Bearer ' + TOKEN,
+        'x-include-price-points': 'true',
+        'x-external-display': 'true',
+        'x-price-points': '1',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.meta.price_points_included).toBe(false);
+    const keys = allKeys(body);
+    expect(keys.has('close_price') || keys.has('pre_release_price')).toBe(false);
   });
 });
 

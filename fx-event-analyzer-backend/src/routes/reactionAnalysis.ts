@@ -1,6 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { assertEntitlement, FEATURE_CODES, listActiveFeatureCodes } from '../authorization/entitlements.js';
-import { REACTION_ANALYSIS_SOURCE_ID, requireReactionAnalysisRights } from '../authorization/reactionAnalysis.js';
+import {
+  pricePointsDisplayGranted,
+  REACTION_ANALYSIS_SOURCE_ID,
+  requireReactionAnalysisRights,
+} from '../authorization/reactionAnalysis.js';
 import { requirePriceFeatures } from '../authorization/priceFeatures.js';
 import { isUsableStrategyPair, selectDefaultStrategyPair } from '../domain/eventStrategyAnalysis.js';
 import { groupByMarketEvent, coReleasedRows, summarizeMarketEventCoverage } from '../domain/marketEventGrouping.js';
@@ -38,6 +42,8 @@ import { reactionAnalysisParamsSchema, reactionAnalysisQuerySchema } from '../sc
  *  1. PRICE_FEATURES_ENABLED, else 404 NOT_FOUND (no DB read).
  *  2. Data rights ledger confirms 'eventReactionAnalysis' for the bar source, else 403 DATA_RIGHTS_UNCONFIRMED
  *     (static ledger, no DB read, same code / detail as GET /fx-pairs/{id}/technical). There is no bypass flag.
+ *     Price points (close_price, pre_release_price) are NOT part of that gate: they are omitted from the body unless the
+ *     ledger also confirms externalDisplay (meta.price_points_included says which). The endpoint stays open without it.
  *  3. VIEW_BASIC_EVENT (403 FEATURE_NOT_ENTITLED).
  *  4. no VIEW_ADVANCED_STATS: 200 { available: false } (price tables are not read).
  *  5. input validation, 422 VALIDATION_ERROR.   6. event, 404 EVENT_NOT_FOUND.   7. pair, 404 FX_PAIR_NOT_FOUND
@@ -61,6 +67,7 @@ export function registerReactionAnalysisRoutes(app: FastifyInstance): void {
 
     // The ledger entry is guaranteed by the gate above (the same static registry).
     const ledgerEntry = app.technicalRightsLedger.find((e) => e.sourceId === REACTION_ANALYSIS_SOURCE_ID)!;
+    const includePricePoints = pricePointsDisplayGranted(app, REACTION_ANALYSIS_SOURCE_ID);
     const params = getParamSet(DEFAULT_PARAM_SET_ID);
     const nowMs = Date.now();
     const releaseMs = Date.parse(event.release_datetime);
@@ -129,7 +136,10 @@ export function registerReactionAnalysisRoutes(app: FastifyInstance): void {
           co_released_indicators: marketEvent.co_released_indicators,
           label_shared: marketEvent.indicator_count > 1,
         },
-        meta: metaBlock({ params, ledgerEntry, dataSource: REACTION_ANALYSIS_SOURCE_ID, nowMs }, null),
+        meta: metaBlock(
+          { params, ledgerEntry, dataSource: REACTION_ANALYSIS_SOURCE_ID, nowMs, includePricePoints },
+          null,
+        ),
         dst_mismatch_caution: dstMismatchCaution(releaseMs),
         reference: null,
         baseline: null,
@@ -203,6 +213,7 @@ export function registerReactionAnalysisRoutes(app: FastifyInstance): void {
       params,
       ledgerEntry,
       dataSource: REACTION_ANALYSIS_SOURCE_ID,
+      includePricePoints,
       reactions,
       bars,
       candidates: overlapCandidates,

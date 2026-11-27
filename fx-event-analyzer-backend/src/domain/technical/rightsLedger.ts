@@ -108,6 +108,11 @@ function isGranted(r: RightEntry | undefined, requireConfirmedAt: boolean): bool
   return !requireConfirmedAt || ISO_DATE.test((r.confirmedAt ?? '').trim());
 }
 
+/** True when one right of one entry counts as confirmed (status, evidence URL and, if asked, a confirmation date). */
+export function isRightConfirmed(entry: RightsLedgerEntry, key: RightKey, requireConfirmedAt = false): boolean {
+  return isGranted(entry.rights[key], requireConfirmedAt);
+}
+
 /**
  * Lists `sourceId:right` pairs that block the feature (empty array = nothing blocks). With `options` (used only by
  * eventReactionAnalysis' gate) a confirmation date and the entry's provider name / terms URL must be recorded too.

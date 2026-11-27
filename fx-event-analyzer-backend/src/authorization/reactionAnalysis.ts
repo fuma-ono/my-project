@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
-import { canEnable, type Feature, missingRights, type MissingRightsOptions } from '../domain/technical/rightsLedger.js';
+import {
+  canEnable,
+  type Feature,
+  isRightConfirmed,
+  missingRights,
+  type MissingRightsOptions,
+} from '../domain/technical/rightsLedger.js';
 import { TWELVEDATA_FREE_INTERNAL_SOURCE_ID } from '../domain/technical/rightsRegistry.js';
 import { priceFeaturesEnabled } from './priceFeatures.js';
 import { ledgerEntriesFor } from './technicalAnalysis.js';
@@ -25,6 +31,17 @@ const REACTION_RIGHTS_OPTIONS: MissingRightsOptions = { requireConfirmedAt: true
 export function reactionAnalysisRightsGranted(app: FastifyInstance, sourceId: string): boolean {
   const entries = ledgerEntriesFor(app, sourceId);
   return entries.length > 0 && REACTION_ANALYSIS_FEATURES.every((f) => canEnable(f, entries, REACTION_RIGHTS_OPTIONS));
+}
+
+/**
+ * Price POINTS (absolute price levels: close_price per window, pre_release_price) are price information itself, so they
+ * are returned only when the ledger confirms externalDisplay (display of price information in the app) for every entry of
+ * the source, with evidence URL and confirmation date. This is NOT part of the route gate: an unconfirmed externalDisplay
+ * never closes the endpoint, it only omits those fields. Static ledger: no flag / query / header can switch it.
+ */
+export function pricePointsDisplayGranted(app: FastifyInstance, sourceId: string): boolean {
+  const entries = ledgerEntriesFor(app, sourceId);
+  return entries.length > 0 && entries.every((e) => isRightConfirmed(e, 'externalDisplay', true));
 }
 
 /** What GET /entitlements reports: PRICE_FEATURES_ENABLED AND the ledger confirms the feature, i.e. "the route would pass its gates". */
