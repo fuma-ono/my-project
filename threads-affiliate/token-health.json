@@ -1,6 +1,6 @@
 {
   "ok": false,
-  "checked_at": "2026-11-28T00:03:27.314131+00:00",
-  "error": "HTTP 400 Bad Request: {\"error\":{\"message\":\"Error validating access token: Session key is malformed because of invalid user id.\",\"code\":190,\"type\":\"OAuthException\",\"error_subcode\":0,\"fbtrace_id\":\"AxA4KCt-jAVUg1idJls4SEk\"}}",
+  "checked_at": "2026-11-28T07:50:26.158818+00:00",
+  "error": "HTTP 400 Bad Request: {\"error\":{\"message\":\"Error validating access token: Session has expired on Monday, 09-Nov-26 17:32:17 PST. The current time is Friday, 27-Nov-26 23:50:26 PST.\",\"code\":190,\"type\":\"OAuthException\",\"error_subcode\":0,\"fbtrace_id\":\"AwZRXY_RgZJbdvTo-X11khS\"}}",
   "notified": true
 }
